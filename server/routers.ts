@@ -19,40 +19,8 @@ export const appRouter = router({
   }),
 
   // Routers para funcionalidades do sistema de interpretação Libras
-  professor: router({
-    translateToLibras: protectedProcedure
-      .input(z.object({ text: z.string() }))
-      .mutation(async ({ input }) => {
-        const { translateAndGenerateVideo } = await import('./vlibras');
-        const videoId = await translateAndGenerateVideo(input.text);
-        return { videoId };
-      }),
-    
-    getVideoStatus: protectedProcedure
-      .input(z.object({ videoId: z.string() }))
-      .query(async ({ input }) => {
-        const { getVideoStatus } = await import('./vlibras');
-        return await getVideoStatus(input.videoId);
-      }),
-    
-    getVideoUrl: protectedProcedure
-      .input(z.object({ videoId: z.string() }))
-      .query(async ({ input }) => {
-        const { getVideoUrl } = await import('./vlibras');
-        return { url: await getVideoUrl(input.videoId) };
-      }),
-  }),
-
-  student: router({
-    // Placeholder para reconhecimento de gestos
-    // Em produção, isso seria implementado com MediaPipe + modelo de ML
-    recognizeGesture: protectedProcedure
-      .input(z.object({ landmarks: z.any() }))
-      .mutation(async ({ input }) => {
-        // TODO: Implementar reconhecimento real com modelo de ML
-        return { text: 'Gesto reconhecido (placeholder)' };
-      }),
-  }),
+  // O reconhecimento de gestos roda inteiramente no cliente (TensorFlow.js
+  // sobre os landmarks do MediaPipe) — ver client/src/lib/gestureClassifier.ts
 
   session: router({
     create: protectedProcedure

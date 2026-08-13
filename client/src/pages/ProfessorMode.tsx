@@ -1,18 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Mic, MicOff, Volume2, Loader } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, Volume2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import VLibrasWidget from "@/components/VLibrasWidget";
 
 export default function ProfessorMode() {
   const [, setLocation] = useLocation();
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [currentSentence, setCurrentSentence] = useState("");
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  
+
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
@@ -47,7 +46,6 @@ export default function ProfessorMode() {
       if (finalTranscript) {
         setTranscript(prev => prev + finalTranscript);
         setCurrentSentence(finalTranscript.trim());
-        translateToLibras(finalTranscript.trim());
       } else {
         setCurrentSentence(interimTranscript);
       }
@@ -79,62 +77,9 @@ export default function ProfessorMode() {
     };
   }, [isRecording]);
 
-  const translateToLibras = async (text: string) => {
-    if (!text.trim()) return;
-    
-    setIsProcessing(true);
-    try {
-      console.log(`Traduzindo para Libras: "${text}"`);
-      
-      // Chamada para a API VLibras
-      const response = await fetch('https://www.vlibras.gov.br/api', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: text,
-          voice: 'pt-BR',
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erro na API VLibras: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.videoUrl) {
-        setVideoUrl(data.videoUrl);
-        toast.success('Vídeo de Libras gerado com sucesso!');
-      } else if (data.url) {
-        setVideoUrl(data.url);
-        toast.success('Vídeo de Libras gerado com sucesso!');
-      } else {
-        throw new Error('Nenhuma URL de vídeo retornada');
-      }
-    } catch (error) {
-      console.error('Erro ao traduzir para Libras:', error);
-      toast.error('Erro ao gerar vídeo de Libras. Tente novamente.');
-      
-      // Fallback: usar simulação
-      simulateLibrasTranslation(text);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const simulateLibrasTranslation = (text: string) => {
-    // Fallback para quando a API não está disponível
-    const videoUrl = `https://www.vlibras.gov.br/video?text=${encodeURIComponent(text)}&voice=pt-BR`;
-    setVideoUrl(videoUrl);
-    toast.info(`Simulando tradução de: "${text}"`);
-  };
-
   const startRecording = () => {
     if (recognitionRef.current) {
       setTranscript("");
-      setVideoUrl(null);
       recognitionRef.current.start();
       setIsRecording(true);
       toast.success('Gravação iniciada. Fale algo!');
@@ -152,12 +97,12 @@ export default function ProfessorMode() {
   const clearTranscript = () => {
     setTranscript("");
     setCurrentSentence("");
-    setVideoUrl(null);
     toast.info('Texto limpo');
   };
 
   return (
     <div className="min-h-screen bg-background">
+      <VLibrasWidget />
       <header className="bg-card border-b border-border">
         <div className="container py-4 flex items-center justify-between">
           <Button variant="ghost" onClick={() => setLocation('/')}>
@@ -228,56 +173,36 @@ export default function ProfessorMode() {
               <CardContent className="space-y-2 text-sm">
                 <p>• Clique em "Iniciar Gravação"</p>
                 <p>• Fale claramente em português</p>
-                <p>• O sistema reconhecerá e traduzirá para Libras</p>
-                <p>• Um vídeo será gerado automaticamente</p>
+                <p>• O texto reconhecido aparecerá no painel de tradução</p>
+                <p>• Ative o avatar VLibras para traduzi-lo para Libras</p>
                 <p>• Clique em "Parar Gravação" quando terminar</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Painel de Vídeo Libras */}
+          {/* Painel de Tradução Libras */}
           <div className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Volume2 className="w-5 h-5" />
-                  Vídeo de Interpretação em Libras
+                  Tradução em Libras
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {isProcessing && (
-                  <div className="flex items-center justify-center gap-2 p-6 bg-muted rounded-lg">
-                    <Loader className="w-5 h-5 animate-spin" />
-                    <span>Gerando vídeo de Libras...</span>
-                  </div>
-                )}
-
-                {videoUrl && !isProcessing && (
-                  <div className="space-y-4">
-                    <iframe
-                      src={videoUrl}
-                      width="100%"
-                      height="400"
-                      frameBorder="0"
-                      allowFullScreen
-                      className="rounded-lg"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Vídeo de interpretação em Libras gerado pela API VLibras
-                    </p>
-                  </div>
-                )}
-
-                {!videoUrl && !isProcessing && (
-                  <div className="flex items-center justify-center p-12 bg-muted rounded-lg">
-                    <div className="text-center">
-                      <Volume2 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">
-                        Fale algo para gerar o vídeo de Libras
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <div className="min-h-[150px] p-4 bg-muted rounded-lg">
+                  <p className="text-lg font-medium" translate="no">
+                    {currentSentence || (
+                      <span className="text-muted-foreground italic">
+                        O texto reconhecido aparecerá aqui para ser traduzido pelo avatar VLibras
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Clique no ícone azul do VLibras no canto da tela para ativar o avatar,
+                  depois selecione o texto acima para vê-lo traduzido em Libras.
+                </p>
               </CardContent>
             </Card>
 

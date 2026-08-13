@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Video, VideoOff, Volume2, Zap } from "lucide-react";
+import { ArrowLeft, Video, VideoOff, Volume2, Zap, GraduationCap } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
+import { useGestureClassifier } from "@/hooks/useGestureClassifier";
 import { recognizeMultipleGestures, LIBRAS_GESTURES } from "@/lib/librasGestureDatabase";
 import type { HandDetectionResult, RecognitionResult } from "@/lib/librasGestureDatabase";
 
@@ -22,6 +23,7 @@ export default function StudentMode() {
   const animationFrameRef = useRef<number | null>(null);
   
   const { handLandmarker, isLoading: isHandLandmarkerLoading, error: handLandmarkerError, detectHands } = useHandLandmarker();
+  const { hasModel: hasTrainedModel, predict: predictGesture } = useGestureClassifier();
 
   useEffect(() => {
     return () => {
@@ -48,18 +50,34 @@ export default function StudentMode() {
       const detectionResult = detectHands(video, timestamp);
 
       if (detectionResult && detectionResult.landmarks.length > 0) {
-        const results = recognizeMultipleGestures(
-          (detectionResult.landmarks[0] as any) || null,
-          (detectionResult.landmarks[1] as any) || null
-        );
+        let bestResult: RecognitionResult | null = null;
 
-        if (results.length > 0) {
-          const bestResult = results[0];
+        if (hasTrainedModel) {
+          // Classificador treinado (TensorFlow.js) sobre a primeira mão detectada
+          const prediction = predictGesture(detectionResult.landmarks[0] as any);
+          if (prediction) {
+            bestResult = {
+              gesture: prediction.label,
+              confidence: prediction.confidence,
+              category: "trained",
+            };
+          }
+        } else {
+          // Nenhum modelo treinado ainda: usa o reconhecimento de referência
+          // (comparação por distância com padrões pré-definidos)
+          const results = recognizeMultipleGestures(
+            (detectionResult.landmarks[0] as any) || null,
+            (detectionResult.landmarks[1] as any) || null
+          );
+          bestResult = results[0] ?? null;
+        }
+
+        if (bestResult) {
           setCurrentGesture(bestResult.gesture);
           setCurrentConfidence(Math.round(bestResult.confidence * 100));
-          
+
           if (bestResult.confidence > 0.75) {
-            setGestureHistory(prev => [...prev.slice(-9), bestResult]);
+            setGestureHistory(prev => [...prev.slice(-9), bestResult as RecognitionResult]);
           }
         }
       }
@@ -78,7 +96,7 @@ export default function StudentMode() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isCapturing, handLandmarker, detectHands]);
+  }, [isCapturing, handLandmarker, detectHands, hasTrainedModel, predictGesture]);
 
   const drawLandmarks = (canvas: HTMLCanvasElement, detectionResult: HandDetectionResult) => {
     const ctx = canvas.getContext('2d');
@@ -207,7 +225,10 @@ export default function StudentMode() {
             Voltar
           </Button>
           <h1 className="text-2xl font-bold text-foreground">Modo Aluno - MediaPipe Hands</h1>
-          <div className="w-24"></div>
+          <Button variant="ghost" onClick={() => setLocation('/aluno/treinar')}>
+            <GraduationCap className="w-4 h-4 mr-2" />
+            Treinar Gestos
+          </Button>
         </div>
       </header>
 
@@ -281,6 +302,11 @@ export default function StudentMode() {
                     {handLandmarkerError && (
                       <p className="text-sm text-destructive text-center">Erro: {handLandmarkerError}</p>
                     )}
+                    <p className="text-xs text-muted-foreground text-center">
+                      {hasTrainedModel
+                        ? "Usando modelo treinado (TensorFlow.js)"
+                        : "Usando reconhecimento de referência — treine um modelo para maior precisão"}
+                    </p>
                   </div>
                 )}
               </CardContent>

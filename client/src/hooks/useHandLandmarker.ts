@@ -13,10 +13,13 @@ export interface HandDetectionResult {
   worldLandmarks: HandLandmark[][];
 }
 
+// O pacote @mediapipe/tasks-vision no CDN só hospeda o runtime wasm, não o
+// modelo .task (por isso URLs sob /wasm/hand_landmarker.task retornavam 404).
+// O modelo é hospedado separadamente pelo Google, e mantemos uma cópia local
+// em /models como fallback caso o CDN esteja indisponível.
 const MODEL_URLS = [
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm/hand_landmarker.task',
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13/wasm/hand_landmarker.task', // Versão estável anterior
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/hand_landmarker.task',
+  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+  '/models/hand_landmarker.task',
 ];
 
 export function useHandLandmarker() {
@@ -37,7 +40,7 @@ export function useHandLandmarker() {
         const { FilesetResolver, HandLandmarker } = await import('@mediapipe/tasks-vision');
 
         const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm'
         );
 
         console.log('FilesetResolver carregado');

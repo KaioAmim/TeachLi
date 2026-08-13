@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import ProfessorMode from "./pages/ProfessorMode";
 import StudentMode from "./pages/StudentMode";
 import History from "./pages/History";
+import TrainGestures from "./pages/TrainGestures";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -16,6 +17,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/professor"} component={ProfessorMode} />
       <Route path={"/aluno"} component={StudentMode} />
+      <Route path={"/aluno/treinar"} component={TrainGestures} />
       <Route path={"/historico"} component={History} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

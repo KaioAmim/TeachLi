@@ -15,7 +15,7 @@
 ## Modo Professor (Fala → Libras)
 - [x] Criar página ProfessorMode
 - [x] Implementar componente SpeechRecognizer com Web Speech API
-- [ ] Integrar com VLibras API para tradução
+- [x] Integrar com VLibras (widget oficial embutido na página)
 - [x] Criar componente LibrasVideoPlayer para exibir vídeos
 - [x] Implementar indicador de status de reconhecimento de fala
 - [x] Adicionar controles de iniciar/parar reconhecimento
@@ -24,11 +24,11 @@
 ## Modo Aluno (Libras → Fala)
 - [x] Criar página StudentMode
 - [ ] Implementar componente HandGestureCapture com MediaPipe Hands
-- [x] Criar sistema de reconhecimento básico de gestos (letras/números)
+- [x] Criar sistema de reconhecimento de gestos com classificador TensorFlow.js treinável (letras/números/palavras)
 - [x] Implementar componente TextToSpeech com Web Speech API
-- [ ] Adicionar visualização de landmarks das mãos
+- [x] Adicionar visualização de landmarks das mãos
 - [x] Criar indicador de gesto reconhecido
-- [x] Criar procedimentos tRPC para aluno (recognizeGesture, convertToSpeech)
+- [x] Criar procedimentos tRPC para aluno (sessão/tradução — reconhecimento roda 100% no cliente, sem backend)
 
 ## Histórico e Sessões
 - [x] Criar página History para visualizar traduções anteriores
@@ -46,9 +46,9 @@
 - [x] Criar guia de instalação e configuração
 
 ## Melhorias Futuras
-- [ ] Treinar modelo de ML para reconhecimento avançado de Libras
+- [x] Treinar modelo de ML para reconhecimento avançado de Libras (MLP em TensorFlow.js sobre landmarks, ver client/src/lib/gestureClassifier.ts)
 - [ ] Adicionar suporte a frases completas em Libras
-- [ ] Implementar modo de treinamento de novos gestos
+- [x] Implementar modo de treinamento de novos gestos (página /aluno/treinar)
 - [ ] Adicionar suporte a múltiplos usuários simultâneos
 - [ ] Implementar cache de vídeos VLibras para palavras comuns
 
@@ -58,13 +58,13 @@
 - [x] Implementar detecção de landmarks das mãos em tempo real
 - [x] Criar visualização dos landmarks na câmera
 - [x] Implementar sistema de reconhecimento básico de gestos
-- [x] Treinar modelo para reconhecer letras (A-Z)
-- [x] Treinar modelo para reconhecer números (0-9)
-- [x] Integrar reconhecimento com backend tRPC
+- [x] Treinar modelo para reconhecer letras (A-Z) — via página de treinamento em /aluno/treinar; 15 letras estáticas (A,B,C,D,E,I,L,M,N,O,R,S,U,V,W) podem ser importadas automaticamente do dataset público "Brazilian Sign Language Alphabet" (MIT), letras com movimento exigem captura manual pela webcam
+- [x] Treinar modelo para reconhecer números (0-9) — captura manual pela webcam em /aluno/treinar
+- [x] Reconhecimento roda 100% no cliente (TensorFlow.js), sem enviar vídeo/landmarks ao servidor
 - [ ] Testar reconhecimento em diferentes condições de iluminação
 - [ ] Otimizar performance do reconhecimento em tempo real
 
 
 ## Bugs a Corrigir
-- [x] Erro 404 do MediaPipe - fallback não está funcionando
+- [x] Erro 404 do MediaPipe - fallback corrigido (modelAssetPath apontava para /wasm/hand_landmarker.task, que não existe; agora usa o host oficial do modelo + cópia local em /models como fallback)
 - [x] API de Libras (VLibras) não está sendo exibida no Modo Professor
