@@ -59,8 +59,7 @@ Foram removidos componentes sem uso, a página ComponentShowcase, o layout de
  diretas, os plugins de instrumentação Manus/Builder e seu patch do Wouter.
 
 A configuração Vitest não tinha testes; foi removida junto com o comando vazio.
-DOCUMENTACAO.md e todo.md descreviam recursos ausentes ou desatualizados e foram
-consolidados no README e neste documento. Arquivos .gitkeep em pastas preenchidas
+DOCUMENTACAO.md foi reescrito para refletir a implementação atual; todo.md foi substituído por docs/GUIA_IMPLEMENTACAO.md, e o README foi atualizado. Arquivos .gitkeep em pastas preenchidas
 ou sem função foram retirados. O ambiente local foi preservado em .env, ignorado,
  e .env.example documenta as variáveis sem credenciais.
 
