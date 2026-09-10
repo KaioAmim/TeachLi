@@ -8,13 +8,15 @@ export interface GesturePrediction {
 }
 
 /**
- * Carrega o classificador de gestos treinado (TensorFlow.js, salvo no
- * IndexedDB pelo fluxo de treinamento) e expõe uma função de predição em
- * tempo real a partir dos landmarks de uma mão.
+ * Carrega o classificador de gestos ativo — o modelo treinado pelo usuário
+ * (IndexedDB) ou, na ausência dele, o modelo base servido em /models — e
+ * expõe uma função de predição em tempo real a partir dos landmarks.
  */
 export function useGestureClassifier() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasModel, setHasModel] = useState(false);
+  const [labels, setLabels] = useState<string[]>([]);
+  const [source, setSource] = useState<LoadedClassifier["source"] | null>(null);
   const classifierRef = useRef<LoadedClassifier | null>(null);
 
   useEffect(() => {
@@ -22,9 +24,14 @@ export function useGestureClassifier() {
 
     loadClassifier()
       .then(classifier => {
-        if (cancelled) return;
+        if (cancelled) {
+          classifier?.dispose();
+          return;
+        }
         classifierRef.current = classifier;
         setHasModel(classifier !== null);
+        setLabels(classifier?.labels ?? []);
+        setSource(classifier?.source ?? null);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -33,6 +40,7 @@ export function useGestureClassifier() {
     return () => {
       cancelled = true;
       classifierRef.current?.dispose();
+      classifierRef.current = null;
     };
   }, []);
 
@@ -45,5 +53,5 @@ export function useGestureClassifier() {
     return { label, confidence };
   }, []);
 
-  return { isLoading, hasModel, predict };
+  return { isLoading, hasModel, labels, source, predict };
 }

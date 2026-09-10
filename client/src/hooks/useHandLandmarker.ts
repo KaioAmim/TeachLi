@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export interface HandLandmark {
   x: number;
@@ -26,7 +26,6 @@ export function useHandLandmarker() {
   const [handLandmarker, setHandLandmarker] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const loadAttemptRef = useRef(0);
 
   useEffect(() => {
     const initializeHandLandmarker = async () => {

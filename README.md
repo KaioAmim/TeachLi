@@ -1,196 +1,109 @@
-# Sistema de Interpretação Bidirecional Libras
+# TeachLi
 
-Sistema web de interpretação em tempo real entre português falado e Língua Brasileira de Sinais (Libras).
+Projeto de extensão universitária para apoiar a comunicação entre alunos surdos
+ e professores. O objetivo é conectar participantes de uma mesma sala, oferecer
+legendas da fala do professor e reproduzir em áudio as mensagens dos alunos.
 
-## 🎯 Objetivo
+## O que existe hoje
 
-Facilitar a comunicação bidirecional entre professores (falantes de português) e alunos surdos (usuários de Libras) através de tecnologias de reconhecimento de fala, tradução automática e visão computacional.
+- Interface React com modos Professor, Aluno, Treinar Gestos e Histórico.
+- Transcrição da fala no navegador e widget VLibras no modo Professor.
+- Captura de mãos com MediaPipe e classificação local com TensorFlow.js.
+- Modelo base de **15 letras estáticas**, com preferência pelo modelo pessoal
+  quando houver treinamento salvo no navegador.
+- Treinamento local por webcam ou importação dos landmarks já extraídos.
+- Síntese de voz no dispositivo que está usando a aplicação.
+- API Express/tRPC, autenticação OAuth Manus e schema MySQL com Drizzle.
 
-## ✨ Funcionalidades
+**Ainda não existe o fluxo completo de salas compartilhadas.** O projeto não
+verifica vínculo institucional de professor e não transmite automaticamente as
+mensagens entre dispositivos. O classificador de letras não traduz frases em
+Libras. O histórico visual e a API precisam ser integrados ao fluxo de salas.
 
-### 🎤 Modo Professor (Fala → Libras)
-- Reconhecimento de fala em tempo real (Web Speech API)
-- Tradução automática para Libras (VLibras API)
-- Geração de vídeos de interpretação em Libras
-- Transcrição completa das aulas
+## Executar
 
-### 📹 Modo Aluno (Libras → Fala)
-- Captura de gestos via webcam
-- Reconhecimento de gestos em Libras (planejado com MediaPipe Hands)
-- Conversão para texto em português
-- Síntese de voz automática (Web Speech API)
-
-### 📊 Histórico e Estatísticas
-- Registro de todas as sessões de interpretação
-- Histórico de traduções
-- Estatísticas de uso
-
-## 🚀 Início Rápido
-
-### Pré-requisitos
-- Node.js 22 ou superior
-- pnpm
-- Navegador moderno (Chrome, Edge ou Safari recomendados)
-
-### Instalação
+Requisitos: Node.js 22 ou superior, pnpm **10.4.1** e navegador com câmera e
+microfone para experimentar os recursos de captura.
 
 ```bash
-# Instalar dependências
-pnpm install
+pnpm install --frozen-lockfile
+```
 
-# Executar migrações do banco de dados
+Copie `.env.example` para `.env` e preencha os valores necessários. O OAuth atual
+precisa de credenciais Manus; a autenticação institucional é uma etapa futura.
+Os modos podem depender do login conforme o fluxo da interface.
+
+Para usar persistência, configure uma instância MySQL e aplique as migrações:
+
+```bash
 pnpm db:push
-
-# Iniciar servidor de desenvolvimento
 pnpm dev
 ```
 
-A aplicação estará disponível em `http://localhost:3000`
+O endereço padrão é `http://localhost:3000`; o servidor tenta outra porta se ela
+estiver ocupada. Para verificar e gerar o build:
 
-## 📖 Como Usar
-
-### Para Professores
-
-1. Acesse o sistema e faça login
-2. Selecione **"Modo Professor"**
-3. Clique no botão de microfone 🎤 para iniciar
-4. Fale normalmente - suas palavras serão transcritas automaticamente
-5. Aguarde a geração do vídeo em Libras
-6. O vídeo de interpretação será exibido na tela
-
-**💡 Dicas para melhor resultado:**
-- Fale de forma clara e pausada
-- Use um microfone de qualidade
-- Evite ambientes barulhentos
-- Aguarde a tradução ser processada antes de continuar
-
-### Para Alunos
-
-1. Acesse o sistema e faça login
-2. Selecione **"Modo Aluno"**
-3. Clique em "Iniciar Câmera" 📹
-4. Posicione-se em frente à câmera
-5. Faça os gestos em Libras
-6. O sistema converterá automaticamente em fala
-
-**💡 Dicas para melhor resultado:**
-- Certifique-se de ter boa iluminação
-- Use um fundo neutro se possível
-- Mantenha as mãos visíveis na câmera
-- Faça os gestos de forma clara
-
-## 🏗️ Arquitetura
-
-### Frontend
-- **React 19** + TypeScript
-- **Tailwind CSS 4** para estilização
-- **tRPC** para comunicação type-safe
-- **Web Speech API** para fala e áudio
-
-### Backend
-- **Express 4** + TypeScript
-- **tRPC 11** para API
-- **Drizzle ORM** + MySQL/TiDB
-- **VLibras API** para tradução
-
-### Estrutura de Pastas
-
-```
-interprete-libras/
-├── client/              # Frontend React
-│   └── src/
-│       ├── pages/       # Páginas da aplicação
-│       ├── components/  # Componentes reutilizáveis
-│       └── lib/         # Configurações
-├── server/              # Backend Express + tRPC
-│   ├── routers.ts       # Routers tRPC
-│   ├── db.ts            # Acesso ao banco
-│   └── vlibras.ts       # Integração VLibras
-├── drizzle/             # Schema do banco
-└── shared/              # Código compartilhado
+```bash
+pnpm check
+pnpm build
+pnpm start
 ```
 
-## 🔧 Tecnologias Utilizadas
+pnpm test verifica a convenção de branches e commits com testes do Node.js. Ainda não há suíte funcional do aplicativo. Compilar não valida câmera, microfone, tradução, precisão do modelo ou autenticação com o provedor real.
 
-- **React 19** - Framework frontend
-- **TypeScript** - Tipagem estática
-- **Tailwind CSS 4** - Estilização
-- **tRPC 11** - API type-safe
-- **Express 4** - Servidor backend
-- **Drizzle ORM** - ORM para banco de dados
-- **MySQL/TiDB** - Banco de dados
-- **Web Speech API** - Reconhecimento de fala e síntese
-- **VLibras API** - Tradução para Libras
-- **MediaPipe Hands** (planejado) - Detecção de gestos
+## Estrutura
 
-## 📊 Banco de Dados
+- `client/src/`: páginas, componentes e reconhecimento no navegador.
+- `client/public/models/`: modelo MediaPipe e classificador treinado.
+- `client/public/datasets/libras-landmarks.json`: features para treinamento local.
+- `server/` e `shared/`: API, autenticação e código compartilhado.
+- `drizzle/`: schema e histórico de migrações; preservar os arquivos de migração.
+- `datasets-raw/libras-alphabet/`: imagens, licença e atribuição do dataset,
+  preservadas para pesquisa e fora do build público.
+- `scripts/dataset/`: extração, recuperação, treinamento e exportação do modelo.
+- `docs/MODELO.md`: procedimento de treino e métricas relatadas no trabalho anterior.
+- `docs/LIMPEZA.md`: diagnóstico da integração e proposta de próximas etapas.
 
-### Tabelas Principais
+Os scripts Python usam `training-output/` para intermediários, ignorados pelo Git.
+Veja [o procedimento e os limites do modelo](docs/MODELO.md).
 
-- **users** - Usuários do sistema
-- **sessions** - Sessões de interpretação
-- **translations** - Histórico de traduções
-- **gestures** - Gestos de Libras (para expansão futura)
+## Publicação
 
-## 🔐 Autenticação
+O build completo gera `dist/index.js` e `dist/public/` e precisa de um ambiente
+Node.js para a API. `vercel.json` é uma configuração herdada que ainda precisa
+ser validada/adaptada para esse servidor; não é uma garantia de deploy funcional.
+As fotos brutas e os scripts de treinamento não são necessários no servidor.
 
-O sistema utiliza autenticação OAuth via plataforma Manus. As credenciais são gerenciadas automaticamente.
+## Próximas etapas
 
-## 🌐 APIs Externas
+1. Salas e sincronização entre os dispositivos do professor e dos alunos.
+2. Texto do aluno com confirmação e fila de áudio no dispositivo da sala.
+3. Legendas do professor compartilhadas com controles de microfone.
+4. Login institucional e autorização de professor verificados no backend.
+5. Avaliação com alunos surdos e profissionais de Libras da faculdade.
+6. Melhorias experimentais do modelo com dados de novos usuários e rejeição de
+   gestos desconhecidos.
 
-### VLibras API
-- **Provedor**: Governo Federal do Brasil
-- **Uso**: Tradução de português para Libras
-- **Custo**: Gratuito
-- **Documentação**: https://www.gov.br/conecta/catalogo/apis/vlibras
+A licença e a atribuição do dataset estão em `datasets-raw/libras-alphabet/`.
 
-### Web Speech API
-- **Provedor**: Navegadores (Chrome, Edge, Safari)
-- **Uso**: Reconhecimento de fala e síntese de voz
-- **Custo**: Gratuito (nativo do navegador)
-- **Documentação**: https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API
+## Documentação e contribuição
 
-## ⚠️ Limitações Conhecidas
+- [Documentação técnica, branches e commits](DOCUMENTACAO.md).
+- [Guia passo a passo de implementação](docs/GUIA_IMPLEMENTACAO.md).
+- [Auditoria da limpeza](docs/LIMPEZA.md).
 
-### VLibras API
-- Pode ter limitações de taxa de requisições
-- Geração de vídeo pode levar alguns segundos
-- Qualidade depende da API governamental
+As labels existentes no GitHub são bug, documentation, enhancement, feature,
+maintenance e UI/UX. Use respectivamente branches bug/, documentation/,
+enhancement/, feature/, maintenance/ e ui-ux/. Labels classificam PRs; não são
+tags Git de versão. A correspondência com tipos de commit está na documentação.
 
-### Web Speech API
-- Requer navegador moderno (Chrome, Edge, Safari)
-- Necessita permissão de microfone
-- Qualidade varia por navegador
-- Funciona melhor em ambientes silenciosos
+Antes de enviar uma branch, rode também:
 
-### Reconhecimento de Gestos
-- Implementação completa com MediaPipe Hands está planejada
-- Versão atual usa simulação para demonstração
-- Requer treinamento de modelo de ML para produção
+```bash
+pnpm test
+pnpm check:conventions --labels maintenance,documentation,bug --base origin/main
+```
 
-## 🚧 Desenvolvimento Futuro
-
-- [ ] Implementação completa do MediaPipe Hands
-- [ ] Treinamento de modelo de ML para reconhecimento de Libras
-- [ ] Suporte a frases completas em Libras
-- [ ] Cache de vídeos VLibras para palavras comuns
-- [ ] Modo de treinamento de novos gestos
-- [ ] Suporte a múltiplos usuários simultâneos
-- [ ] Gravação e exportação de sessões
-- [ ] Suporte a diferentes dialetos de Libras
-
-## 📝 Documentação Completa
-
-Para documentação detalhada, consulte o arquivo [DOCUMENTACAO.md](./DOCUMENTACAO.md)
-
-## 🤝 Contribuição
-
-Este projeto foi desenvolvido na plataforma Manus. Para sugestões e melhorias, entre em contato através da plataforma.
-
-## 📄 Licença
-
-Desenvolvido como parte da plataforma Manus.
-
----
-
-**Desenvolvido com ❤️ para promover a inclusão e acessibilidade na educação**
+Troque as labels pelas do seu PR. Antes do primeiro commit, use --title com o
+título pretendido no lugar de --base. As branches antigas são preservadas;
+a convenção documentada vale para alterações novas.

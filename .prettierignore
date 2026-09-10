@@ -33,3 +33,9 @@ pnpm-lock.yaml
 # OS files
 .DS_Store
 Thumbs.db
+
+# Research data and generated model artifacts
+datasets-raw/
+training-output/
+client/public/datasets/
+client/public/models/

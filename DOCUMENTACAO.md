@@ -1,273 +1,186 @@
-# Sistema de Interpretação Bidirecional Libras
+# Documentação técnica do TeachLi
 
-## Visão Geral
+## Estado do sistema
 
-O Sistema de Interpretação Bidirecional Libras é uma aplicação web que facilita a comunicação entre professores (falantes de português) e alunos surdos (usuários de Libras). O sistema oferece tradução em tempo real nos dois sentidos:
+O TeachLi é um protótipo de apoio à comunicação em sala de aula. A integração
+bidirecional entre dispositivos ainda precisa ser implementada. O modo Professor
+transcreve áudio no próprio navegador e incorpora o widget VLibras. O modo Aluno
+captura mãos e executa um classificador local de 15 letras estáticas, ou um modelo
+pessoal salvo no navegador. A síntese de voz ocorre no dispositivo atual.
 
-- **Professor → Aluno**: Fala em português é convertida em vídeos de interpretação em Libras
-- **Aluno → Professor**: Gestos em Libras são convertidos em texto e áudio em português
+A página Histórico usa dados de demonstração. A API já contém operações de sessão
+ e tradução, mas isso não significa que as páginas estejam persistindo as aulas.
+O login é Manus OAuth e os papéis do banco são user/admin, não aluno/professor.
 
-## Tecnologias Utilizadas
+## Arquitetura e arquivos mantidos
 
-### Frontend
-- **React 19** com TypeScript
-- **Tailwind CSS 4** para estilização
-- **tRPC 11** para comunicação type-safe com o backend
-- **Web Speech API** para reconhecimento de fala e síntese de voz
-- **MediaPipe Hands** (planejado) para detecção de gestos
-
-### Backend
-- **Express 4** com TypeScript
-- **tRPC 11** para API type-safe
-- **MySQL/TiDB** para armazenamento de dados
-- **Drizzle ORM** para gerenciamento do banco de dados
-
-### APIs Externas
-- **VLibras API** (gov.br) - Tradução de português para Libras
-- **Web Speech API** (nativa do navegador) - Reconhecimento de fala e síntese de voz
-
-## Estrutura do Projeto
-
-```
-interprete-libras/
-├── client/                 # Frontend React
-│   ├── src/
-│   │   ├── pages/         # Páginas da aplicação
-│   │   │   ├── Home.tsx           # Seleção de modo
-│   │   │   ├── ProfessorMode.tsx  # Modo Professor
-│   │   │   ├── StudentMode.tsx    # Modo Aluno
-│   │   │   └── History.tsx        # Histórico
-│   │   ├── components/    # Componentes reutilizáveis
-│   │   ├── lib/          # Configurações (tRPC)
-│   │   └── index.css     # Estilos globais
-├── server/                # Backend Express + tRPC
-│   ├── routers.ts        # Definição dos routers tRPC
-│   ├── db.ts             # Funções de acesso ao banco
-│   ├── vlibras.ts        # Integração com VLibras API
-│   └── _core/            # Infraestrutura do servidor
-├── drizzle/              # Schema e migrações do banco
-│   └── schema.ts         # Definição das tabelas
-└── shared/               # Código compartilhado
+```text
+TeachLi/
+├── client/
+│   ├── index.html
+│   ├── public/
+│   │   ├── datasets/libras-landmarks.json
+│   │   └── models/             # MediaPipe e classificador TF.js
+│   └── src/
+│       ├── _core/hooks/        # autenticação utilizada pela interface
+│       ├── components/        # somente componentes alcançados pelo app
+│       ├── contexts/
+│       ├── hooks/             # câmera, classificador e controles utilizados
+│       ├── lib/               # features, treino, importação e tRPC
+│       └── pages/             # Home, Professor, Aluno, Treino e Histórico
+├── server/
+│   ├── _core/                 # servidor, OAuth, contexto, cookies e API base
+│   ├── db.ts
+│   └── routers.ts
+├── shared/
+├── drizzle/                   # schema, SQL e metadados das migrações
+├── datasets-raw/libras-alphabet/ # pesquisa; não é publicado pelo Vite
+├── scripts/
+│   ├── dataset/               # pipeline Python offline
+│   ├── check-conventions.mjs
+│   └── check-conventions.test.mjs
+├── docs/
+│   ├── MODELO.md
+│   ├── LIMPEZA.md
+│   └── GUIA_IMPLEMENTACAO.md
+├── .env.example
+├── package.json
+└── pnpm-lock.yaml
 ```
 
-## Funcionalidades
+O Vite usa client/ como raiz. O build gera dist/public e o esbuild gera
+ dist/index.js. Arquivos em datasets-raw não são copiados pelo Vite. node_modules,
+ dist, .env e training-output são locais e não devem entrar em commits.
 
-### 1. Modo Professor (Fala → Libras)
+Os dados do modelo e a licença do dataset foram preservados. As migrações existentes
+não devem ser apagadas por parecerem antigas: elas descrevem o histórico do banco.
+A declaração server/_core/types/cookie.d.ts é carregada pelo TypeScript e não exige
+um import explícito no aplicativo.
 
-**Objetivo**: Permitir que o professor fale e suas palavras sejam traduzidas para Libras em vídeo.
+## API e persistência existentes
 
-**Fluxo de Funcionamento**:
-1. Professor clica no botão de microfone para iniciar gravação
-2. Web Speech API captura e transcreve a fala em tempo real
-3. Texto é enviado para a API VLibras via tRPC
-4. VLibras traduz o texto para glosa e gera vídeo de interpretação
-5. Vídeo é exibido na tela para os alunos
+| Área | Operações | Limite atual |
+| --- | --- | --- |
+| auth | me, logout e callback OAuth | Depende do provedor Manus configurado |
+| system | health, notifyOwner | Notificação administrativa herdada, ainda exposta |
+| session | create, end, list, getById | Sessões por usuário; não são salas compartilhadas |
+| translation | save, listBySession | Requer integração das páginas e autorização por sessão |
 
-**Componentes Principais**:
-- `ProfessorMode.tsx` - Interface principal
-- Reconhecimento de fala com Web Speech API
-- Integração com VLibras via `server/vlibras.ts`
+O schema contém users, sessions, translations e gestures. A última tabela é
+herdada e está preservada no schema/migrações; o treino atual usa o navegador.
+Antes de usar dados reais, verificar associação à sala/sessão em todas as consultas
+ e alterações. Exigir login sozinho não impede acesso a um ID de outra pessoa.
 
-**Procedimentos tRPC**:
-- `professor.translateToLibras` - Traduz texto e solicita geração de vídeo
-- `professor.getVideoStatus` - Verifica status da geração
-- `professor.getVideoUrl` - Obtém URL do vídeo gerado
+## Reconhecimento e treino
 
-### 2. Modo Aluno (Libras → Fala)
+O MediaPipe extrai landmarks da mão. handFeatures.ts normaliza 21 pontos para
+63 valores. O classificador tenta primeiro o modelo pessoal em IndexedDB e,
+na ausência dele, carrega client/public/models/gesture-classifier.
 
-**Objetivo**: Permitir que o aluno faça gestos em Libras e sejam convertidos em fala.
+O importador lê landmarks já extraídos, evitando processar as fotos no navegador.
+As 15 classes do modelo base são A, B, C, D, E, I, L, M, N, O, R, S, U, V e W.
+A lista de nomes da tela de treino serve para rotular novas amostras: não prova
+que o modelo reconheça todas aquelas palavras. Consulte [MODELO.md](docs/MODELO.md).
 
-**Fluxo de Funcionamento**:
-1. Aluno ativa a câmera
-2. MediaPipe Hands (planejado) captura landmarks das mãos
-3. Modelo de ML reconhece os gestos
-4. Gestos são convertidos em texto português
-5. Web Speech API converte texto em áudio
-6. Áudio é reproduzido automaticamente
+## Labels, branches e commits
 
-**Componentes Principais**:
-- `StudentMode.tsx` - Interface principal
-- Captura de vídeo via webcam
-- Síntese de voz com Web Speech API
+A consulta ao GitHub encontrou as labels abaixo. Não foram encontradas tags Git
+ de versão. Labels classificam issues/PRs; tags Git apontam para commits de uma
+ versão. Um prefixo feature/ é uma convenção de branch, não uma tag Git.
 
-**Procedimentos tRPC**:
-- `student.recognizeGesture` - Processa landmarks e reconhece gesto
+Esta revisão estabelece a seguinte correspondência a partir das labels existentes:
 
-**Nota**: O reconhecimento completo de gestos com MediaPipe Hands está planejado para implementação futura. Atualmente, há uma simulação para demonstração.
+| Label no GitHub | Prefixo de branch | Tipos de commit permitidos | Uso |
+| --- | --- | --- | --- |
+| feature | feature/ | feat | Funcionalidade nova |
+| bug | bug/ | fix | Correção de comportamento incorreto |
+| documentation | documentation/ | docs | Documentação |
+| enhancement | enhancement/ | feat, perf, refactor | Melhoria de funcionalidade existente |
+| maintenance | maintenance/ | chore, refactor, build, ci, test | Manutenção interna |
+| UI/UX | ui-ux/ | style, feat, fix | Interface, interação e acessibilidade |
 
-### 3. Histórico de Sessões
+Formato da branch: prefixo/descricao-curta-em-minusculas. Formato do commit:
+ tipo(escopo-opcional): descrição. Exemplos: feature/salas-compartilhadas com
+ feat(salas): permitir entrada por código; bug/repeticao-audio com
+ fix(audio): evitar reprodução duplicada.
 
-**Objetivo**: Permitir visualização de sessões anteriores e estatísticas de uso.
+A label principal deve corresponder ao prefixo da branch. PRs podem ter labels
+secundárias, e seus commits podem usar os tipos associados a qualquer uma delas.
+O título do PR segue o mesmo formato do commit. Para uma melhoria puramente interna,
+use maintenance/refactor; não classifique como feature apenas por alterar código.
+O verificador checa nomes e correspondência, não deduz se o comportamento implementado
+realmente merece determinada classificação: isso faz parte da revisão do diff.
 
-**Funcionalidades**:
-- Lista de sessões anteriores
-- Detalhes de cada sessão
-- Estatísticas de uso (número de traduções, tempo de uso, etc.)
+### Histórico encontrado
 
-**Procedimentos tRPC**:
-- `session.create` - Cria nova sessão
-- `session.end` - Finaliza sessão
-- `session.list` - Lista sessões do usuário
-- `session.getById` - Obtém detalhes de uma sessão
-- `translation.save` - Salva tradução no histórico
-- `translation.listBySession` - Lista traduções de uma sessão
+- main: branch de integração, inicialmente em 09a976f nesta revisão.
+- Projeto_Treinadov1: branch legada, sem prefixo padronizado.
+- feat/ProjetoAlteradov1.1: branch legada integrada pelo PR #9.
+- e7d3d42: adicionou a cópia libras-modelo-treinado; não registrou exclusões.
+- PRs #1, #8 e #9: estavam fechados e sem labels na consulta.
 
-## Banco de Dados
+Os nomes antigos não são reescritos nem os commits reclassificados retroativamente.
+A convenção aplica-se ao trabalho novo. A revisão atual usa
+ maintenance/limpeza-estrutura-documentacao e as labels maintenance, documentation
+ e bug, pois inclui manutenção, documentação e correção da integração do modelo.
 
-### Tabelas
+### Fluxo de trabalho
 
-#### `users`
-Tabela de usuários (gerenciada pelo sistema de autenticação)
-- `id` - ID único do usuário
-- `openId` - ID OAuth do Manus
-- `name` - Nome do usuário
-- `email` - Email do usuário
-- `role` - Papel (user/admin)
+1. Atualizar main e criar uma branch com o prefixo da label principal.
+2. Implementar uma mudança com escopo definido e revisar arquivos novos/removidos.
+3. Executar os comandos abaixo com as labels propostas para o PR.
+4. Criar commits no formato documentado e repetir a checagem usando origin/main.
+5. Enviar a branch, abrir PR para main e aplicar as mesmas labels no GitHub.
+6. Conferir as labels efetivas, revisar o diff e os resultados dos testes antes
+   do merge. Se a branch ou as labels mudarem, executar a checagem novamente.
+7. Atualizar a documentação quando o comportamento ou o procedimento mudar.
 
-#### `sessions`
-Sessões de interpretação
-- `id` - ID único da sessão
-- `userId` - ID do usuário (FK → users)
-- `title` - Título da sessão
-- `type` - Tipo (professor/aluno)
-- `startedAt` - Data/hora de início
-- `endedAt` - Data/hora de término
-- `createdAt` - Data de criação
+Não criar uma tag de versão somente para indicar o tipo de alteração. Uma eventual
+política de versões/releases deverá ser definida separadamente pela equipe.
 
-#### `translations`
-Histórico de traduções
-- `id` - ID único da tradução
-- `sessionId` - ID da sessão (FK → sessions)
-- `type` - Tipo (speech_to_libras/libras_to_speech)
-- `originalText` - Texto original
-- `translatedText` - Texto traduzido
-- `videoUrl` - URL do vídeo (para traduções Libras)
-- `confidence` - Confiança da tradução (0-100)
-- `createdAt` - Data de criação
+## Verificações
 
-#### `gestures`
-Gestos de Libras treinados (para expansão futura)
-- `id` - ID único do gesto
-- `word` - Palavra em português
-- `gloss` - Glosa em Libras
-- `landmarksData` - Dados de landmarks (JSON)
-- `createdAt` - Data de criação
+Use pnpm 10.4.1, conforme packageManager; outras versões podem interpretar o
+lockfile de maneira diferente.
 
-## Instalação e Configuração
-
-### Pré-requisitos
-- Node.js 22+
-- pnpm
-- Banco de dados MySQL/TiDB
-
-### Instalação
-
-1. Clone o repositório e instale as dependências:
 ```bash
-cd interprete-libras
-pnpm install
+pnpm install --frozen-lockfile
+pnpm check
+pnpm test
+pnpm build
+pnpm check:conventions --labels maintenance,documentation,bug --base origin/main
 ```
 
-2. Configure as variáveis de ambiente (já configuradas automaticamente pela plataforma Manus)
+Antes de existir um commit, valide o título pretendido:
 
-3. Execute as migrações do banco de dados:
 ```bash
-pnpm db:push
+pnpm check:conventions --labels maintenance,documentation,bug --title "chore: limpar estrutura e documentar o projeto"
 ```
 
-4. Inicie o servidor de desenvolvimento:
-```bash
-pnpm dev
-```
+O comando lê a branch atual. --base valida todos os commits novos não merge entre
+ a base e HEAD. --title valida também o título informado. --branch permite testar
+um nome proposto, sem trocar a branch. Uma faixa sem commits e sem título é rejeitada.
+As labels são informadas explicitamente: o script não consulta nem altera o GitHub.
+Este verificador local não é um bloqueio automático de merge no GitHub.
 
-5. Acesse a aplicação em: `http://localhost:3000`
+pnpm test executa cinco testes do verificador de convenções com Node.js, sem Vitest.
+Não existe, ainda, uma suíte funcional do aplicativo. TypeScript verifica imports,
+variáveis e parâmetros locais sem uso; isso não encontra todo arquivo órfão.
 
-## Uso do Sistema
+A limpeza passou por TypeScript, build, inferência TF.js, integridade dos artefatos
+ e verificações HTTP. O build mantém um aviso de bundle grande. Câmera, áudio,
+OAuth real, widget externo e treino Python completo precisam de testes específicos.
+Detalhes em [LIMPEZA.md](docs/LIMPEZA.md).
 
-### Para Professores
+## Configuração e deploy
 
-1. Faça login no sistema
-2. Selecione "Modo Professor" na página inicial
-3. Clique no botão de microfone para iniciar
-4. Fale normalmente - o sistema transcreverá automaticamente
-5. Aguarde a geração do vídeo em Libras
-6. O vídeo será exibido para os alunos
+As variáveis estão em .env.example. Não versionar .env. Para persistência, configurar
+DATABASE_URL e aplicar as migrações com pnpm db:push em um banco apropriado.
+O comando gera e aplica migrações: revisar alterações de schema antes de executar
+contra um banco compartilhado.
 
-**Dicas**:
-- Fale de forma clara e pausada
-- Evite ambientes muito barulhentos
-- Posicione o microfone adequadamente
-- Aguarde a tradução ser processada antes de continuar
+O servidor completo exige Node.js. A configuração vercel.json foi preservada,
+mas ainda precisa ser validada/adaptada; não foi testado um deploy Vercel nesta
+revisão. O OAuth institucional também não foi implementado nesta limpeza.
 
-### Para Alunos
-
-1. Faça login no sistema
-2. Selecione "Modo Aluno" na página inicial
-3. Clique em "Iniciar Câmera"
-4. Posicione-se em frente à câmera
-5. Faça os gestos em Libras
-6. O sistema reconhecerá e converterá em fala
-
-**Dicas**:
-- Certifique-se de ter boa iluminação
-- Mantenha as mãos visíveis na câmera
-- Faça os gestos de forma clara e pausada
-
-## Limitações Conhecidas
-
-### VLibras API
-- API gratuita do governo brasileiro
-- Pode ter limitações de taxa de requisições
-- Geração de vídeo pode levar alguns segundos
-- Qualidade da tradução depende da API
-
-### Web Speech API
-- Disponível apenas em navegadores modernos (Chrome, Edge, Safari)
-- Requer permissão de microfone do usuário
-- Qualidade do reconhecimento varia por navegador
-- Funciona melhor em ambientes silenciosos
-
-### MediaPipe Hands (Planejado)
-- Requer boa iluminação
-- Funciona melhor com fundo neutro
-- Limitado a 21 landmarks por mão
-- Necessita treinamento de modelo de ML para reconhecimento preciso
-
-## Desenvolvimento Futuro
-
-### Melhorias Planejadas
-
-1. **Reconhecimento Avançado de Libras**
-   - Implementar MediaPipe Hands completo
-   - Treinar modelo de ML para reconhecimento de gestos
-   - Suporte a frases completas em Libras
-   - Reconhecimento de expressões faciais
-
-2. **Otimizações de Performance**
-   - Cache de vídeos VLibras para palavras comuns
-   - Processamento local de gestos quando possível
-   - Otimização de latência na tradução
-
-3. **Funcionalidades Adicionais**
-   - Modo de treinamento de novos gestos
-   - Suporte a múltiplos usuários simultâneos
-   - Gravação de sessões completas
-   - Exportação de transcrições
-
-4. **Acessibilidade**
-   - Suporte a diferentes dialetos de Libras
-   - Ajuste de velocidade de reprodução de vídeos
-   - Temas de alto contraste
-   - Atalhos de teclado
-
-## Suporte e Contribuição
-
-Para reportar problemas ou sugerir melhorias, entre em contato através da plataforma Manus.
-
-## Licença
-
-Este projeto foi desenvolvido como parte da plataforma Manus.
-
----
-
-**Desenvolvido com ❤️ para promover a inclusão e acessibilidade na educação**
+O plano de evolução está no [guia de implementação](docs/GUIA_IMPLEMENTACAO.md).
