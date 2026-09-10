@@ -105,3 +105,8 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# Local training outputs and source snapshots
+training-output/
+/interprete-libras-completo.tar.gz
+env*.local

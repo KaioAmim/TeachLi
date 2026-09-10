@@ -6,9 +6,7 @@ import {
   sessions, 
   InsertSession,
   translations,
-  InsertTranslation,
-  gestures,
-  InsertGesture
+  InsertTranslation
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -155,32 +153,4 @@ export async function getTranslationsBySession(sessionId: number) {
     .from(translations)
     .where(eq(translations.sessionId, sessionId))
     .orderBy(translations.createdAt);
-}
-
-// === Gesture Queries ===
-export async function saveGesture(data: InsertGesture) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(gestures).values(data);
-  return result[0].insertId;
-}
-
-export async function getAllGestures() {
-  const db = await getDb();
-  if (!db) return [];
-  
-  return await db.select().from(gestures);
-}
-
-export async function getGestureByWord(word: string) {
-  const db = await getDb();
-  if (!db) return undefined;
-  
-  const result = await db.select()
-    .from(gestures)
-    .where(eq(gestures.word, word))
-    .limit(1);
-  
-  return result.length > 0 ? result[0] : undefined;
 }

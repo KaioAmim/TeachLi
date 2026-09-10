@@ -6,8 +6,17 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
 import { useGestureClassifier } from "@/hooks/useGestureClassifier";
-import { recognizeMultipleGestures, LIBRAS_GESTURES } from "@/lib/librasGestureDatabase";
-import type { HandDetectionResult, RecognitionResult } from "@/lib/librasGestureDatabase";
+import type { HandDetectionResult } from "@/hooks/useHandLandmarker";
+
+interface RecognitionResult {
+  gesture: string;
+  confidence: number;
+}
+
+/** Frames consecutivos com o mesmo rótulo antes de registrar no histórico. */
+const STABLE_FRAMES = 6;
+/** Intervalo mínimo entre atualizações de estado (evita re-render a 60fps). */
+const UI_THROTTLE_MS = 80;
 
 export default function StudentMode() {
   const [, setLocation] = useLocation();
@@ -23,7 +32,17 @@ export default function StudentMode() {
   const animationFrameRef = useRef<number | null>(null);
   
   const { handLandmarker, isLoading: isHandLandmarkerLoading, error: handLandmarkerError, detectHands } = useHandLandmarker();
-  const { hasModel: hasTrainedModel, predict: predictGesture } = useGestureClassifier();
+  const {
+    hasModel,
+    labels: modelLabels,
+    source: modelSource,
+    isLoading: isClassifierLoading,
+    predict: predictGesture,
+  } = useGestureClassifier();
+
+  const stableRef = useRef<{ label: string; count: number }>({ label: "", count: 0 });
+  const lastUiUpdateRef = useRef(0);
+  const lastCommittedRef = useRef("");
 
   useEffect(() => {
     return () => {
@@ -50,36 +69,42 @@ export default function StudentMode() {
       const detectionResult = detectHands(video, timestamp);
 
       if (detectionResult && detectionResult.landmarks.length > 0) {
-        let bestResult: RecognitionResult | null = null;
+        const prediction = predictGesture(detectionResult.landmarks[0] as any);
 
-        if (hasTrainedModel) {
-          // Classificador treinado (TensorFlow.js) sobre a primeira mão detectada
-          const prediction = predictGesture(detectionResult.landmarks[0] as any);
-          if (prediction) {
-            bestResult = {
-              gesture: prediction.label,
-              confidence: prediction.confidence,
-              category: "trained",
-            };
+        if (prediction) {
+          // Janela de estabilidade: só considera o gesto quando o mesmo rótulo
+          // se repete por vários frames, o que evita a oscilação quadro a quadro
+          // e impede o histórico de encher com duplicatas do mesmo sinal.
+          const stable = stableRef.current;
+          if (prediction.label === stable.label) {
+            stable.count += 1;
+          } else {
+            stable.label = prediction.label;
+            stable.count = 1;
           }
-        } else {
-          // Nenhum modelo treinado ainda: usa o reconhecimento de referência
-          // (comparação por distância com padrões pré-definidos)
-          const results = recognizeMultipleGestures(
-            (detectionResult.landmarks[0] as any) || null,
-            (detectionResult.landmarks[1] as any) || null
-          );
-          bestResult = results[0] ?? null;
-        }
 
-        if (bestResult) {
-          setCurrentGesture(bestResult.gesture);
-          setCurrentConfidence(Math.round(bestResult.confidence * 100));
+          const now = performance.now();
+          if (now - lastUiUpdateRef.current > UI_THROTTLE_MS) {
+            lastUiUpdateRef.current = now;
+            setCurrentGesture(prediction.label);
+            setCurrentConfidence(Math.round(prediction.confidence * 100));
+          }
 
-          if (bestResult.confidence > 0.75) {
-            setGestureHistory(prev => [...prev.slice(-9), bestResult as RecognitionResult]);
+          if (
+            stable.count === STABLE_FRAMES &&
+            prediction.confidence > 0.75 &&
+            prediction.label !== lastCommittedRef.current
+          ) {
+            lastCommittedRef.current = prediction.label;
+            setGestureHistory(prev => [
+              ...prev.slice(-9),
+              { gesture: prediction.label, confidence: prediction.confidence },
+            ]);
           }
         }
+      } else {
+        stableRef.current = { label: "", count: 0 };
+        lastCommittedRef.current = "";
       }
 
       if (canvasRef.current && detectionResult) {
@@ -96,7 +121,7 @@ export default function StudentMode() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isCapturing, handLandmarker, detectHands, hasTrainedModel, predictGesture]);
+  }, [isCapturing, handLandmarker, detectHands, predictGesture]);
 
   const drawLandmarks = (canvas: HTMLCanvasElement, detectionResult: HandDetectionResult) => {
     const ctx = canvas.getContext('2d');
@@ -303,9 +328,13 @@ export default function StudentMode() {
                       <p className="text-sm text-destructive text-center">Erro: {handLandmarkerError}</p>
                     )}
                     <p className="text-xs text-muted-foreground text-center">
-                      {hasTrainedModel
-                        ? "Usando modelo treinado (TensorFlow.js)"
-                        : "Usando reconhecimento de referência — treine um modelo para maior precisão"}
+                      {isClassifierLoading
+                        ? "Carregando classificador..."
+                        : modelSource === "user"
+                          ? `Usando o seu modelo treinado (${modelLabels.length} gestos)`
+                          : modelSource === "pretrained"
+                            ? `Usando o modelo base do alfabeto (${modelLabels.length} letras) — treine o seu para incluir outros sinais`
+                            : "Nenhum classificador disponível"}
                     </p>
                   </div>
                 )}
@@ -317,9 +346,27 @@ export default function StudentMode() {
                 <CardTitle className="text-lg">Gestos Disponíveis</CardTitle>
               </CardHeader>
               <CardContent className="text-sm space-y-2">
-                <p><strong>Letras:</strong> A, B, C, D, E</p>
-                <p><strong>Números:</strong> 0, 1, 2, 3</p>
-                <p><strong>Palavras:</strong> OLÁ, OBRIGADO, SIM, NÃO, AMOR, ESCOLA, PROFESSOR</p>
+                {hasModel ? (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      {modelLabels.map(lbl => (
+                        <span key={lbl} className="px-2 py-1 rounded bg-primary/10 text-primary font-medium">
+                          {lbl}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1">
+                      Estes são os sinais que o classificador ativo reconhece. Para acrescentar
+                      outros, capture amostras em{" "}
+                      <button className="underline" onClick={() => setLocation("/aluno/treinar")}>
+                        Treinar Gestos
+                      </button>
+                      .
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground italic">Carregando lista de sinais...</p>
+                )}
               </CardContent>
             </Card>
 
