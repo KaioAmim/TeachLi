@@ -5,6 +5,14 @@ const MODEL_STORAGE_KEY = "indexeddb://libras-gesture-classifier";
 const LABELS_STORAGE_KEY = "libras-gesture-classifier-labels";
 const DATASET_STORAGE_KEY = "libras-gesture-training-dataset";
 
+/**
+ * Modelo base, treinado offline sobre os landmarks do dataset público
+ * "Brazilian Sign Language Alphabet" (MIT). Cobre as 15 letras estáticas
+ * do alfabeto e é carregado quando o usuário ainda não treinou o seu.
+ */
+const PRETRAINED_MODEL_URL = "/models/gesture-classifier/model.json";
+const PRETRAINED_LABELS_URL = "/models/gesture-classifier/labels.json";
+
 export interface TrainingSample {
   label: string;
   features: number[];
@@ -115,12 +123,14 @@ export async function trainClassifier(
 
 export interface LoadedClassifier {
   labels: string[];
-  predict: (features: Float32Array) => { label: string; confidence: number };
+  /** "user" = treinado pelo próprio usuário; "pretrained" = modelo base embutido. */
+  source: "user" | "pretrained";
+  predict: (features: Float32Array) => { label: string; confidence: number; margin: number };
   dispose: () => void;
 }
 
-/** Carrega o classificador treinado e salvo anteriormente, se existir. */
-export async function loadClassifier(): Promise<LoadedClassifier | null> {
+/** Tenta carregar o modelo que o usuário treinou e salvou no IndexedDB. */
+async function loadUserModel(): Promise<{ model: tf.LayersModel; labels: string[] } | null> {
   const labelsRaw = localStorage.getItem(LABELS_STORAGE_KEY);
   if (!labelsRaw) return null;
 
@@ -132,12 +142,46 @@ export async function loadClassifier(): Promise<LoadedClassifier | null> {
   }
   if (!Array.isArray(labels) || labels.length === 0) return null;
 
-  let model: tf.LayersModel;
   try {
-    model = await tf.loadLayersModel(MODEL_STORAGE_KEY);
+    return { model: await tf.loadLayersModel(MODEL_STORAGE_KEY), labels };
   } catch {
     return null;
   }
+}
+
+/** Carrega o modelo base servido junto com a aplicação. */
+async function loadPretrainedModel(): Promise<{ model: tf.LayersModel; labels: string[] } | null> {
+  try {
+    const [model, labelsRes] = await Promise.all([
+      tf.loadLayersModel(PRETRAINED_MODEL_URL),
+      fetch(PRETRAINED_LABELS_URL),
+    ]);
+    if (!labelsRes.ok) {
+      model.dispose();
+      return null;
+    }
+    return { model, labels: await labelsRes.json() };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Carrega o classificador ativo: o do usuário tem prioridade, e o modelo
+ * base entra como fallback para que o reconhecimento funcione já no
+ * primeiro acesso, sem exigir treinamento.
+ */
+export async function loadClassifier(): Promise<LoadedClassifier | null> {
+  let source: LoadedClassifier["source"] = "user";
+  let loaded = await loadUserModel();
+
+  if (!loaded) {
+    source = "pretrained";
+    loaded = await loadPretrainedModel();
+  }
+  if (!loaded) return null;
+
+  const { model, labels } = loaded;
 
   const predict = (features: Float32Array) => {
     const result = tf.tidy(() => {
@@ -145,21 +189,34 @@ export async function loadClassifier(): Promise<LoadedClassifier | null> {
       const output = model.predict(input) as tf.Tensor;
       const data = output.dataSync();
       let bestIndex = 0;
+      let secondBest = 0;
       for (let i = 1; i < data.length; i++) {
-        if (data[i] > data[bestIndex]) bestIndex = i;
+        if (data[i] > data[bestIndex]) {
+          secondBest = data[bestIndex];
+          bestIndex = i;
+        } else if (data[i] > secondBest) {
+          secondBest = data[i];
+        }
       }
-      return { label: labels[bestIndex], confidence: data[bestIndex] };
+      // Margem entre a 1ª e a 2ª classe mais prováveis: separa "o modelo tem
+      // certeza" de "duas classes quase empatadas", o que a confiança do topo
+      // sozinha não distingue (40%/38% e 40%/5% têm a mesma confiança). Sem
+      // uma classe "nenhum sinal" treinada com exemplos negativos, é a
+      // heurística de rejeição que dá pra aplicar sem coletar mais dado.
+      return { label: labels[bestIndex], confidence: data[bestIndex], margin: data[bestIndex] - secondBest };
     });
     return result;
   };
 
   return {
     labels,
+    source,
     predict,
     dispose: () => model.dispose(),
   };
 }
 
+/** True quando o próprio usuário já treinou um modelo (ignora o modelo base). */
 export async function hasTrainedClassifier(): Promise<boolean> {
   return localStorage.getItem(LABELS_STORAGE_KEY) !== null;
 }

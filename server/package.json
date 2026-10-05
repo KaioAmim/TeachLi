@@ -1,0 +1,13 @@
+{
+  "name": "teachli-signaling-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -1,50 +1,27 @@
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
-import ErrorBoundary from "./components/ErrorBoundary";
-import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
-import ProfessorMode from "./pages/ProfessorMode";
-import StudentMode from "./pages/StudentMode";
-import History from "./pages/History";
-import TrainGestures from "./pages/TrainGestures";
+import { Toaster } from "sonner";
+import Home from "@/pages/Home";
+import StudentMode from "@/pages/StudentMode";
+import TrainMode from "@/pages/TrainMode";
+import SalaAula from "@/pages/SalaAula";
+import Classroom from "@/pages/Classroom";
 
-function Router() {
-  // make sure to consider if you need authentication for certain routes
+export default function App() {
   return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/professor"} component={ProfessorMode} />
-      <Route path={"/aluno"} component={StudentMode} />
-      <Route path={"/aluno/treinar"} component={TrainGestures} />
-      <Route path={"/historico"} component={History} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <Toaster richColors position="top-center" />
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/aluno" component={StudentMode} />
+        <Route path="/aluno/treinar" component={TrainMode} />
+        <Route path="/sala" component={SalaAula} />
+        <Route path="/sala/:roomId" component={Classroom} />
+        <Route>
+          <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+            Página não encontrada
+          </div>
+        </Route>
+      </Switch>
+    </>
   );
 }
-
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
-function App() {
-  return (
-    <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
-  );
-}
-
-export default App;

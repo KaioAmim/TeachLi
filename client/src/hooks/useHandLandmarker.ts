@@ -1,133 +1,107 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
+import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
 
-export interface HandLandmark {
-  x: number;
-  y: number;
-  z: number;
-  visibility?: number;
+/** Servido de public/mediapipe/wasm, na mesma versão do pacote npm. */
+const WASM_PATH = "/mediapipe/wasm";
+const MODEL_PATH =
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+
+/**
+ * O landmarker é criado uma única vez por sessão e nunca fechado.
+ *
+ * Instanciar o grafo do MediaPipe custa segundos e o StrictMode monta cada
+ * efeito duas vezes em dev — sem este singleton, a limpeza da primeira montagem
+ * podia fechar justamente o grafo que ficava no estado, e aí todo
+ * detectForVideo posterior falhava sem sinal visível.
+ */
+let landmarkerPromise: Promise<HandLandmarker> | null = null;
+
+/** detectForVideo exige timestamps crescentes; o relógio é global à instância. */
+let lastTimestamp = -1;
+
+async function createLandmarker(): Promise<HandLandmarker> {
+  const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+  const options = {
+    baseOptions: { modelAssetPath: MODEL_PATH },
+    runningMode: "VIDEO" as const,
+    numHands: 2,
+    minHandDetectionConfidence: 0.5,
+    minHandPresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  };
+
+  try {
+    return await HandLandmarker.createFromOptions(vision, {
+      ...options,
+      baseOptions: { ...options.baseOptions, delegate: "GPU" },
+    });
+  } catch {
+    // Placas/drivers sem WebGL utilizável ainda rodam bem na CPU.
+    return HandLandmarker.createFromOptions(vision, {
+      ...options,
+      baseOptions: { ...options.baseOptions, delegate: "CPU" },
+    });
+  }
 }
 
-export interface HandDetectionResult {
-  landmarks: HandLandmark[][];
-  handedness: string[];
-  worldLandmarks: HandLandmark[][];
+function getLandmarker(): Promise<HandLandmarker> {
+  if (!landmarkerPromise) {
+    landmarkerPromise = createLandmarker().catch(err => {
+      landmarkerPromise = null; // permite nova tentativa numa próxima montagem
+      throw err;
+    });
+  }
+  return landmarkerPromise;
 }
 
-// O pacote @mediapipe/tasks-vision no CDN só hospeda o runtime wasm, não o
-// modelo .task (por isso URLs sob /wasm/hand_landmarker.task retornavam 404).
-// O modelo é hospedado separadamente pelo Google, e mantemos uma cópia local
-// em /models como fallback caso o CDN esteja indisponível.
-const MODEL_URLS = [
-  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-  '/models/hand_landmarker.task',
-];
-
+/**
+ * Carrega o HandLandmarker do MediaPipe em modo VIDEO e expõe uma função de
+ * detecção quadro a quadro.
+ */
 export function useHandLandmarker() {
-  const [handLandmarker, setHandLandmarker] = useState<any>(null);
+  const [handLandmarker, setHandLandmarker] = useState<HandLandmarker | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const loadAttemptRef = useRef(0);
+  const landmarkerRef = useRef<HandLandmarker | null>(null);
 
   useEffect(() => {
-    const initializeHandLandmarker = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        console.log('Inicializando MediaPipe Hands...');
-        
-        // Importar dinamicamente
-        const { FilesetResolver, HandLandmarker } = await import('@mediapipe/tasks-vision');
+    let cancelled = false;
 
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm'
-        );
-
-        console.log('FilesetResolver carregado');
-
-        let landmarker: any = null;
-        let lastError: Error | null = null;
-
-        // Tentar cada URL em sequência
-        for (const modelUrl of MODEL_URLS) {
-          try {
-            console.log(`Tentando carregar modelo de: ${modelUrl}`);
-            
-            landmarker = await HandLandmarker.createFromOptions(vision, {
-              baseOptions: {
-                modelAssetPath: modelUrl,
-              },
-              runningMode: 'VIDEO',
-              numHands: 2,
-              minHandDetectionConfidence: 0.5,
-              minHandPresenceConfidence: 0.5,
-              minTrackingConfidence: 0.5,
-            });
-
-            console.log(`✅ Modelo carregado com sucesso de: ${modelUrl}`);
-            break;
-          } catch (err) {
-            lastError = err as Error;
-            console.warn(`❌ Falha ao carregar de ${modelUrl}: ${(err as Error).message}`);
-            continue;
-          }
-        }
-
-        if (!landmarker) {
-          throw new Error(
-            `Falha ao carregar modelo MediaPipe de todas as URLs. Último erro: ${lastError?.message}`
-          );
-        }
-
+    getLandmarker()
+      .then(landmarker => {
+        if (cancelled) return;
+        landmarkerRef.current = landmarker;
         setHandLandmarker(landmarker);
-        setError(null);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido ao inicializar MediaPipe';
-        console.error('Erro ao inicializar MediaPipe Hands:', err);
-        setError(errorMessage);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initializeHandLandmarker();
+      })
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
     return () => {
-      if (handLandmarker) {
-        try {
-          handLandmarker.close();
-        } catch (err) {
-          console.warn('Erro ao fechar HandLandmarker:', err);
-        }
-      }
+      cancelled = true;
     };
   }, []);
 
-  const detectHands = (video: HTMLVideoElement, timestamp: number): HandDetectionResult | null => {
-    if (!handLandmarker) return null;
+  const detectHands = useCallback(
+    (video: HTMLVideoElement, timestamp: number): HandDetectionResult | null => {
+      const landmarker = landmarkerRef.current;
+      if (!landmarker) return null;
 
-    try {
-      const result = handLandmarker.detectForVideo(video, timestamp);
-      
-      if (!result.landmarks || result.landmarks.length === 0) {
-        return null;
-      }
+      if (timestamp <= lastTimestamp) return null;
+      lastTimestamp = timestamp;
 
+      const result = landmarker.detectForVideo(video, timestamp);
       return {
-        landmarks: result.landmarks,
-        handedness: result.handedness.map((h: any) => h.categoryName || 'Unknown'),
-        worldLandmarks: result.worldLandmarks,
+        landmarks: result.landmarks as HandDetectionResult["landmarks"],
+        handedness: result.handedness.map(categories => categories[0]?.categoryName ?? ""),
       };
-    } catch (err) {
-      console.error('Erro ao detectar mãos:', err);
-      return null;
-    }
-  };
+    },
+    []
+  );
 
-  return {
-    handLandmarker,
-    isLoading,
-    error,
-    detectHands,
-  };
+  return { handLandmarker, isLoading, error, detectHands };
 }

@@ -1,13 +1,47 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Video, VideoOff, Volume2, Zap, GraduationCap } from "lucide-react";
+import { ArrowLeft, Video, VideoOff, Volume2, Zap, GraduationCap, Waves } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
 import { useGestureClassifier } from "@/hooks/useGestureClassifier";
-import { recognizeMultipleGestures, LIBRAS_GESTURES } from "@/lib/librasGestureDatabase";
-import type { HandDetectionResult, RecognitionResult } from "@/lib/librasGestureDatabase";
+import { useDynamicGestureClassifier } from "@/hooks/useDynamicGestureClassifier";
+import { twoHandLandmarksToFeatures } from "@/lib/handFeatures";
+import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
+
+interface RecognitionResult {
+  gesture: string;
+  confidence: number;
+  kind: "static" | "dynamic";
+}
+
+/** Frames consecutivos com o mesmo rótulo antes de registrar no histórico (estático). */
+const STABLE_FRAMES = 6;
+/** Intervalo mínimo entre atualizações de estado (evita re-render a 60fps). */
+const UI_THROTTLE_MS = 80;
+
+/** Quantos quadros o buffer de sinais dinâmicos mantém (~2s a 30fps). */
+const DYNAMIC_BUFFER_SIZE = 60;
+/** A cada quantos quadros o classificador dinâmico é consultado — ele é mais
+ * pesado que o estático (roda sobre uma sequência inteira), então não faz
+ * sentido chamá-lo a cada quadro. */
+const DYNAMIC_PREDICT_EVERY = 5;
+/** Chamadas seguidas com o mesmo rótulo antes de registrar um sinal dinâmico. */
+const DYNAMIC_STABLE_CALLS = 3;
+const DYNAMIC_CONFIDENCE_THRESHOLD = 0.75;
+
+/** Confiança mínima para o classificador estático considerar o sinal decidido. */
+const CONFIDENCE_THRESHOLD = 0.75;
+/**
+ * Margem mínima entre a 1ª e a 2ª classe mais prováveis. Sem uma classe
+ * "nenhum sinal" treinada com exemplos negativos (ver MODELO.md), confiança
+ * sozinha não separa "o modelo decidiu" de "duas classes empatadas" — pares
+ * que o modelo já confunde de verdade (C/O, M/N/W) passariam do limiar de
+ * confiança mesmo quase empatados. É uma heurística, não substitui dado novo.
+ */
+const MARGIN_THRESHOLD = 0.15;
+const DYNAMIC_MARGIN_THRESHOLD = 0.15;
 
 export default function StudentMode() {
   const [, setLocation] = useLocation();
@@ -15,15 +49,41 @@ export default function StudentMode() {
   const [recognizedText, setRecognizedText] = useState("");
   const [currentGesture, setCurrentGesture] = useState("");
   const [currentConfidence, setCurrentConfidence] = useState(0);
+  const [currentGestureKind, setCurrentGestureKind] = useState<"static" | "dynamic" | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [gestureHistory, setGestureHistory] = useState<RecognitionResult[]>([]);
-  
+  const [handDetected, setHandDetected] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | null>(null);
-  
+
   const { handLandmarker, isLoading: isHandLandmarkerLoading, error: handLandmarkerError, detectHands } = useHandLandmarker();
-  const { hasModel: hasTrainedModel, predict: predictGesture } = useGestureClassifier();
+  const {
+    hasModel,
+    labels: modelLabels,
+    source: modelSource,
+    isLoading: isClassifierLoading,
+    predict: predictGesture,
+  } = useGestureClassifier();
+  const {
+    hasModel: hasDynamicModel,
+    labels: dynamicLabels,
+    isLoading: isDynamicClassifierLoading,
+    predict: predictDynamicGesture,
+  } = useDynamicGestureClassifier();
+
+  const stableRef = useRef<{ label: string; count: number }>({ label: "", count: 0 });
+  const lastUiUpdateRef = useRef(0);
+  const lastCommittedRef = useRef("");
+
+  // Buffer circular com os últimos quadros (as duas mãos) para o
+  // classificador dinâmico — preenchido a cada quadro, mesmo quando o
+  // estático não reconhece nada, para não perder o início do movimento.
+  const dynamicBufferRef = useRef<Float32Array[]>([]);
+  const dynamicFrameCounterRef = useRef(0);
+  const dynamicStableRef = useRef<{ label: string; count: number }>({ label: "", count: 0 });
+  const lastDynamicCommittedAtRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -47,39 +107,124 @@ export default function StudentMode() {
       }
 
       const timestamp = performance.now();
-      const detectionResult = detectHands(video, timestamp);
+      // Uma exceção aqui abortaria o rAF em definitivo e a tela ficaria parada
+      // em "Aguardando gestos..." sem nenhum sinal do que houve.
+      let detectionResult: HandDetectionResult | null = null;
+      try {
+        detectionResult = detectHands(video, timestamp);
+      } catch (err) {
+        console.error("Falha ao detectar mãos neste quadro:", err);
+      }
 
       if (detectionResult && detectionResult.landmarks.length > 0) {
-        let bestResult: RecognitionResult | null = null;
+        setHandDetected(true);
 
-        if (hasTrainedModel) {
-          // Classificador treinado (TensorFlow.js) sobre a primeira mão detectada
-          const prediction = predictGesture(detectionResult.landmarks[0] as any);
-          if (prediction) {
-            bestResult = {
-              gesture: prediction.label,
-              confidence: prediction.confidence,
-              category: "trained",
-            };
+        // --- reconhecimento estático (pose de um único quadro) ---
+        const prediction = predictGesture(detectionResult.landmarks[0] as any);
+        if (prediction) {
+          // Rejeição por confiança + margem: sem uma classe "nenhum sinal"
+          // treinada com exemplos negativos, é a melhor heurística disponível
+          // para não afirmar uma letra quando o modelo está indeciso (ex. numa
+          // transição entre gestos, ou entre duas classes confundíveis).
+          const isConfident =
+            prediction.confidence > CONFIDENCE_THRESHOLD && prediction.margin > MARGIN_THRESHOLD;
+
+          // Janela de estabilidade: só considera o gesto quando o mesmo rótulo
+          // se repete por vários frames, o que evita a oscilação quadro a quadro
+          // e impede o histórico de encher com duplicatas do mesmo sinal.
+          const stable = stableRef.current;
+          if (!isConfident) {
+            stable.label = "";
+            stable.count = 0;
+          } else if (prediction.label === stable.label) {
+            stable.count += 1;
+          } else {
+            stable.label = prediction.label;
+            stable.count = 1;
           }
-        } else {
-          // Nenhum modelo treinado ainda: usa o reconhecimento de referência
-          // (comparação por distância com padrões pré-definidos)
-          const results = recognizeMultipleGestures(
-            (detectionResult.landmarks[0] as any) || null,
-            (detectionResult.landmarks[1] as any) || null
-          );
-          bestResult = results[0] ?? null;
+
+          const now = performance.now();
+          if (now - lastUiUpdateRef.current > UI_THROTTLE_MS) {
+            lastUiUpdateRef.current = now;
+            if (isConfident) {
+              setCurrentGesture(prediction.label);
+              setCurrentConfidence(Math.round(prediction.confidence * 100));
+              setCurrentGestureKind("static");
+            } else {
+              setCurrentGesture("");
+              setCurrentConfidence(0);
+            }
+          }
+
+          if (
+            isConfident &&
+            stable.count === STABLE_FRAMES &&
+            prediction.label !== lastCommittedRef.current
+          ) {
+            lastCommittedRef.current = prediction.label;
+            setGestureHistory(prev => [
+              ...prev.slice(-9),
+              { gesture: prediction.label, confidence: prediction.confidence, kind: "static" },
+            ]);
+          }
         }
 
-        if (bestResult) {
-          setCurrentGesture(bestResult.gesture);
-          setCurrentConfidence(Math.round(bestResult.confidence * 100));
+        // --- reconhecimento dinâmico (janela deslizante de quadros) ---
+        if (hasDynamicModel) {
+          const buffer = dynamicBufferRef.current;
+          buffer.push(twoHandLandmarksToFeatures(detectionResult));
+          if (buffer.length > DYNAMIC_BUFFER_SIZE) buffer.shift();
 
-          if (bestResult.confidence > 0.75) {
-            setGestureHistory(prev => [...prev.slice(-9), bestResult as RecognitionResult]);
+          dynamicFrameCounterRef.current += 1;
+          if (
+            dynamicFrameCounterRef.current % DYNAMIC_PREDICT_EVERY === 0 &&
+            buffer.length >= DYNAMIC_BUFFER_SIZE / 2
+          ) {
+            const dynPrediction = predictDynamicGesture(buffer);
+            if (dynPrediction) {
+              const dstable = dynamicStableRef.current;
+              if (dynPrediction.label === dstable.label) {
+                dstable.count += 1;
+              } else {
+                dstable.label = dynPrediction.label;
+                dstable.count = 1;
+              }
+
+              const dynIsConfident =
+                dynPrediction.confidence > DYNAMIC_CONFIDENCE_THRESHOLD &&
+                dynPrediction.margin > DYNAMIC_MARGIN_THRESHOLD;
+
+              if (dynIsConfident) {
+                setCurrentGesture(dynPrediction.label);
+                setCurrentConfidence(Math.round(dynPrediction.confidence * 100));
+                setCurrentGestureKind("dynamic");
+              }
+
+              const now = performance.now();
+              if (
+                dynIsConfident &&
+                dstable.count >= DYNAMIC_STABLE_CALLS &&
+                now - lastDynamicCommittedAtRef.current > 1200
+              ) {
+                lastDynamicCommittedAtRef.current = now;
+                dstable.count = 0;
+                // Limpa o buffer: evita que o mesmo movimento seja contado de
+                // novo na próxima janela, já que ele ainda estaria presente
+                // nos quadros mais recentes do buffer.
+                dynamicBufferRef.current = [];
+                setGestureHistory(prev => [
+                  ...prev.slice(-9),
+                  { gesture: dynPrediction.label, confidence: dynPrediction.confidence, kind: "dynamic" },
+                ]);
+              }
+            }
           }
         }
+      } else {
+        setHandDetected(false);
+        stableRef.current = { label: "", count: 0 };
+        lastCommittedRef.current = "";
+        dynamicStableRef.current = { label: "", count: 0 };
       }
 
       if (canvasRef.current && detectionResult) {
@@ -96,7 +241,7 @@ export default function StudentMode() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isCapturing, handLandmarker, detectHands, hasTrainedModel, predictGesture]);
+  }, [isCapturing, handLandmarker, detectHands, predictGesture, predictDynamicGesture, hasDynamicModel]);
 
   const drawLandmarks = (canvas: HTMLCanvasElement, detectionResult: HandDetectionResult) => {
     const ctx = canvas.getContext('2d');
@@ -156,7 +301,11 @@ export default function StudentMode() {
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
-      
+
+      dynamicBufferRef.current = [];
+      dynamicFrameCounterRef.current = 0;
+      dynamicStableRef.current = { label: "", count: 0 };
+
       setIsCapturing(true);
       toast.success('Câmera iniciada - MediaPipe Hands ativado');
       
@@ -202,6 +351,7 @@ export default function StudentMode() {
   const clearText = () => {
     setRecognizedText("");
     setCurrentGesture("");
+    setCurrentGestureKind(null);
     setGestureHistory([]);
     setCurrentConfidence(0);
     toast.info('Texto limpo');
@@ -249,11 +399,11 @@ export default function StudentMode() {
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-full object-cover"
+                    className="video-mirror block w-full h-auto"
                   />
                   <canvas
                     ref={canvasRef}
-                    className="absolute inset-0 w-full h-full"
+                    className="video-mirror absolute inset-0 w-full h-full"
                   />
                   {!isCapturing && (
                     <div className="absolute inset-0 flex items-center justify-center bg-muted">
@@ -288,27 +438,51 @@ export default function StudentMode() {
                   )}
                 </div>
 
-                {isCapturing && (
-                  <div className="space-y-2">
-                    <div className="text-center">
-                      <span className="status-badge ready">
-                        <span className="w-2 h-2 rounded-full bg-chart-2 animate-pulse"></span>
-                        Câmera Ativa
+                {/* O status do MediaPipe fica visível mesmo com a câmera
+                    desligada: se o modelo de mãos falhar ao carregar, é isso que
+                    explica a ausência de reconhecimento. */}
+                <div className="space-y-2">
+                  <div className="text-center">
+                    {isHandLandmarkerLoading ? (
+                      <span className="status-badge">
+                        <span className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse"></span>
+                        Carregando MediaPipe...
                       </span>
-                    </div>
-                    {isHandLandmarkerLoading && (
-                      <p className="text-sm text-muted-foreground text-center">Carregando MediaPipe...</p>
+                    ) : handLandmarkerError ? (
+                      <span className="status-badge bg-destructive/10 text-destructive">
+                        MediaPipe falhou
+                      </span>
+                    ) : isCapturing ? (
+                      <span className={handDetected ? "status-badge ready" : "status-badge"}>
+                        <span
+                          className={`w-2 h-2 rounded-full ${handDetected ? "bg-chart-2" : "bg-muted-foreground"} animate-pulse`}
+                        ></span>
+                        {handDetected ? "Mão detectada" : "Nenhuma mão no quadro"}
+                      </span>
+                    ) : (
+                      <span className="status-badge ready">MediaPipe pronto</span>
                     )}
-                    {handLandmarkerError && (
-                      <p className="text-sm text-destructive text-center">Erro: {handLandmarkerError}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground text-center">
-                      {hasTrainedModel
-                        ? "Usando modelo treinado (TensorFlow.js)"
-                        : "Usando reconhecimento de referência — treine um modelo para maior precisão"}
-                    </p>
                   </div>
-                )}
+                  {handLandmarkerError && (
+                    <p className="text-sm text-destructive text-center">Erro: {handLandmarkerError}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground text-center">
+                    {isClassifierLoading
+                      ? "Carregando classificador..."
+                      : modelSource === "user"
+                        ? `Usando o seu modelo treinado (${modelLabels.length} gestos)`
+                        : modelSource === "pretrained"
+                          ? `Usando o modelo base do alfabeto (${modelLabels.length} letras) — treine o seu para incluir outros sinais`
+                          : "Nenhum classificador estático disponível"}
+                  </p>
+                  <p className="text-xs text-muted-foreground text-center">
+                    {isDynamicClassifierLoading
+                      ? "Carregando classificador dinâmico..."
+                      : hasDynamicModel
+                        ? `Reconhecimento de movimento ativo (${dynamicLabels.length} sinais dinâmicos)`
+                        : "Nenhum sinal dinâmico treinado ainda — grave clipes em Treinar Gestos"}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -316,10 +490,40 @@ export default function StudentMode() {
               <CardHeader>
                 <CardTitle className="text-lg">Gestos Disponíveis</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm space-y-2">
-                <p><strong>Letras:</strong> A, B, C, D, E</p>
-                <p><strong>Números:</strong> 0, 1, 2, 3</p>
-                <p><strong>Palavras:</strong> OLÁ, OBRIGADO, SIM, NÃO, AMOR, ESCOLA, PROFESSOR</p>
+              <CardContent className="text-sm space-y-3">
+                {hasModel ? (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Estáticos</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {modelLabels.map(lbl => (
+                        <span key={lbl} className="px-2 py-1 rounded bg-primary/10 text-primary font-medium">
+                          {lbl}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground italic">Carregando lista de sinais estáticos...</p>
+                )}
+                {hasDynamicModel && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Dinâmicos</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {dynamicLabels.map(lbl => (
+                        <span key={lbl} className="px-2 py-1 rounded bg-chart-2/10 text-chart-2 font-medium">
+                          {lbl}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground pt-1">
+                  Para acrescentar outros sinais, capture amostras em{" "}
+                  <button className="underline" onClick={() => setLocation("/aluno/treinar")}>
+                    Treinar Gestos
+                  </button>
+                  .
+                </p>
               </CardContent>
             </Card>
 
@@ -341,7 +545,11 @@ export default function StudentMode() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Zap className="w-5 h-5" />
+                  {currentGestureKind === "dynamic" ? (
+                    <Waves className="w-5 h-5" />
+                  ) : (
+                    <Zap className="w-5 h-5" />
+                  )}
                   Gesto Reconhecido
                 </CardTitle>
               </CardHeader>
@@ -349,6 +557,9 @@ export default function StudentMode() {
                 <div className="min-h-[100px] p-4 bg-muted rounded-lg flex flex-col items-center justify-center">
                   {currentGesture ? (
                     <div className="text-center">
+                      {currentGestureKind === "dynamic" && (
+                        <p className="text-xs text-chart-2 font-medium mb-1">sinal dinâmico</p>
+                      )}
                       <span className="gesture-indicator text-2xl mb-2">
                         {currentGesture}
                       </span>
@@ -422,7 +633,14 @@ export default function StudentMode() {
                     <p className="text-xs font-semibold text-muted-foreground mb-2">Histórico de Gestos:</p>
                     <div className="flex flex-wrap gap-2">
                       {gestureHistory.map((gesture, idx) => (
-                        <span key={idx} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                        <span
+                          key={idx}
+                          className={`text-xs px-2 py-1 rounded ${
+                            gesture.kind === "dynamic"
+                              ? "bg-chart-2/10 text-chart-2"
+                              : "bg-primary/10 text-primary"
+                          }`}
+                        >
                           {gesture.gesture}
                         </span>
                       ))}
@@ -444,13 +662,16 @@ export default function StudentMode() {
                   <strong>2. Landmarks:</strong> 21 pontos de referência por mão são extraídos
                 </p>
                 <p>
-                  <strong>3. Reconhecimento:</strong> Algoritmo compara com gestos conhecidos
+                  <strong>3. Reconhecimento estático:</strong> cada quadro é comparado com poses
+                  de mão conhecidas (bom para letras paradas)
                 </p>
                 <p>
-                  <strong>4. Conversão:</strong> Gesto é convertido em texto português
+                  <strong>4. Reconhecimento dinâmico:</strong> uma janela dos últimos ~2s de
+                  movimento das duas mãos é comparada com sinais que dependem de trajetória
                 </p>
                 <p>
-                  <strong>5. Áudio:</strong> Texto é falado automaticamente
+                  <strong>5. Conversão e áudio:</strong> o sinal reconhecido vira texto e é falado
+                  automaticamente
                 </p>
               </CardContent>
             </Card>
