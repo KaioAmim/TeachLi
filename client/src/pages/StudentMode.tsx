@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Video, VideoOff, Volume2, Zap, GraduationCap, Waves } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Video, VideoOff, Volume2, Zap, GraduationCap, Waves, Keyboard } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
@@ -9,6 +10,7 @@ import { useGestureClassifier } from "@/hooks/useGestureClassifier";
 import { useDynamicGestureClassifier } from "@/hooks/useDynamicGestureClassifier";
 import { twoHandLandmarksToFeatures } from "@/lib/handFeatures";
 import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
+import VLibrasWidget from "@/components/VLibrasWidget";
 
 interface RecognitionResult {
   gesture: string;
@@ -53,6 +55,9 @@ export default function StudentMode() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [gestureHistory, setGestureHistory] = useState<RecognitionResult[]>([]);
   const [handDetected, setHandDetected] = useState(false);
+  const [typedText, setTypedText] = useState("");
+  const [spokenTypedText, setSpokenTypedText] = useState("");
+  const [librasEnabled, setLibrasEnabled] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -366,8 +371,29 @@ export default function StudentMode() {
     }
   };
 
+  const speakTypedText = () => {
+    if (!typedText.trim()) return;
+    // Mantido num elemento visível (abaixo) para que o VLibras, que traduz o
+    // texto presente na página, também consiga traduzir o que foi digitado.
+    setSpokenTypedText(typedText);
+    speakText(typedText);
+  };
+
+  const handleTypedTextKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      speakTypedText();
+    }
+  };
+
+  const clearTypedText = () => {
+    setTypedText("");
+    setSpokenTypedText("");
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      {librasEnabled && <VLibrasWidget />}
       <header className="bg-card border-b border-border">
         <div className="container py-4 flex items-center justify-between">
           <Button variant="ghost" onClick={() => setLocation('/')}>
@@ -588,6 +614,65 @@ export default function StudentMode() {
                   >
                     Adicionar ao Texto
                   </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Keyboard className="w-5 h-5" />
+                  Digitar e Ouvir
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Textarea
+                  value={typedText}
+                  onChange={e => setTypedText(e.target.value)}
+                  onKeyDown={handleTypedTextKeyDown}
+                  placeholder="Digite aqui o que deseja dizer... (Enter para falar)"
+                  className="min-h-[80px]"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={clearTypedText}
+                    disabled={!typedText && !spokenTypedText}
+                  >
+                    Limpar
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={speakTypedText}
+                    disabled={!typedText.trim()}
+                  >
+                    <Volume2 className="w-4 h-4 mr-2" />
+                    Falar
+                  </Button>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={librasEnabled}
+                    onChange={e => setLibrasEnabled(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  Mostrar opção de tradução em Libras (VLibras)
+                </label>
+                {librasEnabled && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Clique no ícone azul do VLibras no canto da tela e selecione o texto abaixo para ver a tradução em Libras:
+                    </p>
+                    <p className="text-base font-medium">
+                      {spokenTypedText || (
+                        <span className="text-muted-foreground italic">
+                          Digite um texto e clique em "Falar" para habilitá-lo aqui.
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
