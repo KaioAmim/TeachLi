@@ -1,196 +1,133 @@
-# Sistema de Interpretação Bidirecional Libras
+# TeachLi
 
-Sistema web de interpretação em tempo real entre português falado e Língua Brasileira de Sinais (Libras).
+Protótipo de apoio à comunicação em sala de aula, com texto para voz,
+reconhecimento experimental de gestos pela webcam e videochamada entre professor
+e alunos. O objetivo é ampliar as formas de participação de alunos surdos.
 
-## 🎯 Objetivo
+**O modelo base reconhece 15 letras estáticas; ele não traduz Libras completa.**
+O reconhecimento depende dos dados de treino e precisa de avaliação com usuários.
 
-Facilitar a comunicação bidirecional entre professores (falantes de português) e alunos surdos (usuários de Libras) através de tecnologias de reconhecimento de fala, tradução automática e visão computacional.
+## O que está disponível
 
-## ✨ Funcionalidades
+| Recurso | Funcionamento atual |
+| --- | --- |
+| Modo Aluno | Digitar e ouvir no próprio dispositivo; Enter fala e Shift+Enter insere linha |
+| Reconhecimento estático | MediaPipe + TensorFlow.js, 15 letras no modelo base ou modelo pessoal |
+| Sinais dinâmicos | Treino local com clipes das mãos; depende das amostras do usuário |
+| VLibras | Widget opcional no Modo Aluno para traduzir o texto exibido na página |
+| Sala de Aula | Professor cria um código e alunos entram em videochamada WebRTC |
 
-### 🎤 Modo Professor (Fala → Libras)
-- Reconhecimento de fala em tempo real (Web Speech API)
-- Tradução automática para Libras (VLibras API)
-- Geração de vídeos de interpretação em Libras
-- Transcrição completa das aulas
+A sala ainda não envia o texto digitado/reconhecido a outros dispositivos,
+nem oferece legendas compartilhadas, autenticação institucional ou histórico
+persistente de aulas. Veja o [plano de melhorias](docs/GUIA_IMPLEMENTACAO.md).
 
-### 📹 Modo Aluno (Libras → Fala)
-- Captura de gestos via webcam
-- Reconhecimento de gestos em Libras (planejado com MediaPipe Hands)
-- Conversão para texto em português
-- Síntese de voz automática (Web Speech API)
+A próxima direção é a [aula híbrida/EAD](docs/MODELO_HIBRIDO.md): participantes
+presenciais e remotos na mesma sala, com legendas, mensagens confirmadas e voz.
+O documento define os fluxos e etapas ainda necessários para implementar isso.
 
-### 📊 Histórico e Estatísticas
-- Registro de todas as sessões de interpretação
-- Histórico de traduções
-- Estatísticas de uso
+## Executar localmente
 
-## 🚀 Início Rápido
+> **Pendência conhecida na main:** a instalação de `client/` conclui, mas o
+> início do Vite acusa `@radix-ui/react-dialog` ausente; `typecheck` e `build`
+> também falham em dependências e exports legados. Os comandos abaixo documentam
+> o fluxo previsto, ainda dependente da regularização do pacote do cliente.
+> Esta atualização de documentação não corrige esses arquivos de aplicação.
 
-### Pré-requisitos
-- Node.js 22 ou superior
-- pnpm
-- Navegador moderno (Chrome, Edge ou Safari recomendados)
-
-### Instalação
+Use Node.js 22 e npm, um navegador com WebGL, câmera para reconhecimento e câmera
+mais microfone para videochamadas. A digitação com voz não exige ligar a câmera.
 
 ```bash
-# Instalar dependências
-pnpm install
-
-# Executar migrações do banco de dados
-pnpm db:push
-
-# Iniciar servidor de desenvolvimento
-pnpm dev
+git clone https://github.com/KaioAmim/TeachLi.git
+cd TeachLi/client
+npm ci
+npm run dev
 ```
 
-A aplicação estará disponível em `http://localhost:3000`
+Abra o endereço informado pelo Vite, normalmente `http://localhost:5173`.
+O comando copia automaticamente o runtime WASM do MediaPipe para `client/public/`.
 
-## 📖 Como Usar
+Para usar **Sala de Aula**, abra outro terminal na raiz do TeachLi:
 
-### Para Professores
-
-1. Acesse o sistema e faça login
-2. Selecione **"Modo Professor"**
-3. Clique no botão de microfone 🎤 para iniciar
-4. Fale normalmente - suas palavras serão transcritas automaticamente
-5. Aguarde a geração do vídeo em Libras
-6. O vídeo de interpretação será exibido na tela
-
-**💡 Dicas para melhor resultado:**
-- Fale de forma clara e pausada
-- Use um microfone de qualidade
-- Evite ambientes barulhentos
-- Aguarde a tradução ser processada antes de continuar
-
-### Para Alunos
-
-1. Acesse o sistema e faça login
-2. Selecione **"Modo Aluno"**
-3. Clique em "Iniciar Câmera" 📹
-4. Posicione-se em frente à câmera
-5. Faça os gestos em Libras
-6. O sistema converterá automaticamente em fala
-
-**💡 Dicas para melhor resultado:**
-- Certifique-se de ter boa iluminação
-- Use um fundo neutro se possível
-- Mantenha as mãos visíveis na câmera
-- Faça os gestos de forma clara
-
-## 🏗️ Arquitetura
-
-### Frontend
-- **React 19** + TypeScript
-- **Tailwind CSS 4** para estilização
-- **tRPC** para comunicação type-safe
-- **Web Speech API** para fala e áudio
-
-### Backend
-- **Express 4** + TypeScript
-- **tRPC 11** para API
-- **Drizzle ORM** + MySQL/TiDB
-- **VLibras API** para tradução
-
-### Estrutura de Pastas
-
-```
-interprete-libras/
-├── client/              # Frontend React
-│   └── src/
-│       ├── pages/       # Páginas da aplicação
-│       ├── components/  # Componentes reutilizáveis
-│       └── lib/         # Configurações
-├── server/              # Backend Express + tRPC
-│   ├── routers.ts       # Routers tRPC
-│   ├── db.ts            # Acesso ao banco
-│   └── vlibras.ts       # Integração VLibras
-├── drizzle/             # Schema do banco
-└── shared/              # Código compartilhado
+```bash
+cd server
+npm ci
+npm start
 ```
 
-## 🔧 Tecnologias Utilizadas
+O servidor de sinalização escuta em `ws://localhost:8787`. Ele conecta a chamada;
+os modos Aluno e Treinar podem ser usados sem ele. Não é necessário configurar
+banco de dados ou OAuth para esse fluxo atual.
 
-- **React 19** - Framework frontend
-- **TypeScript** - Tipagem estática
-- **Tailwind CSS 4** - Estilização
-- **tRPC 11** - API type-safe
-- **Express 4** - Servidor backend
-- **Drizzle ORM** - ORM para banco de dados
-- **MySQL/TiDB** - Banco de dados
-- **Web Speech API** - Reconhecimento de fala e síntese
-- **VLibras API** - Tradução para Libras
-- **MediaPipe Hands** (planejado) - Detecção de gestos
+Para conectar dispositivos diferentes, todos devem acessar o mesmo servidor de
+sinalização. Configure `VITE_SIGNALING_URL` em `client/.env.local`; `localhost`
+aponta para o próprio dispositivo. Fora de localhost, use HTTPS no site e WSS
+no servidor. Detalhes na [configuração da sala](server/README.md) e no
+[guia de uso](docs/USO.md).
 
-## 📊 Banco de Dados
+> O `package.json` da raiz pertence ao caminho herdado Express/tRPC/Drizzle,
+> com versões diferentes de React e Vite. Os comandos acima usam os pacotes de
+> `client/` e `server/`. Não misture instalações nem execute migrações para
+> iniciar a aplicação atual. Consulte [arquitetura e legado](DOCUMENTACAO.md).
 
-### Tabelas Principais
+## Verificar e gerar o site
 
-- **users** - Usuários do sistema
-- **sessions** - Sessões de interpretação
-- **translations** - Histórico de traduções
-- **gestures** - Gestos de Libras (para expansão futura)
+Na pasta `client/`:
 
-## 🔐 Autenticação
+```bash
+npm run typecheck
+npm run build
+npm run preview
+```
 
-O sistema utiliza autenticação OAuth via plataforma Manus. As credenciais são gerenciadas automaticamente.
+O build independente gera `client/dist/`; o preview serve esse build localmente.
+Essa é a saída prevista quando a compilação passa; as falhas conhecidas acima
+impedem atestar um build novo nesta revisão. Não use o preview como validação
+de uma alteração se ele estiver servindo artefatos antigos.
+Publicar esses arquivos não publica o servidor WebSocket. A hospedagem deve
+suportar as rotas do frontend e os caminhos dos modelos; o Vite atual usa a base
+`/`. Configurações antigas não comprovam um deploy funcional atual.
 
-## 🌐 APIs Externas
+Na raiz, verifique as convenções sem instalar dependências:
 
-### VLibras API
-- **Provedor**: Governo Federal do Brasil
-- **Uso**: Tradução de português para Libras
-- **Custo**: Gratuito
-- **Documentação**: https://www.gov.br/conecta/catalogo/apis/vlibras
+```bash
+node --test scripts/check-conventions.test.mjs
+node scripts/check-conventions.mjs --branch documentation/guia-instalacao --labels documentation --title "docs: atualizar guia de instalação"
+```
 
-### Web Speech API
-- **Provedor**: Navegadores (Chrome, Edge, Safari)
-- **Uso**: Reconhecimento de fala e síntese de voz
-- **Custo**: Gratuito (nativo do navegador)
-- **Documentação**: https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API
+Compilar e verificar tipos não valida câmera, áudio, tradução, conexão entre
+redes ou precisão dos modelos. O [guia de contribuição](CONTRIBUTING.md) traz
+verificações manuais por recurso.
 
-## ⚠️ Limitações Conhecidas
+## Documentação
 
-### VLibras API
-- Pode ter limitações de taxa de requisições
-- Geração de vídeo pode levar alguns segundos
-- Qualidade depende da API governamental
+| Documento | Conteúdo |
+| --- | --- |
+| [Guia de uso](docs/USO.md) | Digitação, câmera, treinamento, sala e problemas frequentes |
+| [Documentação técnica](DOCUMENTACAO.md) | Arquitetura, rotas, armazenamento e legado |
+| [Contribuição](CONTRIBUTING.md) | Preparação, testes, revisão e manutenção documental |
+| [Branches, labels e commits](docs/BRANCHES.md) | Os seis tipos, exemplos e verificador |
+| [Plano de melhorias](docs/GUIA_IMPLEMENTACAO.md) | Estado atual, prioridades e critérios de aceite |
+| [Aula híbrida/EAD](docs/MODELO_HIBRIDO.md) | Proposta de comunicação acessível entre participantes presenciais e remotos |
+| [Modelo](docs/MODELO.md) | Artefatos, métricas históricas, limites e pipeline |
+| [Datasets](docs/DATASETS.md) | Dados utilizados e candidatos para pesquisa |
+| [Servidor de sinalização](server/README.md) | Execução, configuração e limites da chamada |
+| [Histórico da recuperação](docs/LIMPEZA.md) | O que veio da branch antiga e pendências |
 
-### Web Speech API
-- Requer navegador moderno (Chrome, Edge, Safari)
-- Necessita permissão de microfone
-- Qualidade varia por navegador
-- Funciona melhor em ambientes silenciosos
+## Organização do trabalho
 
-### Reconhecimento de Gestos
-- Implementação completa com MediaPipe Hands está planejada
-- Versão atual usa simulação para demonstração
-- Requer treinamento de modelo de ML para produção
+Novas branches usam `feature/`, `bug/`, `documentation/`, `enhancement/`,
+`maintenance/` ou `ui-ux/`, conforme o [padrão completo](docs/BRANCHES.md).
+Cada alteração volta à `main` por PR com escopo, testes e documentação revisados.
+Há modelos de issue e PR em `.github/`; as instruções do responsável pela
+documentação estão em [AGENTS.md](AGENTS.md).
 
-## 🚧 Desenvolvimento Futuro
+## Dados e limites
 
-- [ ] Implementação completa do MediaPipe Hands
-- [ ] Treinamento de modelo de ML para reconhecimento de Libras
-- [ ] Suporte a frases completas em Libras
-- [ ] Cache de vídeos VLibras para palavras comuns
-- [ ] Modo de treinamento de novos gestos
-- [ ] Suporte a múltiplos usuários simultâneos
-- [ ] Gravação e exportação de sessões
-- [ ] Suporte a diferentes dialetos de Libras
+O treino pessoal fica no navegador e não é sincronizado entre dispositivos.
+O servidor de sinalização não grava aulas. A sala atual não autentica participantes
+e não possui TURN para redes restritivas. O VLibras carrega um serviço externo.
 
-## 📝 Documentação Completa
-
-Para documentação detalhada, consulte o arquivo [DOCUMENTACAO.md](./DOCUMENTACAO.md)
-
-## 🤝 Contribuição
-
-Este projeto foi desenvolvido na plataforma Manus. Para sugestões e melhorias, entre em contato através da plataforma.
-
-## 📄 Licença
-
-Desenvolvido como parte da plataforma Manus.
-
----
-
-**Desenvolvido com ❤️ para promover a inclusão e acessibilidade na educação**
+A atribuição do dataset está em
+[ATTRIBUTION.md](client/public/datasets/libras-alphabet/ATTRIBUTION.md). O manifesto
+da raiz declara MIT, mas ainda não há um arquivo `LICENSE` geral; essa formalização
+está pendente e não altera a licença dos dados de terceiros.
