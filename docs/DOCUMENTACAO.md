@@ -8,10 +8,9 @@ treinamento local e videochamada entre professor e alunos. O modelo base classif
 15 letras estáticas do alfabeto manual; isso não equivale a interpretar Libras
 como língua nem traduzir frases sinalizadas.
 
-Esta documentação foi reconciliada com a `main` em `5cf6d3c`. A recuperação dos
-guias da branch `maintenance/limpeza-estrutura-documentacao` preserva suas
-convenções e propostas, sem importar sua implementação antiga ou declarar sua
-limpeza aplicada. Veja o [registro de recuperação](docs/LIMPEZA.md).
+Esta documentação foi reconciliada com a `main` em `5cf6d3c`. O documento reúne a
+arquitetura atual, os limites do reconhecimento e um resumo das métricas históricas;
+propostas e prioridades de evolução estão no [plano de implementação](docs/GUIA_IMPLEMENTACAO.md).
 
 | Recurso | Estado comprovado no código | Limite |
 | --- | --- | --- |
@@ -174,10 +173,38 @@ contas sincronizadas nem histórico compartilhado. Texto digitado/reconhecido e
 histórico de gestos da tela ficam no estado da página. Limpar os dados do site
 pode apagar modelos e amostras pessoais.
 
-Métricas e limites do modelo: [MODELO.md](docs/MODELO.md). Pesquisa sobre novos
-datasets: [DATASETS.md](docs/DATASETS.md). Os scripts Python mantêm caminhos
-absolutos do ambiente original e não constituem hoje uma reprodução automática
-portátil; a revisão documental não executa nem corrige esse pipeline.
+### Métricas históricas e limites do modelo
+
+O pipeline offline extrai landmarks com MediaPipe e treina um MLP `63→256→128→64→15`,
+exportado para TensorFlow.js. O relato histórico registra 2.409 amostras detectadas
+após recuperação, 4.818 após espelhamento e 20.304 amostras após augmentation.
+O modelo base e os landmarks processados ficam em `client/public/models/gesture-classifier/`
+e `client/public/datasets/libras-landmarks.json`.
+
+A avaliação histórica registrou **97,47% de acurácia em blocos não vistos (n=948)**,
+usando divisão agrupada por sequência em vez de divisão aleatória. Esses números não
+foram reproduzidos nesta revisão e não representam desempenho garantido em webcam.
+O conjunto tem 15 classes estáticas: A, B, C, D, E, I, L, M, N, O, R, S, U, V e W.
+Não reconhece Libras completa, movimento lexical, expressões não manuais ou frases.
+O limiar de confiança e a margem entre as duas primeiras classes reduzem algumas
+predições incertas, mas não substituem uma classe negativa treinada para “nenhum sinal”.
+
+O classificador dinâmico usa sequências de 40 quadros das duas mãos e Conv1D, mas
+depende de clipes gravados pelo usuário. Não há dataset público de palavras integrado
+e validado no pipeline atual. Candidatos pesquisados anteriormente incluem
+[MALTA-LIBRAS/ISLR_LIBRAS](https://github.com/Malta-Lab/ISLR_LIBRAS),
+[V-LIBRASIL](https://libras.cin.ufpe.br/),
+[o corpus Libras-UFPel](https://aclanthology.org/2026.propor-1.112/) e
+[LIBRAS-UFOP (Kinect)](https://www.ufop.br/); formato, licença e permissões dos dados
+precisam ser confirmados antes de qualquer uso. VLibrasBD é textual e não serve
+diretamente para treinar um classificador visual de gestos.
+
+O pipeline de treino em `scripts/dataset/` ainda contém caminhos absolutos e
+dependências de arquivos intermediários, incluindo `probe_X.npy`. Portanto, não é
+reproduzível de ponta a ponta sem adaptação. Qualquer avaliação futura deve separar
+sinalizadores/vídeos entre treino e teste, incluir exemplos negativos e medir o
+resultado com participantes e condições de captura reais. As métricas acima são
+referência histórica, não validação clínica, pedagógica ou de produção.
 
 ## Digitação, voz e VLibras
 
@@ -191,91 +218,15 @@ no widget externo. `VLibrasWidget.tsx` incorpora um script e um avatar; o projet
 não solicita nem armazena vídeos traduzidos por uma API própria. Qualidade,
 disponibilidade, vozes e permissões precisam ser avaliadas no navegador real.
 
-## Visão de evolução: comunicação por texto compartilhado
+## Evolução: comunicação por texto compartilhado
 
-O usuário definiu “modelo híbrido” no contexto de **aula EAD**. A evolução deve
-considerar participação remota e seu uso junto à sala presencial, com acesso
-ao mesmo texto e oportunidades de comunicação para alunos surdos. A proposta
-pedagógica e seus limites estão em [MODELO_HIBRIDO.md](docs/MODELO_HIBRIDO.md);
-o termo não designa uma nova arquitetura de classificadores ou uma migração
-automática para serviços de nuvem.
-
-O resumo `TeachLi.txt` fornecido pelo usuário orienta esta proposta. Seu diagnóstico
-descrevia uma etapa anterior: a pasta de WebRTC hoje contém implementação, a
-videochamada já existe e `ProfessorMode.tsx` está fora das rotas. A lacuna atual
-é compartilhar o texto e integrá-lo às interfaces de professor e aluno.
-
-A prioridade proposta é usar texto como conteúdo principal da comunicação
-assistiva. Gestos continuam processados no navegador do aluno; o texto reconhecido
-deve ser revisado e confirmado antes do envio. A videochamada existente é um
-recurso separado: enquanto estiver ativa, transmite áudio e vídeo entre os pares.
-Um modo de participação apenas por texto, sem exigir câmera/microfone, ainda
-precisa ser implementado; não é uma propriedade da sala atual.
-
-| Direção | Fluxo proposto | Trabalho pendente |
-| --- | --- | --- |
-| Professor → aluno | Fala → texto parcial/final → legenda compartilhada → opção Libras | Integrar captura à sala, protocolo de transcrição e interface de legendas |
-| Aluno → professor | Gesto ou digitação → correção e confirmação → mensagem → painel e voz | Editor de confirmação, envio, painel com autoria e controle de reprodução |
-
-### Canal e mensagens — proposta
-
-O primeiro incremento propõe WebSocket de aplicação para texto e mantém WebRTC
-para mídia, conforme [MODELO_HIBRIDO.md](docs/MODELO_HIBRIDO.md). DataChannel é uma
-alternativa a reavaliar se necessário; a escolha proposta ainda precisa ser
-validada na implementação. O WebSocket atual transporta sinalização e não
-fornece esse protocolo de mensagens.
-Definir identificador, sala, remetente, ordem e estado de cada mensagem. Parciais
-de uma mesma transcrição devem substituir a versão anterior; a versão final
-deve fixar o trecho sem gerar cópias. Reconexão exige confirmação de entrega e
-tratamento de duplicatas. Acesso à sala e autoria não devem depender somente do
-nome ou papel enviado pelo navegador.
-
-O painel do professor deverá mostrar mensagens confirmadas, autoria e estado de
-entrega/reprodução. O destinatário poderá ler o texto sem ouvir áudio, escolher
-quais mensagens falar e controlar a fila. A saída digitada já pode ser corrigida
-no campo local; a saída do reconhecimento ainda não dispõe desse editor nem de
-confirmação para envio remoto.
-
-Em aulas EAD ou com participantes presenciais e remotos, o texto deve alcançar os
-destinatários autorizados em seus próprios dispositivos. Falar uma mensagem na
-caixa de som da sala física não confirma que o aluno remoto a recebeu. A política
-de destinatários, leitura local e eventuais legendas das mensagens dos alunos
-precisa ser definida e testada para esse cenário.
-
-### Preferências de voz — proposta
-
-O código atual seleciona automaticamente uma voz `pt-BR`, quando disponível, e
-usa velocidade e tom fixos. Planeja-se listar as vozes disponibilizadas pelo
-navegador, priorizar `pt-BR`, permitir velocidade/tom e oferecer um botão de teste.
-A implementação deverá tratar carregamento assíncrono da lista e ausência da voz
-salva em outro dispositivo. Preferências locais por navegador e sincronização por
-usuário são escopos distintos; esta última depende de identidade e persistência.
-
-Serviços externos de reconhecimento de fala ou TTS podem ser avaliados como
-alternativa, mas não estão contratados ou integrados nesta proposta documental.
-Processamento iniciado no navegador não garante processamento inteiramente local:
-reconhecimento de fala, vozes e recursos externos dependem do ambiente utilizado.
-
-### Legendas e apresentação em Libras — proposta
-
-Legendas devem permanecer visíveis, com tamanho/contraste ajustáveis e histórico
-rolável. Texto parcial serve à leitura imediata; texto final é candidato à
-apresentação em Libras. O resumo propõe enfileirar frases e permitir pular para a
-mais recente quando a apresentação atrasar. Isso exige antes verificar se a
-integração utilizada oferece controles de iniciar, concluir ou cancelar uma
-tradução. O wrapper atual do VLibras não fornece essa fila nem esses eventos.
-Não se presume uma API de controle do avatar ou de geração de vídeos.
-
-Enquanto essa integração não for validada, a proposta deve preservar o texto e
-a seleção manual no widget. Falha do avatar não pode bloquear as legendas ou o
-envio de mensagem confirmada. A transcrição contínua também precisa ser testada
-em aulas longas, pausas, erros e reinícios; o relato sobre um defeito antigo não
-substitui reprodução no código que for integrado.
-
-Os passos e critérios de aceite estão no
-[guia de implementação](docs/GUIA_IMPLEMENTACAO.md). Esta seção registra intenção
-de produto; nenhum desses fluxos compartilhados foi entregue pela revisão de
-documentação.
+A prioridade proposta é permitir que participantes presenciais e remotos compartilhem
+texto acessível. O aluno deve revisar e confirmar qualquer texto reconhecido antes
+do envio; a videochamada atual é complementar e não substitui legendas ou mensagens
+nos dispositivos dos participantes. O protocolo, os fluxos professor↔aluno, a fila
+de voz, as legendas, a integração com VLibras e os critérios de aceite estão
+consolidados no [plano de implementação](docs/GUIA_IMPLEMENTACAO.md). Esses recursos
+compartilhados ainda não devem ser considerados implementados.
 
 ## Sala de Aula: contratos e limites
 
@@ -363,8 +314,5 @@ branch/título pela CLI e `node --check server/index.mjs` passaram. Esses result
 cobrem convenções e sintaxe do servidor; não corrigem nem substituem a falha de
 tipos do cliente, tampouco validam o funcionamento da videochamada.
 
-O procedimento de contribuição está em [CONTRIBUTING.md](CONTRIBUTING.md), as
-convenções em [BRANCHES.md](docs/BRANCHES.md), as instruções de uso em
-[USO.md](docs/USO.md) e a evolução planejada no
-[guia de implementação](docs/GUIA_IMPLEMENTACAO.md). Antes de concluir mudanças,
-o agente principal aciona a revisão documental descrita em [AGENTS.md](AGENTS.md).
+As convenções estão em [BRANCHES.md](docs/BRANCHES.md) e a evolução planejada no
+[guia de implementação](docs/GUIA_IMPLEMENTACAO.md).

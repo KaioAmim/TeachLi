@@ -1,9 +1,5 @@
 # Branches, labels e commits
 
-Convenção recuperada da branch `maintenance/limpeza-estrutura-documentacao`
-(commit `b937716`) e adotada para novas contribuições. A `main` contém a versão
-atual do projeto; branches antigas permanecem como histórico.
-
 ## Escolher o tipo de trabalho
 
 | Label principal | Branch | Tipos de commit | Exemplo |
@@ -50,6 +46,11 @@ separadamente; não crie tags só para classificar uma alteração.
 
 ## Fluxo completo
 
+[!CAUTION]
+⚠️ NÃO TRABALHE DIRETAMENTE NA main!
+
+Crie uma branch de trabalho, abra um Pull Request para main e faça o merge somente após revisar as alterações e verificar os testes.
+
 Com sua árvore de trabalho limpa, na raiz do repositório:
 
 ```bash
@@ -58,22 +59,12 @@ git pull --ff-only origin main
 git switch -c documentation/guia-instalacao
 ```
 
-Faça a alteração, revise o diff e execute as verificações adequadas descritas
-em [CONTRIBUTING.md](../CONTRIBUTING.md). Antes do primeiro commit:
-
-```bash
-node scripts/check-conventions.mjs --labels documentation --title "docs: atualizar instruções de instalação"
-git diff --check
-git diff
-```
-
 Adicione apenas os arquivos pretendidos, crie o commit e confira a faixa:
 
 ```bash
-git add README.md docs/USO.md
+git add README.md docs/arquivo.md
 git commit -m "docs: atualizar instruções de instalação"
 git fetch origin
-node scripts/check-conventions.mjs --labels documentation --base origin/main --title "docs: atualizar instruções de instalação"
 git push -u origin documentation/guia-instalacao
 ```
 
@@ -82,26 +73,4 @@ e revise alterações e verificações. Resolva conflitos e repita as verificaç
 afetadas antes de integrar. Após o merge, atualize sua `main`; remova a branch de
 trabalho apenas se ela não for mais necessária. Nunca use force push na `main`.
 
-## Como funciona a verificação
 
-Execute na raiz; não é necessário instalar pacotes para esses dois comandos:
-
-```bash
-node --test scripts/check-conventions.test.mjs
-node scripts/check-conventions.mjs --branch feature/legendas-compartilhadas --labels feature --title "feat(sala): compartilhar legendas"
-```
-
-- Sem `--branch`, usa a branch atual.
-- `--title` valida um título proposto; `--base origin/main` valida os commits
-  novos, excluindo commits de merge. Podem ser usados juntos.
-- Sem título e sem commits novos, a verificação falha. Em `main`, use uma branch
-  proposta com `--branch` e `--title` para experimentar o padrão.
-- `--labels` recebe valores separados por vírgula. O script não busca nem aplica
-  labels no GitHub: confira se o PR tem as labels informadas.
-- A checagem valida formato e correspondência. Cabe à revisão avaliar se o tipo
-  escolhido representa o conteúdo e se a implementação atende ao pedido.
-- O script é local: esta recuperação não instala CI nem configura proteção de
-  branch. A obrigatoriedade de revisão é uma regra de colaboração.
-
-Nomes e commits antigos não precisam ser reescritos. Agentes também devem usar
-esta convenção específica do projeto para branches novas.

@@ -21,9 +21,9 @@ A sala ainda não envia o texto digitado/reconhecido a outros dispositivos,
 nem oferece legendas compartilhadas, autenticação institucional ou histórico
 persistente de aulas. Veja o [plano de melhorias](docs/GUIA_IMPLEMENTACAO.md).
 
-A próxima direção é a [aula híbrida/EAD](docs/MODELO_HIBRIDO.md): participantes
-presenciais e remotos na mesma sala, com legendas, mensagens confirmadas e voz.
-O documento define os fluxos e etapas ainda necessários para implementar isso.
+A próxima direção é compartilhar texto acessível entre participantes presenciais e remotos,
+com mensagens confirmadas, legendas e voz. A proposta e os critérios de aceite estão no
+[plano de implementação](docs/GUIA_IMPLEMENTACAO.md).
 
 ## Executar localmente
 
@@ -61,8 +61,7 @@ banco de dados ou OAuth para esse fluxo atual.
 Para conectar dispositivos diferentes, todos devem acessar o mesmo servidor de
 sinalização. Configure `VITE_SIGNALING_URL` em `client/.env.local`; `localhost`
 aponta para o próprio dispositivo. Fora de localhost, use HTTPS no site e WSS
-no servidor. Detalhes na [configuração da sala](server/README.md) e no
-[guia de uso](docs/USO.md).
+no servidor. Detalhes na [configuração da sala](server/README.md).
 
 > O `package.json` da raiz pertence ao caminho herdado Express/tRPC/Drizzle,
 > com versões diferentes de React e Vite. Os comandos acima usam os pacotes de
@@ -95,39 +94,20 @@ node scripts/check-conventions.mjs --branch documentation/guia-instalacao --labe
 ```
 
 Compilar e verificar tipos não valida câmera, áudio, tradução, conexão entre
-redes ou precisão dos modelos. O [guia de contribuição](CONTRIBUTING.md) traz
-verificações manuais por recurso.
+redes ou precisão dos modelos. As verificações manuais por recurso devem ser definidas no plano de implementação.
 
 ## Documentação
 
 | Documento | Conteúdo |
 | --- | --- |
-| [Guia de uso](docs/USO.md) | Digitação, câmera, treinamento, sala e problemas frequentes |
-| [Documentação técnica](DOCUMENTACAO.md) | Arquitetura, rotas, armazenamento e legado |
-| [Contribuição](CONTRIBUTING.md) | Preparação, testes, revisão e manutenção documental |
+| [Documentação técnica](DOCUMENTACAO.md) | Arquitetura, rotas, armazenamento, modelo de gestos e limites |
 | [Branches, labels e commits](docs/BRANCHES.md) | Os seis tipos, exemplos e verificador |
-| [Plano de melhorias](docs/GUIA_IMPLEMENTACAO.md) | Estado atual, prioridades e critérios de aceite |
-| [Aula híbrida/EAD](docs/MODELO_HIBRIDO.md) | Proposta de comunicação acessível entre participantes presenciais e remotos |
-| [Modelo](docs/MODELO.md) | Artefatos, métricas históricas, limites e pipeline |
-| [Datasets](docs/DATASETS.md) | Dados utilizados e candidatos para pesquisa |
+| [Plano de implementação](docs/GUIA_IMPLEMENTACAO.md) | Estado atual, prioridades, aula híbrida/EAD e critérios de aceite |
 | [Servidor de sinalização](server/README.md) | Execução, configuração e limites da chamada |
-| [Histórico da recuperação](docs/LIMPEZA.md) | O que veio da branch antiga e pendências |
 
 ## Organização do trabalho
 
 Novas branches usam `feature/`, `bug/`, `documentation/`, `enhancement/`,
 `maintenance/` ou `ui-ux/`, conforme o [padrão completo](docs/BRANCHES.md).
 Cada alteração volta à `main` por PR com escopo, testes e documentação revisados.
-Há modelos de issue e PR em `.github/`; as instruções do responsável pela
-documentação estão em [AGENTS.md](AGENTS.md).
-
-## Dados e limites
-
-O treino pessoal fica no navegador e não é sincronizado entre dispositivos.
-O servidor de sinalização não grava aulas. A sala atual não autentica participantes
-e não possui TURN para redes restritivas. O VLibras carrega um serviço externo.
-
-A atribuição do dataset está em
-[ATTRIBUTION.md](client/public/datasets/libras-alphabet/ATTRIBUTION.md). O manifesto
-da raiz declara MIT, mas ainda não há um arquivo `LICENSE` geral; essa formalização
-está pendente e não altera a licença dos dados de terceiros.
+Há modelos de issue e PR em `.github/`.

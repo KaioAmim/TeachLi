@@ -21,6 +21,9 @@ build/
 *.swo
 *~
 
+# Arquivos de instruções locais para agentes
+AGENTS.md
+
 # OS generated files
 .DS_Store
 .DS_Store?
