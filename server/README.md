@@ -1,64 +1,93 @@
 # Servidor de sinalização — Sala de Aula
 
-Servidor WebSocket mínimo que existe só para o professor e cada aluno trocarem
-SDP/ICE e conseguirem abrir uma conexão WebRTC direta entre si. **Nunca vê
-áudio ou vídeo** — depois que a conexão P2P sobe, a mídia não passa mais por
-aqui.
+`server/index.mjs` usa WebSocket para trocar mensagens que estabelecem uma
+conexão WebRTC entre professor e alunos. No fluxo implementado, ofertas/respostas
+SDP e candidatos ICE passam por aqui; áudio e vídeo trafegam entre os navegadores.
+O servidor também recebe código de sala, nome e papel informado pelo participante.
 
-## Por que existe um servidor separado
-
-O client (`client/`) é um site estático (hoje publicado em ~12 MB no GitHub
-Pages, ver `docs/MODELO.md`). GitHub Pages não roda processos — só serve
-arquivos. WebRTC precisa de *algum* canal para os dois lados combinarem como
-se conectar antes da conexão direta existir; esse canal é este servidor.
+Este processo é independente do servidor Express/tRPC legado em `server/_core/`.
+`npm start` executado nesta pasta inicia somente a sinalização.
 
 ## Rodar localmente
 
+A partir da raiz do repositório, em um terminal:
+
 ```bash
 cd server
-npm install
+npm ci
 npm start
-# ouvindo em ws://localhost:8787
 ```
 
-Por padrão o client (`client/src/lib/webrtc/config.ts`) já aponta para
-`ws://localhost:8787`, então basta rodar os dois lados (`npm run dev` no
-client, `npm start` aqui) para testar a Sala de Aula localmente.
+O padrão é `ws://localhost:8787`. A variável de ambiente `PORT` pode alterar a
+porta do processo. Em outro terminal, também a partir da raiz:
 
-## Hospedar para uso real
+```bash
+cd client
+npm ci
+npm run dev
+```
 
-Qualquer serviço que rode um processo Node de longa duração funciona — por
-exemplo Render, Railway ou Fly.io (todos com um nível gratuito/hobby
-suficiente para uma turma). Passos gerais:
+Acesse `http://localhost:5173`, abra Sala de Aula, inicie como professor e use o
+código para entrar como aluno. Ambos os lados solicitam câmera e microfone.
+O cliente lê a URL de [config.ts](../client/src/lib/webrtc/config.ts), cujo padrão
+é `ws://localhost:8787`. Para outro endereço, defina `VITE_SIGNALING_URL` em
+`client/.env.local` e reinicie o Vite. `localhost` sempre identifica o dispositivo
+que está executando o navegador; testar duas máquinas exige URL acessível a ambas.
 
-1. Publique a pasta `server/` como um serviço Node (comando de start: `npm start`,
-   ou `node index.mjs`).
-2. O serviço vai expor uma URL própria, tipicamente `wss://algo.onrender.com`
-   (note o `wss://`, não `ws://` — HTTPS exige WebSocket seguro).
-3. No `client/`, crie um arquivo `.env.local` com:
-   ```
-   VITE_SIGNALING_URL=wss://algo.onrender.com
-   ```
-4. Rode `npm run build` no client de novo e publique o resultado (`dist/`)
-   como já é feito hoje.
+## Protocolo atual
+
+A conexão WebSocket recebe `room`, `role` e `name` na query. O código de sala é
+normalizado para maiúsculas. `role=professor` tenta ocupar a vaga única de
+professor; os demais valores entram como aluno. Sem professor, o aluno é recusado.
+
+| Evento | Uso |
+| --- | --- |
+| `joined` | Confirma entrada, ID próprio e IDs dos pares iniciais |
+| `peer-joined` | Avisa o professor da chegada de aluno |
+| `peer-left` | Avisa o professor da saída de aluno |
+| `signal` | Encaminha `data` do remetente ao ID `to` encontrado na mesma sala |
+| `room-closed` | Informa aos alunos a saída do professor |
+| `error` | Informa recusa de entrada |
+
+O cliente usa `data.kind` igual a `offer`, `answer` ou `ice-candidate`. O servidor
+repassa `data` sem validar sua estrutura; não o trate como conteúdo confiável.
+Não existe aqui protocolo de chat, legenda, fila de voz ou gravação da aula.
+
+## Hospedagem
+
+O frontend é um build estático; o WebSocket precisa de serviço com processo Node
+de longa duração e suporte a conexões persistentes. Esta documentação não atesta
+uma publicação existente nem planos ou preços de provedores.
+
+1. Instale dependências em `server/` com `npm ci` e inicie com `npm start`.
+2. Configure HTTPS/TLS no provedor ou proxy para expor uma URL `wss://`.
+3. Defina `VITE_SIGNALING_URL=wss://seu-servidor.exemplo.com` no ambiente de build
+   do cliente ou em `client/.env.local`.
+4. Execute `npm run build` em `client/` e publique `client/dist/` em HTTPS.
+5. Configure fallback de rotas para `index.html` e teste entradas diretas em
+   `/sala` e `/sala/CODIGO`, além dos assets em `/models/` e `/mediapipe/wasm`.
+
+A URL `VITE_*` fica no frontend e não pode conter segredos. Não é necessário
+configurar banco de dados para a sinalização. Para testes entre dispositivos,
+use um contexto seguro com acesso à câmera/microfone e URL WebSocket acessível;
+o endereço local de desenvolvimento sozinho não resolve publicação em rede.
 
 ## Limites conhecidos
 
-- **Sem TURN.** Só STUN público (Google) está configurado
-  (`client/src/lib/webrtc/config.ts`). STUN resolve o endereço público de cada
-  peer, mas não ajuda quando um dos lados está atrás de um NAT simétrico ou
-  firewall restritivo — comum em redes de escola/empresa. Nesses casos a
-  chamada falha silenciosamente (fica em "Conectando..."). Resolver isso exige
-  um servidor TURN (ex. coturn, ou um serviço gerenciado), que retransmite a
-  mídia quando a conexão direta não é possível — mais infraestrutura, ainda
-  não incluída aqui.
-- **Estrela, não mesh, e sem SFU.** O professor mantém uma conexão direta com
-  cada aluno; o upload do professor cresce com o número de alunos (cada
-  stream de vídeo é uma cópia separada). Funciona bem para turmas pequenas.
-  Para turmas grandes, o próximo passo seria um SFU (ex. mediasoup, LiveKit)
-  em vez de WebRTC P2P puro — troca simplicidade por escala.
-- **Sem persistência.** Salas e conexões vivem só na memória do processo; um
-  restart do servidor derruba todas as aulas em andamento.
-- **Sem autenticação.** Qualquer pessoa com o código da sala entra. Suficiente
-  para uma sala de aula com código compartilhado de forma controlada, não para
-  um ambiente que precise impedir acesso não autorizado.
+- **Sem autenticação:** nome e papel são informados pelo cliente. Conhecer o código
+  permite tentar participar; não há prova de identidade ou vínculo institucional.
+- **Sem TURN:** [config.ts](../client/src/lib/webrtc/config.ts) configura somente
+  STUN público. Redes com NAT/firewall restritivo podem impedir a mídia.
+- **Topologia em estrela no cliente, sem SFU:** o professor envia uma cópia de sua
+  mídia a cada aluno. Capacidade de turma depende de banda e equipamento e não
+  foi estabelecida por esta revisão.
+- **Estado em memória:** salas não persistem nem são compartilhadas entre instâncias.
+  Reiniciar o servidor perde esse estado. Mídia P2P já conectada pode continuar
+  temporariamente; não há recuperação automática implementada no cliente.
+- **Sinalização não comprova mídia:** o status de entrada pode estar conectado
+  antes de a negociação WebRTC funcionar. Erros e reconexão precisam de evolução.
+- **Sem gravação implementada:** este processo não grava mídia ou histórico. Isso
+  não impede gravação por participantes nem descreve logs de um provedor externo.
+
+Veja [documentação técnica](../DOCUMENTACAO.md), [uso](../docs/USO.md) e
+[próximos passos](../docs/GUIA_IMPLEMENTACAO.md).

@@ -1,4 +1,8 @@
-# Project TODO
+# Project TODO — registro histórico
+
+Este checklist descreve uma versão anterior e não representa o estado atual da
+aplicação. O plano vigente, com recursos entregues, pendências e critérios de
+aceite, está em [docs/GUIA_IMPLEMENTACAO.md](docs/GUIA_IMPLEMENTACAO.md).
 
 ## Estrutura do Banco de Dados
 - [x] Criar tabela sessions para armazenar sessões de interpretação
