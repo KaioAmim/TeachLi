@@ -15,11 +15,11 @@ mensagens do professor e preferências de voz, e então validar o controle do
 avatar. Os números abaixo organizam áreas de trabalho, não uma dependência
 obrigatória de concluir todo o sistema antes de experimentar o fluxo de texto.
 
-O usuário esclareceu que “modelo híbrido” se refere a **aula EAD**, abrangendo
-participação remota e sua combinação com a sala presencial. O guia
-[MODELO_HIBRIDO.md](MODELO_HIBRIDO.md) descreve essa proposta. A implementação
-deve testar comunicação entre dispositivos e redes diferentes; voz na caixa de
-som da sala física não substitui acesso ao texto para quem está remoto.
+O escopo de aula híbrida/EAD está resumido na seção final deste guia. O termo abrange
+participação remota e sua combinação com a sala presencial; não se refere a modelos
+de machine learning ou processamento em nuvem. A comunicação precisa funcionar nos
+dispositivos dos participantes: voz na caixa de som física não substitui texto para
+quem está remoto.
 
 ## 0. Regularizar o cliente independente — bloqueio técnico confirmado
 
@@ -194,9 +194,6 @@ A arquitetura temporal já existe; falta dataset de palavras integrado e validad
 - [ ] Tornar o pipeline Python portátil, incluindo arquivos usados nas sondas.
 - [ ] Versionar modelo, rótulos, dados permitidos e resultados de avaliação juntos.
 
-Aceite: métricas e falhas documentadas, sem afirmar precisão de webcam a partir
-apenas do treino. Ver [MODELO.md](MODELO.md) e [DATASETS.md](DATASETS.md).
-
 ## 8. Histórico e controles de dados — futuro
 
 Branch: `feature/historico-aulas`. Label: `feature`.
@@ -233,12 +230,65 @@ Aceite: cenários acordados passam no ambiente publicado com os dispositivos rea
 ## Checklist para cada PR
 
 - [ ] Branch, commits, título e labels seguem [BRANCHES.md](BRANCHES.md).
-- [ ] Verificador de convenções executado na raiz com labels propostas:
-  `node scripts/check-conventions.mjs --labels <labels-separadas-por-virgula> --base origin/main`.
-- [ ] Antes de haver commits novos, usar `--title "tipo: descrição"` para validar a proposta.
-- [ ] `npm run typecheck` e `npm run build` executados em `client/` quando pertinentes.
 - [ ] Testes funcionais adequados à mudança descritos, com limitações explícitas.
-- [ ] Diff revisado para não incluir credenciais, dependências locais, build ou intermediários.
 - [ ] Remoções conferidas contra imports, configurações e usos indiretos.
-- [ ] Documentação atualizada e revisão do subagente concluída conforme `AGENTS.md`.
+- [ ] Documentação atualizada conforme alteração feita.
 - [ ] Verificações e revisão concluídas antes do merge em `main`.
+
+
+## 10. Aula híbrida/EAD e protocolo de comunicação — proposta
+
+**Objetivo:** permitir que participantes presenciais e remotos participem da mesma
+sessão lógica com texto acessível. A videochamada WebRTC já existe, mas a entrada
+atual solicita câmera e microfone e não implementa chat, legendas compartilhadas
+nem envio de texto entre dispositivos. A participação somente por texto deve ser
+possível sem ativar mídia.
+
+### Fluxos prioritários
+
+- **Professor → aluno:** ativação explícita da transcrição; atualizar uma legenda
+  parcial sem duplicar trechos; fixar o texto final no histórico da sessão; oferecer
+  tamanho/contraste ajustáveis e manter o texto utilizável mesmo se o avatar falhar.
+- **Aluno → professor:** digitar ou gerar um rascunho pelo reconhecimento; revisar
+  e corrigir; confirmar em **Enviar**; apresentar autoria e estado de entrega ao
+  professor; permitir ao receptor reproduzir, pausar, repetir ou descartar a voz.
+- **Voz:** listar vozes disponíveis, priorizar `pt-BR`, oferecer teste/velocidade/tom
+  e impedir falas sobrepostas. Respeitar as políticas de reprodução do navegador.
+
+### Protocolo proposto
+
+A proposta inicial é usar **WebSocket para mensagens de texto** e manter **WebRTC
+para áudio/vídeo**. DataChannel é uma alternativa, não uma exigência paralela.
+Versionar eventos separados dos eventos de sinalização SDP/ICE. O protocolo deve
+definir IDs de sessão/mensagem/segmento, autoria confiável no servidor, revisão de
+transcrição, sequência por sessão e confirmação de entrega.
+
+Eventos candidatos: `caption.partial`, `caption.final`, `student.message`,
+`message.ack`, `playback.status` e `session.closed`. Parciais atrasados não podem
+sobrescrever uma transcrição final; reenvios não devem criar mensagens duplicadas;
+confirmação de entrega não significa que a mensagem foi ouvida. Reconexão não deve
+reproduzir automaticamente mensagens já concluídas. O servidor deve validar vínculo,
+papel e sala, sem confiar em `role`, `senderId` ou `sessionId` arbitrários enviados
+pelo cliente.
+
+### Acessibilidade, dados e validação
+
+Definir limites de texto, frequência, tamanho da fila, retenção e exclusão antes do
+piloto. Não presumir que reconhecimento de fala ou voz do navegador funcionem
+totalmente offline. A mídia da videochamada é transmitida entre pares; o treino de
+gestos permanece local no navegador. Preferências locais não são sincronização por
+conta. A integração VLibras não oferece atualmente contrato próprio de fila ou
+controle automático do avatar; manter seleção manual até que a interface suportada
+seja comprovada.
+
+Validar em dispositivos e redes diferentes, incluindo perda de conexão, acesso
+somente por texto, ausência de câmera/microfone, legendas longas, pausas/reinícios,
+duplicação de mensagens e falhas de voz. Avaliar fluxos com alunos surdos e
+profissionais de Libras. Um teste com duas abas não comprova capacidade de turma;
+autenticação/autorização, isolamento entre salas e proteção contra abuso são
+pré-requisitos para um piloto com participantes reais.
+
+**Aceite mínimo:** o texto chega aos participantes autorizados; mensagens são
+revisadas/confirmadas; parciais viram finais sem duplicação; voz não se sobrepõe;
+reconexão não repete falas concluídas; legendas permanecem acessíveis sem câmera,
+microfone ou avatar.
