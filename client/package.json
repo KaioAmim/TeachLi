@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:auth": "node --test tests/microsoftAuth.test.mjs",
     "copy-wasm": "node scripts/copy-mediapipe-wasm.mjs",
     "predev": "npm run copy-wasm",
     "dev": "vite",

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Copy, LogOut, MicOff, VideoOff } from "lucide-react";
 import { toast } from "sonner";
 import { useClassroom } from "@/hooks/useClassroom";
+import { loadProfessorDemoSession } from "@/lib/demoAuth";
 import type { Role } from "@/lib/webrtc/signalingClient";
 
 function VideoTile({
@@ -57,9 +58,17 @@ export default function Classroom() {
 
   const roomId = (params.roomId ?? "").toUpperCase();
   const role = (search.get("role") === "professor" ? "professor" : "aluno") as Role;
-  const name = search.get("name") || (role === "professor" ? "Professor(a)" : "Aluno(a)");
+  const professorSession = role === "professor" ? loadProfessorDemoSession() : null;
+  const name = role === "professor"
+    ? professorSession?.profile.name ?? "Professor(a)"
+    : search.get("name") || "Aluno(a)";
 
-  const { status, errorMessage, localStream, peers } = useClassroom({ roomId, role, name });
+  const { status, errorMessage, localStream, peers } = useClassroom({
+    roomId,
+    role,
+    name,
+    sessionToken: professorSession?.token,
+  });
 
   const copyRoomCode = () => {
     navigator.clipboard.writeText(roomId).then(
@@ -69,6 +78,22 @@ export default function Classroom() {
   };
 
   const leave = () => setLocation("/sala");
+
+  if (role === "professor" && !professorSession) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <Card className="max-w-md">
+          <CardContent className="pt-6 text-center space-y-4">
+            <p className="font-medium">Entre como professor antes de criar uma sala.</p>
+            <p className="text-sm text-muted-foreground">
+              Sua sessão demo pode ter expirado ou esta sala foi aberta em outro navegador.
+            </p>
+            <Button onClick={leave}>Voltar para a Sala de Aula</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (status === "error") {
     return (

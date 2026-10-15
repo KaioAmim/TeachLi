@@ -69,14 +69,20 @@ Aceite: escopo documentado com responsáveis e cenários reproduzíveis. A digit
 com voz local pode ser avaliada já; texto para um receptor remoto e legendas
 compartilhadas ainda exigem implementação.
 
-## 2. Identidade e autorização — futuro
+## 2. Identidade e autorização — parcial
 
 Branch: `feature/autenticacao-institucional`. Label: `feature`.
 
-A sala atual aceita o papel informado na URL. OAuth Manus e papéis `user/admin`
-existem na infraestrutura legada, mas não autenticam a Sala de Aula independente.
+O primeiro passo da branch adiciona uma sessão demo assinada pelo servidor: apenas
+um e-mail no domínio `@unibarretos.com.br` combinado com o código configurado no
+servidor pode criar sala. `@alunos.unibarretos.com.br` é recusado para esse papel,
+e alterar `role=professor` na URL não funciona sem sessão. Isso é demonstração,
+não comprovação de conta Microsoft. OAuth Manus e papéis `user/admin` existem na
+infraestrutura legada, mas não autenticam a Sala de Aula independente.
 
-- [ ] Integrar um provedor aprovado e verificar o vínculo de professor no servidor.
+- [x] Proteger criação de sala demo com sessão assinada, domínio de professor e código guardado no servidor.
+- [ ] Integrar Microsoft Entra e verificar token institucional no servidor.
+- [ ] Quando disponível, restringir o `Tenant ID` e validar grupo/função de docentes.
 - [ ] Autorizar criação, participação e encerramento de aulas.
 - [ ] Se a API de sessões for reutilizada, verificar a associação do usuário em
   toda consulta/alteração de sessão ou tradução.
