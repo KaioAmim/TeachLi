@@ -12,6 +12,7 @@ export interface UseClassroomOptions {
   roomId: string;
   role: Role;
   name: string;
+  sessionToken?: string;
 }
 
 export type ClassroomStatus = "connecting" | "connected" | "error";
@@ -33,7 +34,7 @@ type SignalPayload =
  * pequenas; para turmas grandes, o próximo passo seria um SFU (ex.
  * mediasoup, LiveKit) em vez de P2P puro.
  */
-export function useClassroom({ roomId, role, name }: UseClassroomOptions) {
+export function useClassroom({ roomId, role, name, sessionToken }: UseClassroomOptions) {
   const [status, setStatus] = useState<ClassroomStatus>("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -99,7 +100,7 @@ export function useClassroom({ roomId, role, name }: UseClassroomOptions) {
         localStreamRef.current = stream;
         setLocalStream(stream);
 
-        const signaling = await connectSignaling(SIGNALING_URL, roomId, role, name);
+        const signaling = await connectSignaling(SIGNALING_URL, roomId, role, name, sessionToken);
         if (cancelled) {
           signaling.close();
           return;
@@ -174,7 +175,7 @@ export function useClassroom({ roomId, role, name }: UseClassroomOptions) {
     // As dependências abaixo não devem disparar reconexão a cada render —
     // só entrar/sair da sala deve reiniciar tudo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, role, name]);
+  }, [roomId, role, name, sessionToken]);
 
   return { status, errorMessage, localStream, peers: Object.values(peers) };
 }

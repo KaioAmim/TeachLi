@@ -37,8 +37,8 @@ style(aluno): melhorar contraste dos controles
 O título do PR usa o mesmo formato. A label principal corresponde ao prefixo da
 branch. Labels secundárias permitem os tipos adicionais da tabela: uma branch
 `maintenance/atualizar-guias` com `maintenance,documentation` aceita `chore` e
-`docs`, por exemplo. O verificador aceita somente essas seis labels; informe
-apenas as labels de classificação desta tabela, não rótulos auxiliares de status.
+`docs`, por exemplo. Informe apenas labels de classificação desta tabela, não
+rótulos auxiliares de status.
 
 Labels classificam issues e PRs. Tags Git identificam versões em commits e não
 substituem labels ou prefixos de branch. Uma política de releases será definida
@@ -72,5 +72,4 @@ No GitHub, abra PR para `main`, aplique as mesmas labels, preencha o modelo de P
 e revise alterações e verificações. Resolva conflitos e repita as verificações
 afetadas antes de integrar. Após o merge, atualize sua `main`; remova a branch de
 trabalho apenas se ela não for mais necessária. Nunca use force push na `main`.
-
 

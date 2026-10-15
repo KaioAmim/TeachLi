@@ -26,11 +26,13 @@ export function connectSignaling(
   url: string,
   roomId: string,
   role: Role,
-  name: string
+  name: string,
+  sessionToken?: string
 ): Promise<SignalingClient> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(
-      `${url}?room=${encodeURIComponent(roomId)}&role=${role}&name=${encodeURIComponent(name)}`
+      `${url}?room=${encodeURIComponent(roomId)}&role=${role}&name=${encodeURIComponent(name)}`,
+      sessionToken ? ["teachli-session", sessionToken] : undefined
     );
     const handlers = new Set<(event: SignalingEvent) => void>();
     let settled = false;

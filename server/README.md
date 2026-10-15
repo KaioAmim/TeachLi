@@ -3,7 +3,8 @@
 `server/index.mjs` usa WebSocket para trocar mensagens que estabelecem uma
 conexão WebRTC entre professor e alunos. No fluxo implementado, ofertas/respostas
 SDP e candidatos ICE passam por aqui; áudio e vídeo trafegam entre os navegadores.
-O servidor também recebe código de sala, nome e papel informado pelo participante.
+O servidor recebe código de sala e nome do participante. Para criar sala, o
+professor também precisa de uma sessão demo assinada pelo próprio servidor.
 
 Este processo é independente do servidor Express/tRPC legado em `server/_core/`.
 `npm start` executado nesta pasta inicia somente a sinalização.
@@ -27,18 +28,44 @@ npm ci
 npm run dev
 ```
 
-Acesse `http://localhost:5173`, abra Sala de Aula, inicie como professor e use o
-código para entrar como aluno. Ambos os lados solicitam câmera e microfone.
+As telas de Sala de Aula estão preservadas no código, mas as rotas `/sala` e
+`/sala/:roomId` foram retiradas da navegação atual. Para verificar o servidor
+independentemente dessas telas, execute `npm test` nesta pasta.
+
+O fluxo demo preservado usa e-mail `@unibarretos.com.br` e código demo para o
+professor, e código de sala para o aluno. Ambos os lados solicitam câmera e
+microfone ao entrar pela interface. Em desenvolvimento, o código demo padrão é
+`teachli-professor-demo`; troque-o por variável de ambiente antes de demonstrar
+para outras pessoas.
 O cliente lê a URL de [config.ts](../client/src/lib/webrtc/config.ts), cujo padrão
 é `ws://localhost:8787`. Para outro endereço, defina `VITE_SIGNALING_URL` em
 `client/.env.local` e reinicie o Vite. `localhost` sempre identifica o dispositivo
 que está executando o navegador; testar duas máquinas exige URL acessível a ambas.
 
+## Sessão demo de professor
+
+`POST /auth/demo/login` recebe nome, e-mail e código de demonstração. O endpoint
+aceita apenas o domínio exato `@unibarretos.com.br`; endereços
+`@alunos.unibarretos.com.br` não podem iniciar aulas. Ao validar o código, ele
+devolve sessão assinada com validade de oito horas. O código e o segredo nunca
+devem ir para `client/`, `.env.local` do frontend ou GitHub.
+
+| Variável do servidor | Desenvolvimento | Demonstração publicada |
+| --- | --- | --- |
+| `DEMO_PROFESSOR_ACCESS_CODE` | padrão local temporário | obrigatório, longo e compartilhado apenas com professores demo |
+| `DEMO_SESSION_SECRET` | aleatório por processo | obrigatório, aleatório e com ao menos 32 caracteres |
+| `TEACHLI_CORS_ORIGIN` | `http://localhost:5173` | URL HTTPS exata do frontend |
+
+O cliente envia a sessão pelo subprotocolo WebSocket, não por parâmetro de URL. O
+servidor ignora um pedido de `role=professor` sem sessão válida e usa o nome assinado
+da sessão. O limite de cinco tentativas de código por IP/minuto é apenas uma proteção
+contra tentativas casuais em uma única instância; não substitui autenticação Microsoft.
+
 ## Protocolo atual
 
 A conexão WebSocket recebe `room`, `role` e `name` na query. O código de sala é
-normalizado para maiúsculas. `role=professor` tenta ocupar a vaga única de
-professor; os demais valores entram como aluno. Sem professor, o aluno é recusado.
+normalizado para maiúsculas. `role=professor` só é aceito quando a sessão demo no
+subprotocolo é válida; os demais entram como aluno. Sem professor, o aluno é recusado.
 
 | Evento | Uso |
 | --- | --- |
@@ -74,8 +101,9 @@ o endereço local de desenvolvimento sozinho não resolve publicação em rede.
 
 ## Limites conhecidos
 
-- **Sem autenticação:** nome e papel são informados pelo cliente. Conhecer o código
-  permite tentar participar; não há prova de identidade ou vínculo institucional.
+- **Autenticação ainda demonstrativa:** professor precisa de sessão assinada e código
+  demo, mas o sistema não confirma posse de uma conta Microsoft. Alunos entram por
+  código de sala e não têm identidade institucional verificada.
 - **Sem TURN:** [config.ts](../client/src/lib/webrtc/config.ts) configura somente
   STUN público. Redes com NAT/firewall restritivo podem impedir a mídia.
 - **Topologia em estrela no cliente, sem SFU:** o professor envia uma cópia de sua
@@ -89,5 +117,5 @@ o endereço local de desenvolvimento sozinho não resolve publicação em rede.
 - **Sem gravação implementada:** este processo não grava mídia ou histórico. Isso
   não impede gravação por participantes nem descreve logs de um provedor externo.
 
-Veja [documentação técnica](../DOCUMENTACAO.md), [uso](../docs/USO.md) e
+Veja a [documentação técnica](../docs/DOCUMENTACAO.md) e os
 [próximos passos](../docs/GUIA_IMPLEMENTACAO.md).

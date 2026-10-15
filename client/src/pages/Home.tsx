@@ -1,10 +1,19 @@
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Hand, GraduationCap, Video, Users } from "lucide-react";
+import { Hand, GraduationCap, Video } from "lucide-react";
+import { AppRole, MICROSOFT_ROLE_DOMAINS, startMicrosoftLogin } from "@/lib/microsoftAuth";
+import { toast } from "sonner";
 
 export default function Home() {
   const [, setLocation] = useLocation();
+  const signIn = async (role: AppRole) => {
+    try {
+      await startMicrosoftLogin(role);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível iniciar o login Microsoft.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -18,59 +27,50 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card>
+        <div className="grid sm:grid-cols-2 gap-6">
+          <Card className="border-primary/30">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Video className="w-5 h-5" />
-                Modo Aluno
+                Aluno
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Liga a câmera e reconhece os sinais em tempo real, com leitura em voz alta do texto.
+                Reconheça sinais pela câmera, escreva mensagens e use a leitura em voz alta.
               </p>
-              <Button className="w-full" onClick={() => setLocation("/aluno")}>
-                Abrir
+              <Button className="w-full" onClick={() => void signIn("aluno")}>
+                Entrar como aluno
               </Button>
+              <p className="text-xs text-muted-foreground">Conta @{MICROSOFT_ROLE_DOMAINS.aluno}</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-primary/30">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <GraduationCap className="w-5 h-5" />
-                Treinar Gestos
+                Professor
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Captura amostras próprias na webcam e treina um classificador que substitui o
-                modelo base.
+                Transforme a fala em texto para apoiar a comunicação com a turma.
               </p>
-              <Button variant="outline" className="w-full" onClick={() => setLocation("/aluno/treinar")}>
-                Abrir
+              <Button className="w-full" onClick={() => void signIn("professor")}>
+                Entrar como professor
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Users className="w-5 h-5" />
-                Sala de Aula
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Videochamada em tempo real entre professor e alunos, direto no navegador.
-              </p>
-              <Button variant="outline" className="w-full" onClick={() => setLocation("/sala")}>
-                Abrir
-              </Button>
+              <p className="text-xs text-muted-foreground">Conta @{MICROSOFT_ROLE_DOMAINS.professor}</p>
             </CardContent>
           </Card>
         </div>
+
+        <p className="mt-8 text-center text-sm text-muted-foreground">
+          Quer personalizar o reconhecimento?{" "}
+          <button className="font-medium text-primary underline underline-offset-4" onClick={() => setLocation("/aluno/treinar")}>
+            Treinar gestos
+          </button>
+        </p>
       </main>
     </div>
   );

@@ -12,3 +12,15 @@ export const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:1930
  * servidor em server/ estiver rodando (ver server/README.md). */
 export const SIGNALING_URL =
   (import.meta.env.VITE_SIGNALING_URL as string | undefined) ?? "ws://localhost:8787";
+
+function signalingToHttpUrl(url: string): string {
+  if (url.startsWith("wss://")) return `https://${url.slice("wss://".length)}`;
+  if (url.startsWith("ws://")) return `http://${url.slice("ws://".length)}`;
+  return url;
+}
+
+/** Endpoint HTTP que inicia a sessão demo de professor.
+ * Em produção, VITE_DEMO_AUTH_URL deve apontar para o mesmo serviço HTTPS/WSS. */
+export const DEMO_AUTH_URL =
+  (import.meta.env.VITE_DEMO_AUTH_URL as string | undefined) ??
+  `${signalingToHttpUrl(SIGNALING_URL)}/auth/demo/login`;
