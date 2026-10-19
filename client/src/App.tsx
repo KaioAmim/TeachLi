@@ -1,4 +1,5 @@
-import { Route, Switch } from "wouter";
+import { AppHeader, AppFooter } from "@/components/AppShell";
+import { Link, Route, Switch } from "wouter";
 import { Toaster } from "sonner";
 import Home from "@/pages/Home";
 import StudentMode from "@/pages/StudentMode";
@@ -9,20 +10,33 @@ import MicrosoftCallback from "@/pages/MicrosoftCallback";
 import { loadMicrosoftSession } from "@/lib/microsoftAuth";
 
 function StudentRoute() {
-  return loadMicrosoftSession("aluno") ? <StudentMode /> : <LoginRequired role="aluno" />;
+  return loadMicrosoftSession("aluno") ? (
+    <StudentMode />
+  ) : (
+    <LoginRequired role="aluno" />
+  );
 }
 
 function ProfessorRoute() {
-  return loadMicrosoftSession("professor") ? <ProfessorMode /> : <LoginRequired role="professor" />;
+  return loadMicrosoftSession("professor") ? (
+    <ProfessorMode />
+  ) : (
+    <LoginRequired role="professor" />
+  );
 }
 
 function TrainRoute() {
-  return loadMicrosoftSession("aluno") ? <TrainMode /> : <LoginRequired role="aluno" />;
+  return loadMicrosoftSession("aluno") ? (
+    <TrainMode />
+  ) : (
+    <LoginRequired role="aluno" />
+  );
 }
 
 export default function App() {
   return (
-    <>
+    <div className="app-frame">
+      <AppHeader />
       <Toaster richColors position="top-center" />
       <Switch>
         <Route path="/" component={Home} />
@@ -31,11 +45,21 @@ export default function App() {
         <Route path="/aluno/treinar" component={TrainRoute} />
         <Route path="/professor" component={ProfessorRoute} />
         <Route>
-          <div className="min-h-screen flex items-center justify-center text-muted-foreground">
-            Página não encontrada
-          </div>
+          <main id="conteudo" tabIndex={-1} className="auth-page">
+            <div className="auth-card">
+              <h1>Página não encontrada</h1>
+              <p>
+                Este endereço não está disponível. Volte ao início para escolher
+                seu espaço.
+              </p>
+              <Link href="/" className="auth-back">
+                Voltar ao início
+              </Link>
+            </div>
+          </main>
         </Route>
       </Switch>
-    </>
+      <AppFooter />
+    </div>
   );
 }

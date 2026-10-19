@@ -1,8 +1,7 @@
+import { WorkspaceHeading } from "@/components/AppShell";
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   Camera,
   Circle,
   Download,
@@ -44,8 +43,6 @@ type SignKind = "static" | "dynamic";
 const MIN_CLIP_FRAMES = 8;
 
 export default function TrainMode() {
-  const [, setLocation] = useLocation();
-
   const [kind, setKind] = useState<SignKind>("static");
 
   // --- dataset estático (1 quadro por amostra) ---
@@ -209,9 +206,9 @@ export default function TrainMode() {
     try {
       const imported = await importPretrainedAlphabetDataset();
       persist([...samples, ...imported]);
-      toast.success(`${imported.length} amostras importadas do dataset do alfabeto`);
+      toast.success(`${imported.length} amostras do alfabeto importadas`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao importar o dataset");
+      toast.error(err instanceof Error ? err.message : "Falha ao importar as amostras");
     } finally {
       setIsImporting(false);
     }
@@ -254,29 +251,20 @@ export default function TrainMode() {
   const reset = async () => {
     persist([]);
     await deleteClassifier();
-    toast.info("Dataset e modelo estático removidos — o modelo base volta a ser usado");
+    toast.info("Amostras e modelo estático removidos — o modelo base volta a ser usado");
   };
 
   const resetDynamic = async () => {
     persistDynamic([]);
     await deleteDynamicClassifier();
-    toast.info("Dataset e modelo dinâmico removidos");
+    toast.info("Clipes e modelo dinâmico removidos");
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="bg-card border-b border-border">
-        <div className="container py-4 flex items-center justify-between">
-          <Button variant="ghost" onClick={() => setLocation("/aluno")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar
-          </Button>
-          <h1 className="text-2xl font-bold">Treinar Gestos</h1>
-          <div className="w-24" />
-        </div>
-      </header>
+    <div className="workspace-page">
+      <WorkspaceHeading title="Cada gesto, um novo aprendizado." description="Capture amostras e personalize o reconhecimento no seu navegador." backTo="/aluno" />
 
-      <main className="container py-8 grid lg:grid-cols-2 gap-8">
+      <main id="conteudo" tabIndex={-1} className="container workspace-content grid lg:grid-cols-2 gap-8">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -289,6 +277,7 @@ export default function TrainMode() {
               <button
                 type="button"
                 onClick={() => setKind("static")}
+                aria-pressed={kind === "static"}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   kind === "static" ? "bg-background shadow-sm" : "text-muted-foreground"
                 }`}
@@ -298,6 +287,7 @@ export default function TrainMode() {
               <button
                 type="button"
                 onClick={() => setKind("dynamic")}
+                aria-pressed={kind === "dynamic"}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   kind === "dynamic" ? "bg-background shadow-sm" : "text-muted-foreground"
                 }`}
@@ -322,7 +312,7 @@ export default function TrainMode() {
             </div>
 
             {isLandmarkerLoading && (
-              <p className="text-sm text-muted-foreground text-center">Carregando MediaPipe...</p>
+              <p className="text-sm text-muted-foreground text-center">Preparando reconhecimento…</p>
             )}
             {landmarkerError && (
               <p className="text-sm text-destructive text-center">Erro: {landmarkerError}</p>
@@ -332,18 +322,19 @@ export default function TrainMode() {
               {!isCapturing ? (
                 <Button className="flex-1" onClick={startCapture}>
                   <Video className="w-4 h-4 mr-2" />
-                  Iniciar Câmera
+                  Iniciar câmera
                 </Button>
               ) : (
                 <Button variant="destructive" className="flex-1" onClick={stopCapture}>
                   <VideoOff className="w-4 h-4 mr-2" />
-                  Parar Câmera
+                  Parar câmera
                 </Button>
               )}
             </div>
 
             <div className="flex gap-2">
               <input
+                aria-label="Nome do gesto"
                 value={label}
                 onChange={event => setLabel(event.target.value)}
                 placeholder={kind === "static" ? "Rótulo do sinal (ex.: A)" : "Rótulo do sinal (ex.: OBRIGADO)"}
@@ -384,8 +375,8 @@ export default function TrainMode() {
             <CardHeader>
               <CardTitle>
                 {kind === "static"
-                  ? `Dataset estático (${samples.length} amostras)`
-                  : `Dataset dinâmico (${dynamicSamples.length} clipes)`}
+                  ? `Suas amostras (${samples.length})`
+                  : `Seus clipes (${dynamicSamples.length})`}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -393,7 +384,7 @@ export default function TrainMode() {
                 <>
                   {labels.length === 0 ? (
                     <p className="text-sm text-muted-foreground italic">
-                      Nenhuma amostra ainda. Capture na webcam ou importe o dataset do alfabeto.
+                      Nenhuma amostra ainda. Capture na webcam ou importe as amostras do alfabeto.
                     </p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
@@ -493,20 +484,13 @@ export default function TrainMode() {
 
           <Card className="bg-accent/50">
             <CardHeader>
-              <CardTitle className="text-lg">Como funciona</CardTitle>
+              <CardTitle className="text-lg">Como treinar seus gestos</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>
-                • <strong>Estático:</strong> cada amostra é um vetor de 63 valores dos landmarks de
-                uma mão num único quadro — bom para configurações de mão paradas (alfabeto).
-              </p>
-              <p>
-                • <strong>Dinâmico:</strong> cada amostra é um clipe (as duas mãos, ao longo do
-                tempo) reamostrado para {SEQUENCE_LENGTH} quadros — necessário para sinais cujo
-                significado depende do movimento.
-              </p>
-              <p>• Os dois modelos treinados ficam salvos no IndexedDB e são usados juntos no Modo Aluno.</p>
-              <p>• Limpar remove apenas o dataset e o modelo do tipo selecionado no momento.</p>
+              <p><strong>Sem movimento:</strong> dê um nome ao gesto, mantenha a mão parada e capture várias amostras da mesma posição.</p>
+              <p><strong>Com movimento:</strong> grave o gesto do início ao fim. Repita algumas vezes para criar seus clipes de treino.</p>
+              <p><strong>Depois de capturar:</strong> reúna pelo menos dois gestos diferentes e clique em Treinar. Seu modelo fica salvo neste navegador para usar no espaço do aluno.</p>
+              <p className="text-muted-foreground">Limpar remove as amostras e o modelo apenas do tipo selecionado. Essa ação não pode ser desfeita.</p>
             </CardContent>
           </Card>
         </div>

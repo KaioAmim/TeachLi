@@ -39,7 +39,11 @@ npm ci
 npm run dev
 ```
 
-Abra o endereço informado pelo Vite, normalmente `http://localhost:5173`.
+Abra `http://127.0.0.1:5173` (ou `http://localhost:5173` se cadastrado na Microsoft).
+A porta 5173 é fixa no desenvolvimento e na prévia de build. Se já estiver ocupada,
+use a instância do TeachLi em execução ou encerre-a antes de iniciar outra; o Vite
+não mudará automaticamente para 5174. Não altere a porta sem cadastrar também
+o novo endereço de retorno na Microsoft.
 O comando copia automaticamente o runtime WASM do MediaPipe para `client/public/`.
 
 ## Configurar login Microsoft
@@ -61,6 +65,12 @@ No registro do aplicativo, cadastre como URLs de redirecionamento do tipo **SPA*
 `http://127.0.0.1:5173/entrar` e, se for usar esse endereço, também
 `http://localhost:5173/entrar`. O valor `organizations` usa contas organizacionais
 Microsoft. Não use Client Secret no frontend.
+
+Se aparecer `AADSTS50011` com `http://127.0.0.1:5174/entrar`, abra o TeachLi em
+`http://127.0.0.1:5173` e inicie o login novamente. Não basta trocar a porta
+na URL de retorno: a sessão temporária deve ser criada na mesma origem antes
+de ir à Microsoft. Em outro ambiente, cadastre a URL exata de `/entrar` como
+SPA no Microsoft Entra; desenvolvimento e produção têm endereços distintos.
 
 No retorno, o cliente exige o domínio exato `@alunos.unibarretos.com.br` para
 Aluno e `@unibarretos.com.br` para Professor. Uma conta não pode entrar no perfil

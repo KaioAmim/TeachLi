@@ -1,13 +1,12 @@
+import { WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Mic, MicOff, Volume2 } from "lucide-react";
-import { useLocation } from "wouter";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Mic, MicOff, FileText, Languages, Trash2, ChevronDown, ArrowUpRight } from "lucide-react";
 import { toast } from "sonner";
 import VLibrasWidget from "@/components/VLibrasWidget";
 
 export default function ProfessorMode() {
-  const [, setLocation] = useLocation();
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [currentSentence, setCurrentSentence] = useState("");
@@ -101,155 +100,73 @@ export default function ProfessorMode() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="workspace-page professor-workspace">
       <VLibrasWidget />
-      <header className="bg-card border-b border-border">
-        <div className="container py-4 flex items-center justify-between">
-          <Button variant="ghost" onClick={() => setLocation('/')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar
-          </Button>
-          <h1 className="text-2xl font-bold text-foreground">Modo Professor - Fala para Libras</h1>
-          <div className="w-24"></div>
-        </div>
-      </header>
+      <WorkspaceHeading title="A sua fala, mais acessível." description="Fale, acompanhe a transcrição e compartilhe com a turma." />
 
-      <main className="container py-8">
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Painel de Reconhecimento de Fala */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Mic className="w-5 h-5" />
-                  Reconhecimento de Fala
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="min-h-[150px] p-4 bg-muted rounded-lg">
-                  <p className="text-lg font-medium">
-                    {currentSentence || (
-                      <span className="text-muted-foreground italic">
-                        {isRecording ? 'Ouvindo...' : 'Clique em iniciar para começar a falar'}
-                      </span>
-                    )}
-                  </p>
+      <main id="conteudo" tabIndex={-1} className="container workspace-content">
+        <div className="professor-layout">
+          <div className="professor-main-column">
+            <Card className="professor-panel professor-live-panel" role="region" aria-labelledby="speech-title">
+              <CardHeader className="professor-panel-header">
+                <div className="professor-title-row">
+                  <span className="professor-tool-icon"><Mic size={21} aria-hidden="true" /></span>
+                  <div><h2 id="speech-title">Sua fala em texto</h2><p>Acompanhe a frase enquanto você fala.</p></div>
                 </div>
-
-                <div className="flex gap-2">
-                  {!isRecording ? (
-                    <Button 
-                      className="flex-1" 
-                      onClick={startRecording}
-                    >
-                      <Mic className="w-4 h-4 mr-2" />
-                      Iniciar Gravação
-                    </Button>
-                  ) : (
-                    <Button 
-                      variant="destructive" 
-                      className="flex-1" 
-                      onClick={stopRecording}
-                    >
-                      <MicOff className="w-4 h-4 mr-2" />
-                      Parar Gravação
-                    </Button>
+                <span className="professor-recording-status" data-recording={isRecording} role="status"><i aria-hidden="true" />{isRecording ? "Ouvindo" : "Microfone desligado"}</span>
+              </CardHeader>
+              <CardContent>
+                <div className="professor-live-text" data-empty={!currentSentence} aria-label="Fala atual" aria-live="polite" aria-atomic="true">
+                  {currentSentence ? <p>{currentSentence}</p> : (
+                    <div className="professor-empty-state">
+                      <span className="professor-mic-outline"><Mic size={28} strokeWidth={1.5} aria-hidden="true" /></span>
+                      <strong>{isRecording ? "Pode falar. Estamos ouvindo." : "Tudo pronto para a sua voz"}</strong>
+                      <p>{isRecording ? "Sua fala aparecerá aqui em instantes." : "Inicie a gravação e fale em português. O texto aparecerá aqui."}</p>
+                    </div>
                   )}
                 </div>
-
-                {isRecording && (
-                  <div className="flex items-center justify-center gap-2 p-3 bg-primary/10 rounded-lg">
-                    <div className="w-3 h-3 rounded-full bg-primary animate-pulse"></div>
-                    <span className="text-sm font-medium">Gravando...</span>
-                  </div>
-                )}
+                <div className="professor-recording-toolbar">
+                  <Button variant={isRecording ? "destructive" : "default"} onClick={isRecording ? stopRecording : startRecording}>
+                    {isRecording ? <MicOff size={18} aria-hidden="true" /> : <Mic size={18} aria-hidden="true" />}
+                    {isRecording ? "Parar gravação" : "Iniciar gravação"}
+                  </Button>
+                  <p>{isRecording ? "Ao terminar, pare a gravação para revisar o texto." : "Permita o acesso ao microfone para começar."}</p>
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-accent/50">
-              <CardHeader>
-                <CardTitle className="text-lg">Instruções</CardTitle>
+            <Card className="professor-panel" role="region" aria-labelledby="history-title">
+              <CardHeader className="professor-panel-header">
+                <div className="professor-title-row">
+                  <span className="professor-tool-icon professor-tool-icon-muted"><FileText size={21} aria-hidden="true" /></span>
+                  <div><h2 id="history-title">Histórico da fala</h2><p>As frases reconhecidas ficam reunidas aqui.</p></div>
+                </div>
+                <Button variant="ghost" className="professor-clear" onClick={clearTranscript} disabled={!transcript && !currentSentence}><Trash2 size={16} aria-hidden="true" /> Limpar histórico</Button>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>• Clique em "Iniciar Gravação"</p>
-                <p>• Fale claramente em português</p>
-                <p>• O texto reconhecido aparecerá no painel de tradução</p>
-                <p>• Ative o avatar VLibras para traduzi-lo para Libras</p>
-                <p>• Clique em "Parar Gravação" quando terminar</p>
+              <CardContent>
+                <div className="professor-history" tabIndex={transcript ? 0 : undefined} aria-label="Histórico de transcrição">
+                  <p className={transcript ? undefined : "professor-placeholder"}>{transcript || "Ainda não há transcrição. Suas frases aparecerão conforme você falar."}</p>
+                </div>
+                <p className="professor-history-note">Ao iniciar uma nova gravação, o histórico anterior é limpo.</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Painel de Tradução Libras */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Volume2 className="w-5 h-5" />
-                  Tradução em Libras
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="min-h-[150px] p-4 bg-muted rounded-lg">
-                  <p className="text-lg font-medium" translate="no">
-                    {currentSentence || (
-                      <span className="text-muted-foreground italic">
-                        O texto reconhecido aparecerá aqui para ser traduzido pelo avatar VLibras
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Clique no ícone azul do VLibras no canto da tela para ativar o avatar,
-                  depois selecione o texto acima para vê-lo traduzido em Libras.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Histórico de Transcrição</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="max-h-[200px] overflow-y-auto p-4 bg-muted rounded-lg">
-                  <p className="whitespace-pre-wrap text-sm">
-                    {transcript || (
-                      <span className="text-muted-foreground italic">
-                        Nenhuma transcrição ainda...
-                      </span>
-                    )}
-                  </p>
-                </div>
-
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={clearTranscript}
-                >
-                  Limpar Histórico
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-chart-2/5">
-              <CardHeader>
-                <CardTitle className="text-lg">Sobre VLibras</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>
-                  VLibras é um avatar que traduz conteúdo em português para Libras em tempo real.
-                </p>
-                <p>
-                  Desenvolvido pelo governo brasileiro para acessibilidade.
-                </p>
-                <p>
-                  <a href="https://www.vlibras.gov.br" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                    Saiba mais sobre VLibras
-                  </a>
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <aside className="professor-support" aria-labelledby="libras-title">
+            <div className="professor-support-heading"><span className="professor-tool-icon professor-tool-icon-warm"><Languages size={23} aria-hidden="true" /></span><span>Apoio à comunicação</span></div>
+            <h2 id="libras-title">Leve o texto <br />para Libras.</h2>
+            <p>Use o avatar VLibras para apoiar a tradução do texto da sua fala.</p>
+            <ol className="professor-steps">
+              <li><span aria-hidden="true">1</span><div><strong>Abra o tradutor</strong><p>Clique no ícone azul do VLibras no canto da tela.</p></div></li>
+              <li><span aria-hidden="true">2</span><div><strong>Escolha o texto</strong><p>Com o avatar aberto, selecione a frase ou um trecho do histórico.</p></div></li>
+              <li><span aria-hidden="true">3</span><div><strong>Acompanhe o avatar</strong><p>Veja a tradução do trecho selecionado em Libras.</p></div></li>
+            </ol>
+            <details className="professor-help">
+              <summary>Dicas para uma boa transcrição<ChevronDown size={17} aria-hidden="true" /></summary>
+              <div><p>Fale com clareza e faça pequenas pausas entre as frases. Prefira um ambiente com pouco ruído.</p><p>Se o reconhecimento não estiver disponível, tente usar Chrome ou Edge.</p></div>
+            </details>
+            <a className="professor-about-link" href="https://www.vlibras.gov.br" target="_blank" rel="noopener noreferrer">Conheça o VLibras<ArrowUpRight size={15} aria-hidden="true" /></a>
+          </aside>
         </div>
       </main>
     </div>

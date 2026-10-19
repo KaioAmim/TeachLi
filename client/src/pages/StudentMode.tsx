@@ -1,8 +1,9 @@
+import { WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Video, VideoOff, Volume2, Zap, GraduationCap, Waves, Keyboard } from "lucide-react";
+import { Video, VideoOff, Volume2, Waves, Keyboard, BookOpen, Plus, Trash2, ScanLine, ChevronDown, Lightbulb } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
@@ -312,7 +313,7 @@ export default function StudentMode() {
       dynamicStableRef.current = { label: "", count: 0 };
 
       setIsCapturing(true);
-      toast.success('Câmera iniciada - MediaPipe Hands ativado');
+      toast.success('Câmera iniciada. Posicione sua mão no quadro.');
       
     } catch (error) {
       console.error('Erro ao acessar câmera:', error);
@@ -392,376 +393,190 @@ export default function StudentMode() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="workspace-page student-workspace">
       {librasEnabled && <VLibrasWidget />}
-      <header className="bg-card border-b border-border">
-        <div className="container py-4 flex items-center justify-between">
-          <Button variant="ghost" onClick={() => setLocation('/')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar
-          </Button>
-          <h1 className="text-2xl font-bold text-foreground">Modo Aluno - MediaPipe Hands</h1>
-          <Button variant="ghost" onClick={() => setLocation('/aluno/treinar')}>
-            <GraduationCap className="w-4 h-4 mr-2" />
-            Treinar Gestos
-          </Button>
-        </div>
-      </header>
+      <WorkspaceHeading
+        title="Seu espaço de comunicação"
+        description="Use o teclado para falar ou explore gestos com a câmera."
+      >
+        <Button variant="outline" onClick={() => setLocation("/aluno/treinar")}>
+          <BookOpen size={17} aria-hidden="true" /> Treinar gestos
+        </Button>
+      </WorkspaceHeading>
 
-      <main className="container py-8">
-        <div className="grid lg:grid-cols-2 gap-8">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Video className="w-5 h-5" />
-                  Captura de Gestos com MediaPipe
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="video-container bg-black relative">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="video-mirror block w-full h-auto"
-                  />
-                  <canvas
-                    ref={canvasRef}
-                    className="video-mirror absolute inset-0 w-full h-full"
-                  />
-                  {!isCapturing && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-muted">
-                      <div className="text-center">
-                        <Video className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-muted-foreground">
-                          Clique em "Iniciar Câmera" para começar
-                        </p>
-                      </div>
-                    </div>
-                  )}
+      <main id="conteudo" tabIndex={-1} className="container workspace-content">
+        <div className="student-layout">
+          <Card className="student-panel student-camera-panel" role="region" aria-labelledby="camera-title">
+            <CardHeader className="student-panel-header">
+              <div className="student-title-row">
+                <span className="student-tool-icon"><Video size={21} aria-hidden="true" /></span>
+                <div><h2 id="camera-title">Reconhecimento de gestos</h2><p>Enquadre sua mão e acompanhe o resultado.</p></div>
+              </div>
+              <span className="student-experiment">Experimental</span>
+            </CardHeader>
+            <CardContent className="student-camera-content">
+              <div className="video-container student-camera-stage" data-active={isCapturing}>
+                <video ref={videoRef} autoPlay playsInline muted className="video-mirror block w-full h-auto" />
+                <canvas ref={canvasRef} className="video-mirror absolute inset-0 w-full h-full" />
+                {!isCapturing && (
+                  <div className="student-camera-empty">
+                    <span className="student-viewfinder" aria-hidden="true"><VideoOff size={30} strokeWidth={1.5} /></span>
+                    <strong>Sua câmera está desligada</strong>
+                    <p>Quando estiver pronto, inicie a câmera<br />e posicione a mão no quadro.</p>
+                  </div>
+                )}
+              </div>
+              <div className="student-camera-toolbar">
+                <div className="student-camera-status" role="status">
+                  <span className="student-status-dot" data-ready={!isHandLandmarkerLoading && !handLandmarkerError} />
+                  {isHandLandmarkerLoading ? "Preparando reconhecimento…"
+                    : handLandmarkerError ? "Reconhecimento indisponível"
+                    : isCapturing ? (handDetected ? "Mão detectada" : "Nenhuma mão no quadro")
+                    : "Pronto para começar"}
                 </div>
+                <Button variant={isCapturing ? "destructive" : "default"} onClick={isCapturing ? stopCapture : startCapture}>
+                  {isCapturing ? <VideoOff size={17} aria-hidden="true" /> : <Video size={17} aria-hidden="true" />}
+                  {isCapturing ? "Parar câmera" : "Iniciar câmera"}
+                </Button>
+              </div>
+              {handLandmarkerError && <p className="student-error" role="alert">Erro: {handLandmarkerError}</p>}
 
-                <div className="flex gap-2">
-                  {!isCapturing ? (
-                    <Button 
-                      className="flex-1" 
-                      onClick={startCapture}
-                    >
-                      <Video className="w-4 h-4 mr-2" />
-                      Iniciar Câmera
-                    </Button>
-                  ) : (
-                    <Button 
-                      variant="destructive" 
-                      className="flex-1" 
-                      onClick={stopCapture}
-                    >
-                      <VideoOff className="w-4 h-4 mr-2" />
-                      Parar Câmera
-                    </Button>
-                  )}
+              <div className="student-recognition">
+                <div className="student-recognition-label">
+                  {currentGestureKind === "dynamic" ? <Waves size={17} aria-hidden="true" /> : <ScanLine size={17} aria-hidden="true" />}
+                  <h3>Gesto reconhecido</h3>
                 </div>
-
-                {/* O status do MediaPipe fica visível mesmo com a câmera
-                    desligada: se o modelo de mãos falhar ao carregar, é isso que
-                    explica a ausência de reconhecimento. */}
-                <div className="space-y-2">
-                  <div className="text-center">
-                    {isHandLandmarkerLoading ? (
-                      <span className="status-badge">
-                        <span className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse"></span>
-                        Carregando MediaPipe...
-                      </span>
-                    ) : handLandmarkerError ? (
-                      <span className="status-badge bg-destructive/10 text-destructive">
-                        MediaPipe falhou
-                      </span>
-                    ) : isCapturing ? (
-                      <span className={handDetected ? "status-badge ready" : "status-badge"}>
-                        <span
-                          className={`w-2 h-2 rounded-full ${handDetected ? "bg-chart-2" : "bg-muted-foreground"} animate-pulse`}
-                        ></span>
-                        {handDetected ? "Mão detectada" : "Nenhuma mão no quadro"}
-                      </span>
+                <div className="student-recognition-result">
+                  <div className="student-result-value">
+                    {currentGesture ? (
+                      <>
+                        <strong className="student-gesture-value">{currentGesture}</strong>
+                        <div className="student-confidence">
+                          <p>{currentGestureKind === "dynamic" ? "Sinal em movimento" : "Gesto estático"} · {currentConfidence}% de confiança</p>
+                          <div className="student-confidence-track" role="meter" aria-label="Confiança do reconhecimento" aria-valuemin={0} aria-valuemax={100} aria-valuenow={currentConfidence}>
+                            <span style={{ width: `${currentConfidence}%` }} />
+                          </div>
+                        </div>
+                      </>
                     ) : (
-                      <span className="status-badge ready">MediaPipe pronto</span>
+                      <p className="student-empty-copy">{isCapturing ? "Mantenha a mão visível e faça um gesto pausadamente." : "O gesto identificado aparecerá aqui."}</p>
                     )}
                   </div>
-                  {handLandmarkerError && (
-                    <p className="text-sm text-destructive text-center">Erro: {handLandmarkerError}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground text-center">
-                    {isClassifierLoading
-                      ? "Carregando classificador..."
-                      : modelSource === "user"
-                        ? `Usando o seu modelo treinado (${modelLabels.length} gestos)`
-                        : modelSource === "pretrained"
-                          ? `Usando o modelo base do alfabeto (${modelLabels.length} letras) — treine o seu para incluir outros sinais`
-                          : "Nenhum classificador estático disponível"}
-                  </p>
-                  <p className="text-xs text-muted-foreground text-center">
-                    {isDynamicClassifierLoading
-                      ? "Carregando classificador dinâmico..."
-                      : hasDynamicModel
-                        ? `Reconhecimento de movimento ativo (${dynamicLabels.length} sinais dinâmicos)`
-                        : "Nenhum sinal dinâmico treinado ainda — grave clipes em Treinar Gestos"}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-primary/5">
-              <CardHeader>
-                <CardTitle className="text-lg">Gestos Disponíveis</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm space-y-3">
-                {hasModel ? (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Estáticos</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {modelLabels.map(lbl => (
-                        <span key={lbl} className="px-2 py-1 rounded bg-primary/10 text-primary font-medium">
-                          {lbl}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground italic">Carregando lista de sinais estáticos...</p>
-                )}
-                {hasDynamicModel && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Dinâmicos</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {dynamicLabels.map(lbl => (
-                        <span key={lbl} className="px-2 py-1 rounded bg-chart-2/10 text-chart-2 font-medium">
-                          {lbl}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground pt-1">
-                  Para acrescentar outros sinais, capture amostras em{" "}
-                  <button className="underline" onClick={() => setLocation("/aluno/treinar")}>
-                    Treinar Gestos
-                  </button>
-                  .
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-accent/50">
-              <CardHeader>
-                <CardTitle className="text-lg">Instruções</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>• Posicione-se em frente à câmera</p>
-                <p>• Certifique-se de ter boa iluminação</p>
-                <p>• Mantenha as mãos visíveis na câmera</p>
-                <p>• Faça os gestos de forma clara e pausada</p>
-                <p>• Os landmarks (pontos vermelhos e azuis) mostram a detecção</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {currentGestureKind === "dynamic" ? (
-                    <Waves className="w-5 h-5" />
-                  ) : (
-                    <Zap className="w-5 h-5" />
-                  )}
-                  Gesto Reconhecido
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="min-h-[100px] p-4 bg-muted rounded-lg flex flex-col items-center justify-center">
-                  {currentGesture ? (
-                    <div className="text-center">
-                      {currentGestureKind === "dynamic" && (
-                        <p className="text-xs text-chart-2 font-medium mb-1">sinal dinâmico</p>
-                      )}
-                      <span className="gesture-indicator text-2xl mb-2">
-                        {currentGesture}
-                      </span>
-                      <div className="mt-2 w-full">
-                        <div className="w-full bg-muted-foreground/20 rounded-full h-2">
-                          <div 
-                            className="bg-primary h-2 rounded-full transition-all"
-                            style={{ width: `${currentConfidence}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Confiança: {currentConfidence}%
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground italic">
-                      Aguardando gestos...
-                    </p>
-                  )}
-                </div>
-                {currentGesture && currentConfidence > 75 && (
-                  <Button 
-                    className="w-full"
-                    onClick={addGestureToText}
-                  >
-                    Adicionar ao Texto
+                  <Button variant="outline" onClick={addGestureToText} disabled={!currentGesture || currentConfidence <= 75}>
+                    <Plus size={17} aria-hidden="true" /> Adicionar ao texto
                   </Button>
-                )}
+                </div>
+              </div>
+
+              {gestureHistory.length > 0 && (
+                <details className="student-model-details student-recent-gestures">
+                  <summary><span>Últimos gestos detectados</span><ChevronDown size={17} aria-hidden="true" /></summary>
+                  <div className="student-model-body">
+                    <p>Este histórico mostra as detecções da câmera. Use Adicionar ao texto para incluir um gesto na sua mensagem.</p>
+                    <div className="student-gesture-list">{gestureHistory.map((gesture, idx) => <span key={idx} data-dynamic={gesture.kind === "dynamic"}>{gesture.gesture}</span>)}</div>
+                  </div>
+                </details>
+              )}
+
+              <details className="student-model-details">
+                <summary><span><BookOpen size={17} aria-hidden="true" /> Gestos disponíveis</span><ChevronDown size={17} aria-hidden="true" /></summary>
+                <div className="student-model-body">
+                  <p>{isClassifierLoading ? "Preparando reconhecimento de letras…"
+                    : modelSource === "user" ? `Usando o seu modelo treinado (${modelLabels.length} gestos).`
+                    : modelSource === "pretrained" ? `Modelo base do alfabeto: ${modelLabels.length} letras estáticas.`
+                    : "Nenhum classificador estático disponível."}</p>
+                  {hasModel && <div className="student-gesture-list" aria-label="Gestos estáticos disponíveis">{modelLabels.map(label => <span key={label}>{label}</span>)}</div>}
+                  <p>{isDynamicClassifierLoading ? "Preparando reconhecimento de movimentos…"
+                    : hasDynamicModel ? `Movimentos disponíveis: ${dynamicLabels.length} sinais.`
+                    : "Para reconhecer movimentos, grave clipes em Treinar gestos."}</p>
+                  {hasDynamicModel && <div className="student-gesture-list" aria-label="Gestos dinâmicos disponíveis">{dynamicLabels.map(label => <span key={label}>{label}</span>)}</div>}
+                  <button type="button" className="student-text-link" onClick={() => setLocation("/aluno/treinar")}>Personalizar meus gestos</button>
+                </div>
+              </details>
+            </CardContent>
+          </Card>
+
+          <div className="student-message-column">
+            <Card className="student-panel student-transcript-panel" role="region" aria-labelledby="transcript-title">
+              <CardHeader className="student-panel-header">
+                <div className="student-title-row">
+                  <span className="student-tool-icon"><ScanLine size={21} aria-hidden="true" /></span>
+                  <div><h2 id="transcript-title">Mensagem com gestos</h2><p>Acompanhe o texto que você está construindo.</p></div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="student-message-label-row">
+                  <label className="student-field-label" htmlFor="gesture-message">Sua mensagem</label>
+                  <span className="student-manual-label">Adição manual</span>
+                </div>
+                <Textarea
+                  id="gesture-message"
+                  value={recognizedText}
+                  readOnly
+                  aria-describedby="gesture-message-help gesture-message-session"
+                  placeholder="Sua mensagem aparecerá aqui…"
+                  className="student-message-input student-gesture-message"
+                />
+                <p id="gesture-message-help" className="student-message-help">Reconheça um gesto e clique em <strong>Adicionar ao texto</strong>, abaixo da câmera.</p>
+                <div className="student-actions student-phrase-actions">
+                  <Button onClick={() => speakText(recognizedText)} disabled={!recognizedText.trim()}><Volume2 size={17} aria-hidden="true" /> Ouvir mensagem</Button>
+                  <Button variant="ghost" onClick={clearText} disabled={!recognizedText && !gestureHistory.length && !currentGesture}><Trash2 size={16} aria-hidden="true" /> Limpar mensagem</Button>
+                </div>
+                <p id="gesture-message-session" className="student-session-note">O texto fica disponível enquanto esta tela estiver aberta.</p>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Keyboard className="w-5 h-5" />
-                  Digitar e Ouvir
-                </CardTitle>
+            <Card className="student-panel student-compose-panel" role="region" aria-labelledby="compose-title">
+              <CardHeader className="student-panel-header">
+                <div className="student-title-row">
+                  <span className="student-tool-icon"><Keyboard size={21} aria-hidden="true" /></span>
+                  <div><h2 id="compose-title">Digitar e ouvir</h2><p>Transforme sua mensagem em voz.</p></div>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
+                <label className="student-field-label" htmlFor="student-message">O que você quer dizer?</label>
                 <Textarea
+                  id="student-message"
+                  aria-label="Mensagem para ler em voz alta"
+                  aria-describedby="student-keyboard-hint"
                   value={typedText}
                   onChange={e => setTypedText(e.target.value)}
                   onKeyDown={handleTypedTextKeyDown}
-                  placeholder="Digite aqui o que deseja dizer... (Enter para falar)"
-                  className="min-h-[80px]"
+                  placeholder="Escreva sua mensagem aqui…"
+                  className="student-message-input"
                 />
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={clearTypedText}
-                    disabled={!typedText && !spokenTypedText}
-                  >
-                    Limpar
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={speakTypedText}
-                    disabled={!typedText.trim()}
-                  >
-                    <Volume2 className="w-4 h-4 mr-2" />
-                    Falar
-                  </Button>
+                <p className="student-keyboard-hint" id="student-keyboard-hint"><kbd>Enter</kbd> para falar <span>·</span> <kbd>Shift + Enter</kbd> para nova linha</p>
+                <div className="student-actions">
+                  <Button onClick={speakTypedText} disabled={!typedText.trim()}><Volume2 size={17} aria-hidden="true" /> Falar mensagem</Button>
+                  <Button variant="ghost" onClick={clearTypedText} disabled={!typedText && !spokenTypedText}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={librasEnabled}
-                    onChange={e => setLibrasEnabled(e.target.checked)}
-                    className="accent-primary"
-                  />
-                  Mostrar opção de tradução em Libras (VLibras)
-                </label>
-                {librasEnabled && (
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Clique no ícone azul do VLibras no canto da tela e selecione o texto abaixo para ver a tradução em Libras:
-                    </p>
-                    <p className="text-base font-medium">
-                      {spokenTypedText || (
-                        <span className="text-muted-foreground italic">
-                          Digite um texto e clique em "Falar" para habilitá-lo aqui.
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Volume2 className="w-5 h-5" />
-                  Texto Reconhecido
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="max-h-[300px] overflow-y-auto p-4 bg-muted rounded-lg">
-                  <p className="whitespace-pre-wrap text-lg">
-                    {recognizedText || (
-                      <span className="text-muted-foreground italic">
-                        Nenhum texto reconhecido ainda...
-                      </span>
-                    )}
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1"
-                    onClick={clearText}
-                  >
-                    Limpar
-                  </Button>
-                  <Button 
-                    className="flex-1"
-                    onClick={() => speakText(recognizedText)}
-                    disabled={!recognizedText}
-                  >
-                    <Volume2 className="w-4 h-4 mr-2" />
-                    Falar
-                  </Button>
-                </div>
-
-                {gestureHistory.length > 0 && (
-                  <div className="mt-4 p-3 bg-secondary rounded-lg">
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">Histórico de Gestos:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {gestureHistory.map((gesture, idx) => (
-                        <span
-                          key={idx}
-                          className={`text-xs px-2 py-1 rounded ${
-                            gesture.kind === "dynamic"
-                              ? "bg-chart-2/10 text-chart-2"
-                              : "bg-primary/10 text-primary"
-                          }`}
-                        >
-                          {gesture.gesture}
-                        </span>
-                      ))}
+                <div className="student-libras-option">
+                  <label htmlFor="student-libras"><span><strong>Apoio em Libras</strong><small>Mostrar o tradutor VLibras na tela.</small></span>
+                    <input id="student-libras" type="checkbox" role="switch" checked={librasEnabled} onChange={e => setLibrasEnabled(e.target.checked)} />
+                  </label>
+                  {librasEnabled && (
+                    <div className="student-libras-preview">
+                      <p>Abra o ícone azul do VLibras e selecione a mensagem abaixo para traduzir.</p>
+                      <p className="student-spoken-text">{spokenTypedText || "Digite uma mensagem e escolha Falar mensagem para exibi-la aqui."}</p>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-chart-2/5">
-              <CardHeader>
-                <CardTitle className="text-lg">Como Funciona</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>
-                  <strong>1. Detecção:</strong> MediaPipe Hands detecta as mãos em tempo real
-                </p>
-                <p>
-                  <strong>2. Landmarks:</strong> 21 pontos de referência por mão são extraídos
-                </p>
-                <p>
-                  <strong>3. Reconhecimento estático:</strong> cada quadro é comparado com poses
-                  de mão conhecidas (bom para letras paradas)
-                </p>
-                <p>
-                  <strong>4. Reconhecimento dinâmico:</strong> uma janela dos últimos ~2s de
-                  movimento das duas mãos é comparada com sinais que dependem de trajetória
-                </p>
-                <p>
-                  <strong>5. Conversão e áudio:</strong> o sinal reconhecido vira texto e é falado
-                  automaticamente
-                </p>
-              </CardContent>
-            </Card>
+
           </div>
         </div>
+
+        <aside className="student-guidance" aria-labelledby="student-guidance-title">
+          <div className="student-guidance-heading"><Lightbulb size={20} aria-hidden="true" /><h2 id="student-guidance-title">Para reconhecer melhor</h2></div>
+          <div className="student-guidance-tips">
+            <p><strong>Cuide da iluminação.</strong> Deixe a mão inteira visível no quadro.</p>
+            <p><strong>Faça uma pausa no gesto.</strong> Espere o resultado antes de adicionar ao texto.</p>
+            <p><strong>Personalize no treino.</strong> Capture suas amostras para incluir outros gestos.</p>
+          </div>
+          <p className="student-limit-note">O modelo base reconhece 15 letras estáticas. O reconhecimento é experimental e não traduz Libras completa.</p>
+        </aside>
       </main>
     </div>
   );

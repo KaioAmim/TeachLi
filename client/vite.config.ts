@@ -13,6 +13,12 @@ export default defineConfig({
     },
   },
   server: {
+    // Microsoft requires the registered callback origin; never fall back to 5174.
     port: 5173,
+    strictPort: true,
+  },
+  preview: {
+    port: 5173,
+    strictPort: true,
   },
 });
