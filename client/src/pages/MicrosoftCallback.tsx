@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { TeachLiBrand } from "@/components/Brand";
+import { Loader2, ShieldAlert } from "lucide-react";
 import { finishMicrosoftLogin } from "@/lib/microsoftAuth";
 
 export default function MicrosoftCallback() {
@@ -15,32 +16,51 @@ export default function MicrosoftCallback() {
     login.current ??= finishMicrosoftLogin(window.location.search);
     login.current
       .then(session => {
-        if (active) setLocation(session.role === "aluno" ? "/aluno" : "/professor");
+        if (active)
+          setLocation(session.role === "aluno" ? "/aluno" : "/professor");
       })
       .catch(reason => {
-        if (active) setError(reason instanceof Error ? reason.message : "Não foi possível concluir o login.");
+        if (active)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Não foi possível concluir o login."
+          );
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [setLocation]);
 
   return (
-    <main className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="pt-6 text-center space-y-4">
-          {error ? (
-            <>
-              <p className="font-medium text-destructive">Não foi possível entrar.</p>
-              <p className="text-sm text-muted-foreground">{error}</p>
-              <Button onClick={() => setLocation("/")}>Voltar ao início</Button>
-            </>
-          ) : (
-            <>
-              <p className="font-medium">Concluindo o login Microsoft…</p>
-              <p className="text-sm text-muted-foreground">Você será direcionado para o modo escolhido.</p>
-            </>
-          )}
-        </CardContent>
-      </Card>
+    <main id="conteudo" tabIndex={-1} className="auth-page">
+      <div className="auth-card" aria-live="polite">
+        <TeachLiBrand large />
+        {error ? (
+          <>
+            <ShieldAlert
+              className="mx-auto mb-4 text-destructive"
+              size={28}
+              aria-hidden="true"
+            />
+            <h1>Não foi possível entrar.</h1>
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <Button onClick={() => setLocation("/")}>Voltar ao início</Button>
+          </>
+        ) : (
+          <>
+            <Loader2
+              className="mx-auto mb-4 animate-spin text-primary"
+              size={28}
+              aria-hidden="true"
+            />
+            <h1>Preparando seu espaço…</h1>
+            <p className="text-sm text-muted-foreground">
+              Você será direcionado para o modo escolhido.
+            </p>
+          </>
+        )}
+      </div>
     </main>
   );
 }

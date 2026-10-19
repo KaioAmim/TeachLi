@@ -1,0 +1,117 @@
+/* A quiet workspace: camera and result together; writing remains immediately available. */
+.student-workspace { background: #f3f6fb; }
+.student-workspace .workspace-heading { padding-top: 22px; padding-bottom: 28px; }
+.student-workspace .workspace-heading-row { align-items: center; margin-top: 16px; padding-left: 18px; }
+.student-workspace .workspace-heading h1 { font-size: clamp(27px, 3vw, 36px); line-height: 1.15; }
+.student-workspace .workspace-heading p { margin-top: 8px; font-size: 14px; }
+.student-workspace button { gap: 8px; }
+.student-workspace button svg { flex-shrink: 0; }
+.student-workspace .workspace-heading-row > button { flex-shrink: 0; border-radius: 10px; background: white; }
+.student-layout { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.student-message-column { display: grid; gap: 24px; min-width: 0; }
+.student-panel { min-width: 0; border: 1px solid #dce4ef; border-radius: 20px; box-shadow: 0 4px 16px #15356603; overflow: hidden; }
+.student-panel .student-panel-header { display: flex; flex-direction: row; align-items: start; justify-content: space-between; gap: 10px; padding: 24px 24px 20px; }
+.student-panel-header > :not([hidden]) ~ :not([hidden]) { margin-top: 0; }
+.student-title-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.student-title-row > div { min-width: 0; }
+.student-title-row h2 { font-size: 19px; line-height: 1.3; font-weight: 550; letter-spacing: -.025em; color: #153566; }
+.student-title-row p { margin-top: 4px; font-size: 12px; line-height: 1.55; color: #53647d; }
+.student-tool-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; color: #2b57a2; background: #edf3fd; flex-shrink: 0; }
+.student-tool-icon-soft { background: #f3f6fb; color: #53647d; }
+.student-experiment { padding: 5px 8px; border-radius: 6px; background: #fff3e7; color: #95430a; font-size: 11px; white-space: nowrap; }
+.student-workspace .student-camera-stage { position: relative; overflow: hidden; background: #102b4f; border: 0; border-radius: 14px; min-height: 300px; }
+.student-workspace .student-camera-stage[data-active="true"] { min-height: 0; }
+.student-camera-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 22px; text-align: center; color: white; }
+.student-camera-empty strong { font-size: 16px; font-weight: 500; }
+.student-camera-empty p { color: #b8c9df; font-size: 13px; line-height: 1.6; }
+.student-viewfinder { display: grid; place-items: center; width: 76px; height: 66px; margin-bottom: 7px; color: #c4d5ed; border: 1px solid #b4c9e44a; border-radius: 18px; }
+.student-camera-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 16px; }
+.student-camera-toolbar button { border-radius: 9px; font-size: 13px; flex-shrink: 0; }
+.student-camera-status { display: flex; align-items: center; gap: 7px; font-size: 12px; line-height: 1.5; color: #53647d; }
+.student-status-dot { display: block; width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: #8b98ab; }
+.student-status-dot[data-ready="true"] { background: #34836a; }
+.student-error { font-size: 12px; line-height: 1.6; color: #a12323; overflow-wrap: anywhere; padding-bottom: 12px; }
+.student-recognition { padding: 18px; background: #f5f8fc; border: 1px solid #e4ebf5; border-radius: 12px; }
+.student-recognition-label { display: flex; align-items: center; gap: 8px; color: #53647d; }
+.student-recognition-label h3 { font-size: 12px; font-weight: 500; }
+.student-recognition-result { display: flex; flex-direction: column; align-items: stretch; gap: 14px; margin-top: 14px; }
+.student-recognition-result > button { align-self: flex-start; height: 36px; border-radius: 8px; font-size: 12px; }
+.student-result-value { display: flex; align-items: center; gap: 16px; min-height: 36px; min-width: 0; }
+.student-gesture-value { font-size: 32px; font-weight: 600; color: #153566; overflow-wrap: anywhere; max-width: 50%; }
+.student-confidence { flex: 1; min-width: 0; }
+.student-confidence p { color: #53647d; font-size: 11px; margin-bottom: 7px; }
+.student-confidence-track { height: 5px; border-radius: 5px; background: #dce4ef; overflow: hidden; }
+.student-confidence-track > span { display: block; height: 100%; background: #2b57a2; }
+.student-empty-copy { font-size: 13px; line-height: 1.65; color: #64748b; }
+.student-model-details { margin-top: 18px; border-top: 1px solid #e4ebf5; }
+.student-model-details summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0 0; font-size: 13px; font-weight: 500; color: #435b80; cursor: pointer; list-style: none; }
+.student-model-details summary::-webkit-details-marker { display: none; }
+.student-model-details summary > span { display: flex; align-items: center; gap: 8px; }
+.student-model-details[open] summary > svg { transform: rotate(180deg); }
+.student-model-body { padding-top: 16px; font-size: 12px; line-height: 1.7; color: #53647d; }
+.student-model-body > * + * { margin-top: 12px; }
+.student-text-link { color: #2b57a2; text-decoration: underline; text-underline-offset: 3px; text-align: left; }
+.student-gesture-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.student-gesture-list > span { display: inline-block; min-width: 28px; padding: 4px 8px; border: 1px solid #dce4ef; border-radius: 6px; background: #f6f9fe; color: #2b57a2; font-size: 12px; text-align: center; overflow-wrap: anywhere; max-width: 100%; }
+.student-gesture-list > span[data-dynamic="true"] { color: #286a58; background: #eef8f4; }
+.student-transcript-panel { border-top: 3px solid #2b57a2; }
+.student-field-label { display: block; color: #435b80; font-size: 12px; margin-bottom: 10px; }
+.student-workspace .student-message-input { min-height: 172px; max-height: 480px; resize: vertical; background: #fbfcff; border: 1px solid #ccd8e9; border-radius: 10px; padding: 16px; font-size: 16px; line-height: 1.65; color: #153566; box-shadow: none; }
+.student-message-input::placeholder { color: #8794a7; }
+.student-keyboard-hint { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 10px; color: #65748a; font-size: 11px; line-height: 1.8; }
+.student-keyboard-hint kbd { font-family: inherit; border: 1px solid #e0e6ee; border-radius: 4px; padding: 0 4px; background: #f7f9fc; }
+.student-keyboard-hint > span { padding-inline: 2px; }
+.student-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
+.student-actions button { min-height: 40px; border-radius: 9px; font-size: 13px; }
+.student-actions button:first-child { flex: 1; }
+.student-actions button:last-child { color: #53647d; }
+.student-libras-option { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e4ebf5; }
+.student-libras-option label { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.student-libras-option strong { display: block; font-size: 12px; font-weight: 500; color: #435b80; }
+.student-libras-option small { display: block; font-size: 11px; color: #64748b; margin-top: 4px; }
+.student-libras-option input { appearance: none; display: block; flex-shrink: 0; width: 34px; height: 20px; border-radius: 20px; border: 1px solid #a4b3c8; background: #edf1f7; cursor: pointer; }
+.student-libras-option input::before { content: ""; display: block; width: 12px; height: 12px; margin: 3px; border-radius: 50%; background: #6f819a; }
+.student-libras-option input:checked { background: #2b57a2; border-color: #2b57a2; }
+.student-libras-option input:checked::before { transform: translateX(14px); background: white; }
+.student-libras-preview { margin-top: 16px; padding: 12px; border-radius: 8px; background: #f3f6fb; color: #53647d; font-size: 12px; line-height: 1.65; }
+.student-spoken-text { margin-top: 8px; color: #153566; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The composed message is distinct from the camera's detection history. */
+.student-message-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.student-message-label-row .student-field-label { margin-bottom: 0; }
+.student-manual-label { padding: 4px 8px; border-radius: 6px; background: #edf3fd; color: #435b80; font-size: 11px; }
+.student-workspace .student-gesture-message { min-height: 200px; font-size: 21px; line-height: 1.6; background: #f7faff; }
+.student-gesture-message::placeholder { font-size: 17px; }
+.student-message-help { margin-top: 12px; color: #53647d; font-size: 12px; line-height: 1.7; }
+.student-message-help strong { font-weight: 500; color: #435b80; }
+.student-session-note { margin-top: 16px; padding-top: 14px; border-top: 1px solid #e4ebf5; color: #64748b; font-size: 11px; line-height: 1.6; }
+.student-phrase-actions button { padding-inline: 12px; }
+.student-guidance { margin-top: 26px; padding: 22px 24px; background: #edf2f9; border-radius: 16px; border: 1px solid #e0e7f1; }
+.student-guidance-heading { display: flex; align-items: center; gap: 9px; color: #435b80; }
+.student-guidance-heading h2 { font-size: 14px; font-weight: 500; }
+.student-guidance-heading > svg { color: #a75b21; }
+.student-guidance-tips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: 16px; }
+.student-guidance-tips p { font-size: 12px; line-height: 1.7; color: #53647d; }
+.student-guidance-tips strong { display: block; font-weight: 500; color: #435b80; }
+.student-limit-note { margin-top: 18px; padding-top: 14px; border-top: 1px solid #d7e0ed; font-size: 11px; line-height: 1.65; color: #64748b; }
+@media (max-width: 1100px) {
+  .student-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+  .student-panel .student-panel-header { flex-wrap: wrap; }
+  .student-experiment { margin-left: 54px; }
+  .student-workspace .student-camera-stage { min-height: 260px; }
+  .student-camera-toolbar { align-items: stretch; flex-direction: column; }
+}
+@media (max-width: 800px) {
+  .student-layout { grid-template-columns: minmax(0, 1fr); }
+  .student-workspace .workspace-heading-row { align-items: start; flex-direction: column; gap: 18px; }
+  .student-guidance-tips { grid-template-columns: 1fr; gap: 14px; }
+  .student-camera-toolbar { flex-direction: row; align-items: center; }
+}
+@media (max-width: 480px) {
+  .student-panel .student-panel-header { padding: 20px; }
+  .student-title-row h2 { font-size: 18px; }
+  .student-workspace .student-camera-stage { min-height: 240px; }
+  .student-camera-toolbar { flex-direction: column; align-items: stretch; }
+  .student-result-value { flex-wrap: wrap; }
+  .student-gesture-value { max-width: 100%; }
+  .student-guidance { padding: 20px; }
+}
