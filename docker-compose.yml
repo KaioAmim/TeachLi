@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    ports:
+      - "5173:5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./client/src:/app/client/src
+      - ./client/public:/app/client/public

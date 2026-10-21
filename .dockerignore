@@ -1,0 +1,8 @@
+node_modules
+**/node_modules
+dist
+.git
+datasets-raw
+libras-modelo-treinado
+*.tar.gz
+**/*.timestamp-*.mjs
