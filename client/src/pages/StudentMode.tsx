@@ -13,6 +13,10 @@ import { twoHandLandmarksToFeatures } from "@/lib/handFeatures";
 import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
 import VLibrasWidget from "@/components/VLibrasWidget";
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 interface RecognitionResult {
   gesture: string;
   confidence: number;
