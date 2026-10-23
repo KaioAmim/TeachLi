@@ -41,18 +41,21 @@ O movimento responde à seleção e ao foco; respeita redução de movimento.
 - `client/public/brand/teachli.jpg`: cópia da marca original `TeachLi.jpg`, já
   existente no repositório. Preservar proporção, cores e fundo branco.
 
-Não redesenhar as marcas. Usar textos alternativos, navegação por teclado,
+Preservar o desenho das marcas. A variante transparente com contorno branco
+foi solicitada para o TeachLi e substitui a placa branca na interface. Usar textos alternativos, navegação por teclado,
 foco visível e controles com áreas de toque confortáveis. Manter os limites reais
-do protótipo: 15 letras estáticas no modelo base, sem prometer tradução completa.
+do protótipo: A–Z experimental por pose, sem Ç e sem prometer tradução completa
+ou validação de movimentos de H/J/K/X/Z.
 
-## Validação desta alteração
+## Registro da validação visual anterior
 
 - Build direto do Vite concluído; o pacote mantém o aviso de tamanho do JavaScript.
 - Teste de autenticação existente passou. Os domínios institucionais e as regras
   de sessão foram preservados.
-- Checagem de tipos comparada antes/depois: mesmos erros anteriores em dependências
-  e arquivos legados, sem erros novos. O build completo com `tsc` segue bloqueado
-  por essa pendência anterior, descrita no README.
+- Na etapa visual anterior, a checagem de tipos ainda misturava aplicação e
+  arquivos herdados. A regularização atual está descrita na
+  [documentação técnica](DOCUMENTACAO.md#fronteira-de-compilação-e-legado); esse
+  registro histórico não representa o estado do build atual.
 - Navegação e capturas de tela em desktop (1440px), celular (390px) e verificações
   adicionais de largura a 320px: sem rolagem horizontal nos fluxos verificados.
 - Seletores de recursos, perguntas expansíveis, estados de login, retorno da
@@ -71,11 +74,11 @@ no Entra foi alterado nesta revisão.
 
 ## Favicon e movimento
 
-O favicon `client/public/brand/teachli-favicon.png` deriva da logo original,
-com fundo transparente. A edição foi feita com a ferramenta integrada ImageGen.
-Prompt: remover apenas o fundo branco, inclusive os espaços vazados, preservando
-ilustração, texto TeachLi, círculo, proporções e cores; PNG quadrado transparente
-com pequena margem. O arquivo original permanece preservado.
+O favicon ativo em `client/index.html` usa
+`client/public/brand/teachli-outline.png`, a mesma variante transparente com
+contorno branco da interface. O navegador dimensiona a imagem para a aba. O
+recurso anterior `teachli-favicon.png` permanece preservado, mas não é o ícone
+referenciado pelo HTML. O prompt de criação da variante está registrado abaixo.
 
 As animações usam deslocamentos entre 6 e 18 pixels e durações entre 650 ms e
 1 segundo. Ao selecionar Texto, Voz ou Gestos, a demonstração atual se apaga em
@@ -83,15 +86,10 @@ As animações usam deslocamentos entre 6 e 18 pixels e durações entre 650 ms 
 Trocas rápidas cancelam a seleção pendente e preservam a última escolha.
 Os cartões de acesso usam inclinação limitada e reflexos discretos.
 
-A rolagem pelo botão “Quero participar” e pelos links do menu dura entre 850 ms e
-1,4 segundo, com aceleração/desaceleração gradual. No desktop, a roda do mouse
-avança suavemente entre as três seções; se a seção for maior que a tela, há
-paradas intermediárias para não pular conteúdo. Cada avanço pela roda é limitado
-a 60% da altura da tela, e o final de cada seção alta tem uma parada própria para
-expor seus controles antes de seguir. A abertura usa espaçamentos mais compactos
-para manter o controle de animações visível. Rolagem por toque, pequenos
-deltas de trackpad, campos, áreas com rolagem própria e teclado permanecem nativos.
-A navegação automática pode ser interrompida por toque, clique ou teclas de navegação.
+A rolagem usa o comportamento nativo do navegador, tanto na roda do mouse
+quanto nos links para seções. Não há captura de eventos de roda, saltos entre
+seções nem animação personalizada de rolagem. As demais animações visuais e a
+preferência de reduzir movimento continuam independentes da navegação.
 
 Perguntas compartilham um único estado aberto. Ao abrir outra, a anterior se
 recolhe; altura, cor e opacidade do texto mudam gradualmente. Os controles mantêm
@@ -123,7 +121,8 @@ Revisão visual com os componentes reais em uma prévia temporária removida ao
 final, sem alterar a proteção das rotas. Larguras de 1265, 390 e 320 pixels
 verificadas, sem rolagem horizontal. Digitação, limpeza do campo, disponibilidade
 dos botões e abertura/fechamento das instruções conferidos. A checagem de tipos
-não apontou erros nas duas páginas; permanecem os erros legados descritos acima.
+não apontou erros nas duas páginas naquela etapa. A auditoria legada é hoje
+separada do build da aplicação atual, conforme a documentação técnica.
 
 Build direto do Vite desta revisão concluído (2937 módulos), mantendo apenas o
 aviso existente de tamanho do pacote JavaScript.
@@ -131,12 +130,53 @@ aviso existente de tamanho do pacote JavaScript.
 ### Campo de mensagem com gestos
 
 A mensagem composta fica em destaque no topo da coluna ao lado da câmera, em um
-campo de leitura selecionável. O histórico de detecções fica recolhido junto à
+campo editável e selecionável, com revisão e envio explícito ao professor. O histórico de detecções fica recolhido junto à
 câmera; não é apresentado como histórico de frases. O campo usa o estado
 `recognizedText` já existente e mantém a adição manual, a leitura em voz e a limpeza.
 O aviso de sessão deixa claro que não existe salvamento persistente.
 
-Fora do escopo desta branch visual: composição automática de letras em palavras,
-separação de palavras, edição de frases, persistência de mensagens e reconhecimento
-de frases em Libras. Essas funcionalidades precisam de implementação e validação
-próprias; o layout não apresenta controles falsos de salvar ou reconhecimento automático.
+Ainda fora da entrega atual: composição automática de letras em palavras,
+separação automática, persistência de mensagens e reconhecimento de frases em
+Libras. A edição manual e o envio confirmado do rascunho já estão implementados;
+o layout não apresenta controles falsos de salvar ou reconhecimento automático.
+
+## Entrada por sala de aula
+
+A seleção de sala mantém Outfit e a paleta institucional, com formulário alinhado
+à esquerda e uma orientação lateral no desktop. No celular, os blocos ficam
+empilhados. Um seletor nativo lista os laboratórios A/B/C e as salas 01/02; o
+botão de entrada só fica disponível após a escolha. Nome, perfil e e-mail ajudam
+a reconhecer a conta utilizada. A faixa azul nas telas de comunicação informa
+sala, conexão/presença e oferece troca ou saída da conta.
+
+Validação local desta etapa: seleção em 1440px e 390px, sem overflow horizontal
+na seleção móvel; mensagem digitada chegando ao professor; legenda retornando ao
+aluno com reconhecimento de voz simulado; espera pelo professor, troca de sala e
+logout. Foram usadas identidades fictícias emitidas por um servidor de teste,
+sem login Microsoft real. Esse registro corresponde ao ensaio visual anterior; a suíte atual contém
+14 testes de autenticação do cliente e sete cenários do servidor. O estado da
+compilação foi atualizado na documentação técnica. Microfone real e validação
+com contas institucionais em dispositivos diferentes continuam pendentes.
+
+
+## Logo transparente com contorno branco
+
+Arquivo ativo: `client/public/brand/teachli-outline.png`, PNG com canal alpha,
+1446 × 1087. O JPEG original permanece preservado. O cabeçalho deixou de usar
+fundo branco e mistura de cores sobre a logo. Um contorno CSS de 1px reforça
+a leitura da imagem em tamanho pequeno; a variante é usada também nas
+áreas de acesso. A marca UniBarretos não foi alterada.
+
+Edição feita com ImageGen integrado (sem CLI). Prompt final: remover o fundo
+branco, inclusive vazados, e adicionar contorno branco fino de aproximadamente
+4 pixels em largura 1024; preservar desenho, cores, proporções e palavra TeachLi;
+não adicionar fundo, placa, sombra ou novos elementos; pequena margem transparente.
+
+## Ajuste de escopo da entrada por salas
+
+O login Microsoft anterior foi restaurado: não há consulta ao servidor de salas
+antes do redirecionamento ou no retorno Microsoft. A seleção de sala prepara a
+sessão de comunicação e permite tentar novamente sem perder o login caso o
+servidor esteja indisponível. Não se exige Tenant ID da faculdade, função Entra
+ou cadastro extra de professores. O scroll nativo e a logo transparente com
+contorno branco permanecem aplicados.

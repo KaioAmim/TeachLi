@@ -399,7 +399,7 @@ export default function TrainMode() {
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={importDataset} disabled={isImporting}>
                       <Download className="w-4 h-4 mr-2" />
-                      {isImporting ? "Importando..." : "Importar alfabeto"}
+                      {isImporting ? "Importando..." : "Importar amostras de 15 letras"}
                     </Button>
                     <Button onClick={train} disabled={isTraining || labels.length < 2}>
                       <Play className="w-4 h-4 mr-2" />

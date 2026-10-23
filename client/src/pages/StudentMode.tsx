@@ -1,3 +1,5 @@
+import { ClassroomPanel } from "@/components/ClassroomPanel";
+import { useClassroomConnection } from "@/contexts/ClassroomContext";
 import { WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,7 @@ const MARGIN_THRESHOLD = 0.15;
 const DYNAMIC_MARGIN_THRESHOLD = 0.15;
 
 export default function StudentMode() {
+  const classroom = useClassroomConnection();
   const [, setLocation] = useLocation();
   const [isCapturing, setIsCapturing] = useState(false);
   const [recognizedText, setRecognizedText] = useState("");
@@ -383,7 +386,7 @@ export default function StudentMode() {
   const handleTypedTextKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      speakTypedText();
+      classroom.send(typedText);
     }
   };
 
@@ -404,6 +407,7 @@ export default function StudentMode() {
         </Button>
       </WorkspaceHeading>
 
+      <ClassroomPanel />
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
         <div className="student-layout">
           <Card className="student-panel student-camera-panel" role="region" aria-labelledby="camera-title">
@@ -452,7 +456,7 @@ export default function StudentMode() {
                       <>
                         <strong className="student-gesture-value">{currentGesture}</strong>
                         <div className="student-confidence">
-                          <p>{currentGestureKind === "dynamic" ? "Sinal em movimento" : "Gesto estático"} · {currentConfidence}% de confiança</p>
+                          <p>{currentGestureKind === "dynamic" ? "Sinal em movimento" : "Letra reconhecida"} · {currentConfidence}% de confiança</p>
                           <div className="student-confidence-track" role="meter" aria-label="Confiança do reconhecimento" aria-valuemin={0} aria-valuemax={100} aria-valuenow={currentConfidence}>
                             <span style={{ width: `${currentConfidence}%` }} />
                           </div>
@@ -483,9 +487,9 @@ export default function StudentMode() {
                 <div className="student-model-body">
                   <p>{isClassifierLoading ? "Preparando reconhecimento de letras…"
                     : modelSource === "user" ? `Usando o seu modelo treinado (${modelLabels.length} gestos).`
-                    : modelSource === "pretrained" ? `Modelo base do alfabeto: ${modelLabels.length} letras estáticas.`
+                    : modelSource === "pretrained" ? `Modelo experimental do alfabeto: ${modelLabels.length} letras.`
                     : "Nenhum classificador estático disponível."}</p>
-                  {hasModel && <div className="student-gesture-list" aria-label="Gestos estáticos disponíveis">{modelLabels.map(label => <span key={label}>{label}</span>)}</div>}
+                  {hasModel && <div className="student-gesture-list" aria-label="Letras disponíveis">{modelLabels.map(label => <span key={label}>{label}</span>)}</div>}
                   <p>{isDynamicClassifierLoading ? "Preparando reconhecimento de movimentos…"
                     : hasDynamicModel ? `Movimentos disponíveis: ${dynamicLabels.length} sinais.`
                     : "Para reconhecer movimentos, grave clipes em Treinar gestos."}</p>
@@ -512,13 +516,15 @@ export default function StudentMode() {
                 <Textarea
                   id="gesture-message"
                   value={recognizedText}
-                  readOnly
+                  onChange={e => setRecognizedText(e.target.value)}
+                  maxLength={2000}
                   aria-describedby="gesture-message-help gesture-message-session"
                   placeholder="Sua mensagem aparecerá aqui…"
                   className="student-message-input student-gesture-message"
                 />
-                <p id="gesture-message-help" className="student-message-help">Reconheça um gesto e clique em <strong>Adicionar ao texto</strong>, abaixo da câmera.</p>
+                <p id="gesture-message-help" className="student-message-help">Reconheça um gesto e clique em <strong>Adicionar ao texto</strong>, abaixo da câmera. Revise o texto antes de enviar.</p>
                 <div className="student-actions student-phrase-actions">
+                  <Button onClick={() => classroom.send(recognizedText)} disabled={!recognizedText.trim() || classroom.status !== "connected" || !classroom.professor}>Enviar ao professor</Button>
                   <Button onClick={() => speakText(recognizedText)} disabled={!recognizedText.trim()}><Volume2 size={17} aria-hidden="true" /> Ouvir mensagem</Button>
                   <Button variant="ghost" onClick={clearText} disabled={!recognizedText && !gestureHistory.length && !currentGesture}><Trash2 size={16} aria-hidden="true" /> Limpar mensagem</Button>
                 </div>
@@ -530,24 +536,26 @@ export default function StudentMode() {
               <CardHeader className="student-panel-header">
                 <div className="student-title-row">
                   <span className="student-tool-icon"><Keyboard size={21} aria-hidden="true" /></span>
-                  <div><h2 id="compose-title">Digitar e ouvir</h2><p>Transforme sua mensagem em voz.</p></div>
+                  <div><h2 id="compose-title">Mensagem ao professor</h2><p>Escreva, revise e envie para sua sala.</p></div>
                 </div>
               </CardHeader>
               <CardContent>
                 <label className="student-field-label" htmlFor="student-message">O que você quer dizer?</label>
                 <Textarea
                   id="student-message"
-                  aria-label="Mensagem para ler em voz alta"
+                  aria-label="Mensagem para o professor"
                   aria-describedby="student-keyboard-hint"
+                  maxLength={2000}
                   value={typedText}
                   onChange={e => setTypedText(e.target.value)}
                   onKeyDown={handleTypedTextKeyDown}
                   placeholder="Escreva sua mensagem aqui…"
                   className="student-message-input"
                 />
-                <p className="student-keyboard-hint" id="student-keyboard-hint"><kbd>Enter</kbd> para falar <span>·</span> <kbd>Shift + Enter</kbd> para nova linha</p>
+                <p className="student-keyboard-hint" id="student-keyboard-hint"><kbd>Enter</kbd> para enviar <span>·</span> <kbd>Shift + Enter</kbd> para nova linha</p>
                 <div className="student-actions">
-                  <Button onClick={speakTypedText} disabled={!typedText.trim()}><Volume2 size={17} aria-hidden="true" /> Falar mensagem</Button>
+                  <Button onClick={() => classroom.send(typedText)} disabled={!typedText.trim() || classroom.status !== "connected" || !classroom.professor}>Enviar ao professor</Button>
+                  <Button variant="outline" onClick={speakTypedText} disabled={!typedText.trim()}><Volume2 size={17} aria-hidden="true" /> Ouvir aqui</Button>
                   <Button variant="ghost" onClick={clearTypedText} disabled={!typedText && !spokenTypedText}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
                 </div>
                 <div className="student-libras-option">
@@ -557,7 +565,7 @@ export default function StudentMode() {
                   {librasEnabled && (
                     <div className="student-libras-preview">
                       <p>Abra o ícone azul do VLibras e selecione a mensagem abaixo para traduzir.</p>
-                      <p className="student-spoken-text">{spokenTypedText || "Digite uma mensagem e escolha Falar mensagem para exibi-la aqui."}</p>
+                      <p className="student-spoken-text">{spokenTypedText || "Digite uma mensagem e escolha Ouvir aqui para exibi-la aqui."}</p>
                     </div>
                   )}
                 </div>
@@ -575,7 +583,7 @@ export default function StudentMode() {
             <p><strong>Faça uma pausa no gesto.</strong> Espere o resultado antes de adicionar ao texto.</p>
             <p><strong>Personalize no treino.</strong> Capture suas amostras para incluir outros gestos.</p>
           </div>
-          <p className="student-limit-note">O modelo base reconhece 15 letras estáticas. O reconhecimento é experimental e não traduz Libras completa.</p>
+          <p className="student-limit-note">O modelo experimental inclui A a Z. H, J, K, X e Z são reconhecidos pela posição da mão, sem validar o movimento completo. Ç ainda não está incluído. Não traduz Libras completa.</p>
         </aside>
       </main>
     </div>

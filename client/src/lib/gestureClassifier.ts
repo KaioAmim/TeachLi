@@ -6,12 +6,12 @@ const LABELS_STORAGE_KEY = "libras-gesture-classifier-labels";
 const DATASET_STORAGE_KEY = "libras-gesture-training-dataset";
 
 /**
- * Modelo base, treinado offline sobre os landmarks do dataset público
- * "Brazilian Sign Language Alphabet" (MIT). Cobre as 15 letras estáticas
- * do alfabeto e é carregado quando o usuário ainda não treinou o seu.
+ * Modelo experimental A–Z: transferência do modelo de 15 letras, ajustada com
+ * landmarks legados e LibraSign. Origem, licenças e avaliação estão no NOTICE
+ * junto do artefato e em docs/TREINAMENTO_ALFABETO.md.
  */
-const PRETRAINED_MODEL_URL = "/models/gesture-classifier/model.json";
-const PRETRAINED_LABELS_URL = "/models/gesture-classifier/labels.json";
+const PRETRAINED_MODEL_URL = "/models/gesture-classifier-26/model.json";
+const PRETRAINED_LABELS_URL = "/models/gesture-classifier-26/labels.json";
 
 export interface TrainingSample {
   label: string;

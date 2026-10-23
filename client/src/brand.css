@@ -13,7 +13,7 @@
   --brand-navy: #153566;
 }
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   scroll-padding-top: 24px;
 }
 body {
@@ -93,25 +93,16 @@ summary {
 }
 .product-brand {
   display: block;
-  background: #fffffff0;
-  border-radius: 16px;
   flex-shrink: 0;
-  overflow: hidden;
-  border: 1px solid #ffffffb3;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow:
-    0 4px 18px #061c3e18,
-    inset 0 1px 0 white;
+  border-radius: 8px;
+  background: transparent;
 }
 .teachli-logo {
   display: block;
   width: 92px;
   height: 66px;
+  filter: drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white);
   object-fit: contain;
-}
-.product-brand .teachli-logo {
-  mix-blend-mode: multiply;
 }
 .teachli-logo-large {
   width: 136px;
@@ -638,7 +629,6 @@ summary {
   width: 78px;
   height: 58px;
   flex-shrink: 0;
-  mix-blend-mode: multiply;
 }
 @supports not (backdrop-filter: blur(1px)) {
   .student-card {
@@ -1261,7 +1251,7 @@ summary {
 .role-button { transition: background .45s, box-shadow .45s; }
 .role-button > .lucide-arrow-up-right { transition: background .45s, transform .5s var(--motion-ease); }
 .product-brand { transition: box-shadow .5s, background .5s; }
-.product-brand:hover, .product-brand:focus-visible { background: white; box-shadow: 0 0 0 4px #ffffff12; }
+.product-brand:hover, .product-brand:focus-visible { background: transparent; box-shadow: 0 0 0 4px #ffffff12; }
 .help-topics { display: grid; gap: 10px; align-content: start; }
 .help-topic {
   border: 1px solid #dce4ef;

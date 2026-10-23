@@ -1,0 +1,21 @@
+.room-selection { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 64px; padding-bottom: 64px; }
+.room-form { background: #fff; border: 1px solid #dbe3f0; border-radius: 20px; padding: 32px; }
+.room-identity { display: flex; align-items: center; gap: 16px; padding-bottom: 28px; color: #153566; overflow-wrap: anywhere; }
+.room-identity p, .room-hint { color: #53647d; font-size: .95rem; }
+.room-form label { display: block; font-weight: 600; color: #153566; margin-bottom: 10px; }
+.room-form select { width: 100%; padding: 14px; background: #f3f6fb; border: 1px solid #a9b9cf; border-radius: 8px; color: #153566; }
+.room-hint { display: flex; align-items: flex-start; gap: 8px; margin: 16px 0; }
+.room-hint svg { flex-shrink: 0; }
+.room-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+.room-explanation { align-self: center; border-left: 4px solid #f5822a; padding-left: 28px; max-width: 420px; }
+.room-explanation h2 { font-size: 1.8rem; line-height: 1.15; margin-bottom: 18px; }
+.room-explanation p { color: #53647d; margin: 14px 0; }
+.room-error { color: #9a2424; padding: 12px; background: #fff0f0; border-radius: 8px; margin: 12px 0; }
+.classroom-panel { margin-bottom: 28px; }
+.classroom-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; background: #eaf0fa; border-left: 4px solid #2b57a2; padding: 16px 20px; border-radius: 8px; }
+.classroom-bar strong { display: flex; align-items: center; gap: 8px; color: #153566; font-size: 1.1rem; }
+.classroom-bar p { color: #53647d; margin-top: 4px; }
+.classroom-messages { max-height: 300px; overflow-y: auto; overflow-wrap: anywhere; }
+.classroom-messages article { padding: 16px 4px; border-bottom: 1px solid #dbe3f0; }
+.classroom-messages article p { white-space: pre-wrap; margin-top: 6px; }
+@media (max-width: 700px) { .room-selection { grid-template-columns: 1fr; gap: 28px; } .room-form { padding: 22px; } .classroom-bar { align-items: flex-start; flex-direction: column; } }

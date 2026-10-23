@@ -1,300 +1,200 @@
 # Guia de implementação do TeachLi
 
-Este roteiro recupera a proposta de `maintenance/limpeza-estrutura-documentacao`
-e a adapta à `main` em `5cf6d3c`. “Implementado” significa presente no código;
-não significa validado com usuários reais. Os itens abaixo são prioridades
-propostas e critérios de aceite, não compromissos aprovados para um piloto.
-As convenções estão em [BRANCHES.md](BRANCHES.md).
+Atualizado em 23/10/2026 para `feature/entrada-salas-aula`.
+Este roteiro mantém o objetivo final e distingue a entrega atual das próximas
+etapas. “Implementado” significa presente no aplicativo; não equivale a
+aprovação do piloto ou validação com usuários reais.
 
-O resumo `TeachLi.txt` enviado pelo usuário acrescenta uma prioridade: conectar
-professor e aluno por texto compartilhado, preservando correção/confirmação do
-aluno e legendas legíveis. A referência à ausência de WebRTC no resumo é
-histórica; a videochamada já existe na base atual. A sequência proposta é definir
-o protocolo de texto, integrar transcrições parciais/finais, criar o painel de
-mensagens do professor e preferências de voz, e então validar o controle do
-avatar. Os números abaixo organizam áreas de trabalho, não uma dependência
-obrigatória de concluir todo o sistema antes de experimentar o fluxo de texto.
+## Resultado final desejado
 
-O escopo de aula híbrida/EAD está resumido na seção final deste guia. O termo abrange
-participação remota e sua combinação com a sala presencial; não se refere a modelos
-de machine learning ou processamento em nuvem. A comunicação precisa funcionar nos
-dispositivos dos participantes: voz na caixa de som física não substitui texto para
-quem está remoto.
+Permitir que alunos surdos e professores se comuniquem em uma aula presencial,
+remota ou híbrida por texto acessível, voz opcional e apoio em Libras. O aluno
+poderá digitar ou produzir um rascunho por gestos, revisar e confirmar o envio;
+o professor receberá a mensagem e poderá ouvi-la com controle de reprodução.
+A fala do professor deverá chegar aos alunos em legendas legíveis, com apoio do
+avatar quando a integração e a qualidade da tradução forem comprovadas.
 
-## 0. Regularizar o cliente independente — bloqueio técnico confirmado
+A comunicação deve funcionar nos dispositivos dos participantes. A voz emitida
+na caixa de som física não substitui texto para quem está remoto. Texto deve
+continuar disponível sem câmera, microfone ou avatar. Reconhecimento experimental
+não deve ser apresentado como tradução completa de Libras nem substituir a
+avaliação de alunos surdos e profissionais de Libras.
 
-Branch: `maintenance/regularizar-build-client`. Label: `maintenance`.
+## 0. Build e organização — regularizados para o aplicativo atual
 
-`npm ci` em `client/` passou, mas `npm run typecheck` falhou na base funcional
-inalterada. O `tsconfig` inclui toda a pasta `src`, incluindo arquivos legados
-com dependências ausentes no pacote independente (`@trpc/client`, `@radix-ui/*`),
-alias `@shared` não configurado e exports incompatíveis (`buttonVariants`,
-`LIBRAS_GESTURES`). `npm run build` também falhou no TypeScript após a cópia dos
-WASM. O teste de desenvolvimento iniciou o Vite, mas encontrou
-`@radix-ui/react-dialog` não resolvido em `components/ui/dialog.tsx`, alcançado
-pela interface ativa. Assim, a correção é necessária também para validar o uso
-local, antes de publicar ou ampliar a aplicação.
+- [x] Definir a fronteira do cliente a partir de `src/main.tsx` e todos os imports,
+  das declarações locais e da configuração Vite, mantendo TypeScript estrito.
+- [x] Preservar o código herdado e sua auditoria em `npm run typecheck:legacy`.
+- [x] Manter TypeScript no comando completo de build, antes do Vite.
+- [ ] Regularizar separadamente telas e APIs legadas, caso sejam reintegradas.
 
-Os testes foram feitos com Node.js 18.19.1/npm 9.2.0. O Node.js 22 recomendado
-nos guias não estava disponível e precisa entrar na validação da correção;
-trocar a versão não foi demonstrado como solução para imports/exports ausentes.
+Os pacotes atuais são `client/` e `server/`; o manifesto completo da raiz é
+herdado. A auditoria legada ainda possui erros e não é apresentada como aprovada.
+O aceite desta etapa exige instalação limpa, tipos e build do pacote atual,
+sem remover a checagem ou silenciar erros. Resultados das execuções ficam no PR.
 
-- [ ] Mapear fontes da aplicação independente e do caminho legado sem remover
-  arquivos por estarem fora das rotas apenas.
-- [ ] Definir a fronteira de compilação e corrigir imports, exports e dependências
-  de acordo com os usos comprovados; manter lockfiles coerentes.
-- [ ] Não silenciar erros ou excluir arquivos arbitrariamente para obter build verde.
-- [ ] Executar `npm ci`, `npm run typecheck` e `npm run build` em ambiente limpo
-  do cliente, usando a versão de Node recomendada, e conferir a saída e os fluxos ativos.
-- [ ] Executar `npm run dev` e abrir a interface, confirmando que não há erro de
-  dependência ativa; iniciar o processo sozinho não satisfaz o teste de uso.
+## 1. Piloto e avaliação — próximos passos
 
-Aceite: instalação, tipos e build passam com configuração coerente; eventuais
-limites do legado ficam documentados. Os cinco testes de convenções, a CLI e a
-checagem sintática do servidor já passaram nesta revisão, mas não comprovam esse
-aceite. A correção funcional não faz parte da recuperação de documentação.
+- [ ] Confirmar participantes, equipamentos, responsáveis e avaliação em Libras.
+- [ ] Acordar cenários, métricas, limites, retenção e exclusão de dados do piloto.
+- [ ] Validar com duas contas institucionais em dispositivos e redes diferentes.
+- [ ] Incluir participação presencial/remota, apenas por texto e com voz desativada.
 
-## 1. Definir e validar o piloto — futuro
+O login institucional já é a escolha implementada. Uma alteração dessa política
+precisa de decisão explícita, não é um requisito pendente para usar as salas.
+Aceite: responsáveis e cenários definidos, resultados registrados sem extrapolar
+um teste com duas sessões para capacidade de uma turma.
 
-Branch sugerida: `documentation/escopo-primeira-entrega`. Label: `documentation`.
+## 2. Identidade e autorização — base implementada
 
-- [ ] Confirmar participantes, equipamentos e responsáveis pela avaliação em Libras.
-- [ ] Definir entrada como convidado ou conta institucional e autorização de professor.
-- [ ] Definir dados armazenados, retenção, exclusão e informação aos participantes.
-- [ ] Acordar cenários, métricas e limites do piloto antes de ampliar o uso.
-- [ ] Incluir cenários EAD e de participação presencial/remota, definindo quem
-  recebe cada mensagem e quais recursos funcionam sem câmera ou com voz desativada.
+- [x] Login Microsoft existente, com `organizations`, PKCE, `state` e nonce.
+- [x] Verificar token no servidor antes da comunicação; definir autoria e papel.
+- [x] Aplicar domínios de aluno/professor; rejeitar perfil forjado e conta externa.
+- [x] Testar expiração, logout e isolamento com identidades de teste.
+- [ ] Conferir o login com contas institucionais reais no ambiente do piloto.
+- [ ] Avaliar com a faculdade a administração do aplicativo Microsoft e eventual
+  política de vínculo, grupos ou funções de docentes.
 
-Aceite: escopo documentado com responsáveis e cenários reproduzíveis. A digitação
-com voz local pode ser avaliada já; texto para um receptor remoto e legendas
-compartilhadas ainda exigem implementação.
+**Tenant ID da faculdade e novo cadastro de docentes não são exigidos nesta
+entrega.** A regra atual por domínio não prova administrativamente a função de
+professor. Restrições adicionais dependerão do acordo com a instituição.
+Se a API legada de sessões for reutilizada, autorizar cada consulta/alteração por
+participação; exigir login sozinho não basta.
 
-## 2. Identidade e autorização — parcial
+## 3. Salas e comunicação — implementadas, piloto pendente
 
-Branch: `feature/autenticacao-institucional`. Label: `feature`.
+- [x] Laboratórios A/B/C e salas 01/02 após login; nome visível na comunicação.
+- [x] Presença, entrada antes do professor, um professor por sala e troca de sala.
+- [x] Mensagens e frases finais somente entre perfis opostos na mesma sala.
+- [x] Participação por texto sem exigir câmera ou microfone.
+- [x] Estados de falha, nova entrada explícita e encerramento da sessão no logout.
+- [ ] Validar em dispositivos/redes reais, inclusive interrupção de conexão.
+- [ ] Definir turmas, matrículas, encerramento de aula e histórico se o piloto exigir.
+- [ ] Evoluir reconexão e recuperação de estado sem duplicar mensagens.
 
-O primeiro passo da branch adiciona uma sessão demo assinada pelo servidor: apenas
-um e-mail no domínio `@unibarretos.com.br` combinado com o código configurado no
-servidor pode criar sala. `@alunos.unibarretos.com.br` é recusado para esse papel,
-e alterar `role=professor` na URL não funciona sem sessão. Isso é demonstração,
-não comprovação de conta Microsoft. OAuth Manus e papéis `user/admin` existem na
-infraestrutura legada, mas não autenticam a Sala de Aula independente.
+Estado atual em memória, uma instância; sem histórico persistente. O código
+WebRTC antigo está preservado, fora das rotas e sem integração com o servidor
+atual. Retomar videochamada requer projeto próprio de sinalização e mídia,
+permissões opcionais, avaliação de TURN e banda. WebSocket conectado não comprova
+conexão de mídia nem capacidade de turma.
 
-- [x] Proteger criação de sala demo com sessão assinada, domínio de professor e código guardado no servidor.
-- [ ] Integrar Microsoft Entra e verificar token institucional no servidor.
-- [ ] Quando disponível, restringir o `Tenant ID` e validar grupo/função de docentes.
-- [ ] Autorizar criação, participação e encerramento de aulas.
-- [ ] Se a API de sessões for reutilizada, verificar a associação do usuário em
-  toda consulta/alteração de sessão ou tradução.
-- [ ] Testar expiração, logout e acesso permitido/negado entre participantes e salas.
+## 4. Texto do aluno e voz — envio implementado, reprodução avançada futura
 
-Aceite: um aluno não consegue assumir papel de professor por parâmetro de URL;
-dados de outra sala ficam inacessíveis. Domínio de e-mail sozinho não prova papel.
+- [x] Digitar ou formar rascunho por gestos, editar e confirmar o envio.
+- [x] Enter envia; Shift+Enter insere linha; ouvir localmente é ação separada.
+- [x] Painel do professor com autoria e botão de ouvir a mensagem.
+- [x] IDs, limite de texto, deduplicação e confirmação de encaminhamento.
+- [ ] Fila de reprodução sem sobreposição, com pausar, repetir e descartar.
+- [ ] Diferenciar encaminhamento, leitura e reprodução na interface/protocolo.
+- [ ] Definir receptor da caixa de som e experiência dos participantes remotos.
+- [ ] Escolha de voz `pt-BR`, velocidade, tom, teste e preferências locais.
+- [ ] Garantir que reconectar não reproduza mensagens já ouvidas.
 
-## 3. Salas e videochamada — parcial
+Aceite final: texto confirmado chega ao receptor correto, permanece legível com
+voz desligada e pode ser reproduzido de forma controlada, sem sobreposição ou
+envio involuntário de uma predição. A confirmação atual não comprova leitura.
 
-Branch para evolução: `enhancement/salas-compartilhadas`. Label: `enhancement`.
+## 5. Legendas do professor — finais implementadas, parciais futuras
 
-**Implementado:** código de sala, entrada por nome/papel, um professor por sala,
-alunos associados ao professor, chamada WebRTC em estrela e aviso quando o
-professor sai. O estado reside na memória de `server/index.mjs`.
+- [x] Iniciar/parar captura por ação explícita e informar compartilhamento.
+- [x] Compartilhar frases finalizadas apenas com alunos da mesma sala.
+- [x] Tratar falhas de permissão e parar a captura na desconexão.
+- [ ] Compartilhar parciais com IDs de segmento, substituindo-as pelo texto final.
+- [ ] Impedir parciais atrasadas de sobrescrever finais e duplicação na reconexão.
+- [ ] Testar aulas longas, pausas/reinícios, latência, erros e legibilidade.
+- [ ] Evitar que a voz sintetizada na sala seja retranscrita pelo microfone.
+- [ ] Oferecer tamanho de legenda, contraste e navegação no histórico da sessão.
 
-- [ ] Definir sala, sessão e participação persistentes se o piloto exigir histórico.
-- [ ] Implementar reconexão e recuperação explícita de estado.
-- [ ] Validar a proposta de WebSocket de aplicação para texto e WebRTC para mídia;
-  DataChannel é alternativa, e a sinalização atual não implementa mensagens de texto.
-- [ ] Permitir participação apenas por texto sem exigir câmera e microfone,
-  mantendo a chamada de mídia como recurso separado.
-- [ ] Melhorar estados de falha: sinalização conectada não comprova mídia conectada.
-- [ ] Avaliar TURN em redes restritivas e capacidade de banda com vários alunos.
-- [ ] Definir encerramento autorizado e impedir mensagens após saída/encerramento.
+Aceite final: legendas legíveis com parciais atualizadas e finais estáveis; parar
+interrompe a captura; nenhum texto chega a outra sala. Reconhecimento de fala
+depende do navegador e precisa de avaliação real com microfone.
 
-Aceite: duas máquinas entram na mesma aula, falhas são compreensíveis e outras
-salas permanecem isoladas. Medir em redes reais; não declarar capacidade de turma
-apenas por funcionar com duas abas.
+## 6. Apoio em Libras — widget disponível, integração a evoluir
 
-## 4. Texto do aluno para áudio — local implementado, compartilhamento futuro
+- [x] VLibras para seleção manual do texto exibido, preservando o original.
+- [ ] Avaliar tradução com alunos surdos e profissionais de Libras.
+- [ ] Integrar textos finais compartilhados, se a interface suportada permitir.
+- [ ] Conferir controles/eventos disponíveis antes de prometer automação do avatar.
+- [ ] Se viável, fila de frases finais, repetição, cancelamento e pular para a recente.
+- [ ] Definir comportamento em falha e registrar termos inadequados das disciplinas.
 
-Branch: `feature/mensagens-aluno-audio`. Label: `feature`.
+Aceite: o texto permanece utilizável sem o widget. Fila e sincronização automática
+são expectativas de evolução, não capacidades comprovadas da integração atual.
 
-**Implementado:** digitar, revisar e falar no próprio navegador, por botão ou
-Enter; Shift+Enter cria nova linha. Não há envio desse texto na videochamada.
+## 7. Reconhecimento por câmera — A–Z experimental, movimento como próxima etapa
 
-- [ ] Criar protocolo de mensagens com autoria, IDs e ordenação por sessão.
-- [ ] Criar painel do professor com mensagem confirmada, autor e estado de entrega.
-- [ ] Definir o receptor conectado à caixa de som e fila de reprodução.
-- [ ] Definir entrega de texto e leitura opcional para participantes remotos;
-  não depender apenas do áudio emitido na sala física.
-- [ ] Mostrar envio, entrega, reprodução e falha; tratar reconexão sem duplicação.
-- [ ] Oferecer ao receptor iniciar áudio, pausar, repetir e descartar mensagens.
-- [ ] Criar editor para corrigir o reconhecimento e confirmar explicitamente o
-  texto antes do envio; preservar a revisão da digitação e oferecer vocabulário
-  inicial limitado, validado com participantes.
-- [ ] Listar vozes disponíveis, priorizar `pt-BR`, permitir velocidade/tom e teste;
-  tratar carregamento assíncrono e voz salva indisponível.
-- [ ] Definir persistência das preferências: local por navegador inicialmente ou
-  por usuário quando identidade/sincronização estiverem implementadas.
+- [x] Ampliar o modelo padrão para A–Z com duas bases e preservar o modelo antigo.
+- [x] Preservar modelos pessoais, editor de texto e confirmação antes do envio.
+- [x] Versionar artefatos, origem, licenças, scripts e resultados dos experimentos.
+- [ ] Corrigir a captura temporal para preservar trajetória, tempo e posição relativa.
+- [ ] Versionar o novo formato, sem reinterpretar ou apagar clipes/modelos antigos.
+- [ ] Coletar clipes completos de movimentos, incluindo Ç e distinção de C.
+- [ ] Conferir rótulos com pessoa fluente e incluir pausas/transições como negativos.
+- [ ] Separar gravações e participantes antes de gerar variações de treino.
+- [ ] Treinar modelo temporal e coordená-lo com o modelo por pose para evitar
+  aceitar etapas intermediárias de um gesto como letras diferentes.
+- [ ] Avaliar por letra com pessoas não usadas no treino, diferentes mãos,
+  velocidades, iluminação, distância e enquadramento; melhorar as confusões.
+- [ ] Medir letras repetidas, rejeição de desconhecidos e confiança na câmera.
 
-Aceite: mensagem digitada em um dispositivo é falada uma vez no receptor;
-mensagens de alunos não se sobrepõem e uma reconexão não repete falas concluídas.
-Validar também as políticas de reprodução de áudio do navegador.
-O painel deve continuar legível com voz desativada, e o aluno não pode enviar
-involuntariamente uma predição ainda não confirmada.
+Fotos isoladas podem descrever poses; movimentos exigem sequências ordenadas.
+Coleta e treinamento são etapas distintas. Não há modelo temporal base distribuído;
+H/J/K/X/Z no modelo atual são experimentais por pose e Ç ainda não está incluído.
+A captura dinâmica centraliza a mão em cada quadro, removendo deslocamento global:
+corrigir isso deve preceder a coleta. Métricas internas não representam acerto
+independente na câmera. Detalhes em [TREINAMENTO_ALFABETO.md](TREINAMENTO_ALFABETO.md)
+e, para o próximo trabalho, na descrição do PR.
 
-## 5. Legendas da fala do professor — futuro
+O script do experimento A–Z tem instruções de reprodução. Os scripts históricos
+anteriores ainda têm caminhos específicos e precisam de adaptação se reutilizados.
 
-Branch: `feature/legendas-compartilhadas`. Label: `feature`.
+## 8. Histórico e dados — futuro
 
-`ProfessorMode.tsx` tem transcrição local, mas não está nas rotas atuais. A sala
-WebRTC não publica legendas. Reutilização desse código exige integração explícita.
+- [ ] Definir quais mensagens persistem, retenção e quem pode consultar/excluir.
+- [ ] Integrar armazenamento autorizado com estados vazio, carregando e falha.
+- [ ] Separar histórico de aula, preferências locais e amostras pessoais de treino.
+- [ ] Não gravar áudio/vídeo sem requisito definido; permitir exclusão dos dados.
 
-- [ ] Iniciar/pausar microfone por ação clara e mostrar o estado da captura.
-- [ ] Transmitir transcrições parciais/finais com IDs e atualização sem duplicação.
-- [ ] Substituir parciais do mesmo trecho e fixar a versão final no histórico
-  compartilhado; identificar ordem e remetente para reconexão.
-- [ ] Tratar permissões, desconexão, ausência de fala e encerramento.
-- [ ] Evitar retranscrever o áudio sintetizado no receptor da turma.
-- [ ] Medir legibilidade, latência e erros no equipamento real.
-- [ ] Testar aulas longas e o ciclo iniciar/pausar/reiniciar ao integrar o código
-  legado, reproduzindo eventuais falhas antes de afirmar uma causa.
-- [ ] Oferecer tamanho de legenda, alto contraste e histórico rolável.
-
-Aceite: alunos da mesma sala recebem o texto final; parciais são substituídas;
-pausar interrompe captura; nenhuma legenda aparece em outra sala.
-
-## 6. Apresentação em Libras — widget local implementado, integração parcial
-
-Branch: `feature/libras-na-sala`. Label: `feature`; `UI/UX` quando pertinente.
-
-**Implementado:** opção VLibras em Digitar e Ouvir, com seleção do texto visível
-no widget. Não há API própria de vídeo nem conexão com legendas compartilhadas.
-
-- [ ] Avaliar tradução com usuários surdos e profissionais de Libras.
-- [ ] Integrar textos finais compartilhados sem esconder o original.
-- [ ] Verificar quais controles/eventos a integração VLibras suporta antes de
-  prometer alimentação automática, conclusão ou cancelamento de uma frase.
-- [ ] Se os controles necessários forem comprovados, implementar fila de frases
-  finais e opção de pular para a mais recente; caso contrário, manter seleção
-  manual do texto no widget e registrar essa limitação.
-- [ ] Definir repetição e comportamento quando o serviço externo falhar.
-- [ ] Registrar termos e exemplos das disciplinas com tradução inadequada.
-
-Aceite: a legenda permanece utilizável sem o widget; a avaliação do piloto define
-em quais situações a tradução pode apoiar a comunicação.
-Fila e sincronização com avatar são propostas; o wrapper atual não as implementa
-nem comprova disponibilidade de uma API externa para controlá-las.
-
-## 7. Reconhecimento por câmera — implementado, validação e dados pendentes
-
-Branch: `enhancement/reconhecimento-gestos`. Label: `enhancement`.
-
-**Implementado:** 15 letras estáticas no modelo base, modelos pessoais, confiança
-e margem para filtrar predições, treino estático e classificador dinâmico Conv1D.
-A arquitetura temporal já existe; falta dataset de palavras integrado e validado.
-
-- [ ] Avaliar por classe com participantes separados dos usados no treino.
-- [ ] Medir condições de iluminação, mão, distância e enquadramento.
-- [ ] Coletar exemplos negativos e avaliar rejeição de gestos desconhecidos.
-- [ ] Verificar letras repetidas, estabilidade e correção antes do envio à sala.
-- [ ] Avaliar dados dinâmicos com licença e consentimento adequados antes de integrar.
-- [ ] Tornar o pipeline Python portátil, incluindo arquivos usados nas sondas.
-- [ ] Versionar modelo, rótulos, dados permitidos e resultados de avaliação juntos.
-
-## 8. Histórico e controles de dados — futuro
-
-Branch: `feature/historico-aulas`. Label: `feature`.
-
-O histórico de gestos atual dura a página. A página `History.tsx` legada tem
-exemplos e não está nas rotas; a API legada não comprova persistência da sala.
-
-- [ ] Definir quais mensagens serão persistidas e quem pode consultar/excluir.
-- [ ] Implementar integração autorizada e estados vazio, carregando e falha.
-- [ ] Aplicar retenção e exclusão; evitar gravar áudio/vídeo sem requisito definido.
-
-Aceite: dados reais persistem só conforme a regra acordada; exemplos fictícios
-não aparecem como aulas, e participantes de outra sala não conseguem consultá-los.
+A página `History.tsx` e as tabelas legadas não comprovam persistência no aplicativo.
+Aceite: registros reais seguem a política acordada e são inacessíveis a outra sala.
 
 ## 9. Acessibilidade, operação e publicação — parcial
 
-Separar `ui-ux/acessibilidade` (label `UI/UX`) e `maintenance/deploy-piloto`
-(label `maintenance`).
+- [x] Rolagem nativa e identidade visual com logo transparente e contorno branco.
+- [x] Comandos independentes e atalho para iniciar site e servidor juntos.
+- [ ] Testar teclado, foco, contraste, zoom e legibilidade com participantes.
+- [ ] Medir CPU, memória, carregamento e banda no equipamento da faculdade.
+- [ ] Configurar HTTPS/WSS, retorno Microsoft, origens, rotas diretas e assets.
+- [ ] Revisar os datasets em `public/`, copiados pelo Vite para a publicação.
+- [ ] Avaliar capacidade do processo único, suporte e necessidade de escala.
+- [ ] Executar piloto acompanhado antes de ampliar o uso.
 
-**Configurado:** comandos independentes de desenvolvimento/build do cliente e
-início do servidor. A falha de tipos descrita na etapa 0 impede considerar o build
-regularizado. Publicação, acessibilidade e desempenho exigem validação própria.
+Aceite: cenários acordados passam no ambiente publicado com equipamentos reais.
+A regularização do build não certifica implantação, precisão ou acessibilidade.
 
-- [ ] Concluir `maintenance/regularizar-build-client` antes de publicar.
-- [ ] Testar teclado, foco, contraste, zoom, áudio e legendas legíveis.
-- [ ] Medir CPU, memória, carregamento e banda com o equipamento da faculdade.
-- [ ] Validar HTTPS/WSS, rotas diretas e caminhos de assets na hospedagem escolhida.
-- [ ] Examinar conteúdo de `client/public/` antes de publicar; imagens brutas ainda
-  estão nessa pasta, e o build do Vite as copia.
-- [ ] Preparar suporte e executar piloto acompanhado, registrando problemas.
+## 10. Aula híbrida/EAD — evolução preservada
 
-Aceite: cenários acordados passam no ambiente publicado com os dispositivos reais.
+O primeiro canal compartilhado já usa WebSocket para `student.message` e
+`caption.final`, com `message.ack`/`message.rejected`. A evolução deve definir
+segmentos e revisão de legendas, ordem e recuperação da sessão, estados de
+reprodução e encerramento autorizado. Eventos como `caption.partial`,
+`playback.status` e `session.closed` ainda são propostas.
+
+A mídia WebRTC pode complementar esse canal no futuro, sem tornar câmera ou
+microfone obrigatórios para texto. Não há videochamada ativa nesta entrega.
+Preferências locais não são sincronização por conta; transmissão de texto não
+comprova reprodução; seleção no VLibras não comprova controle automático do avatar.
+
+Aceite final: participantes autorizados recebem texto confirmado; parciais viram
+finais sem duplicação; voz não se sobrepõe; reconexão não repete falas concluídas;
+legendas continuam acessíveis sem câmera, microfone ou avatar. Esses critérios
+mantêm a direção do produto sem declarar concluídos os recursos futuros.
 
 ## Checklist para cada PR
 
 - [ ] Branch, commits, título e labels seguem [BRANCHES.md](BRANCHES.md).
-- [ ] Testes funcionais adequados à mudança descritos, com limitações explícitas.
-- [ ] Remoções conferidas contra imports, configurações e usos indiretos.
-- [ ] Documentação atualizada conforme alteração feita.
-- [ ] Verificações e revisão concluídas antes do merge em `main`.
-
-
-## 10. Aula híbrida/EAD e protocolo de comunicação — proposta
-
-**Objetivo:** permitir que participantes presenciais e remotos participem da mesma
-sessão lógica com texto acessível. A videochamada WebRTC já existe, mas a entrada
-atual solicita câmera e microfone e não implementa chat, legendas compartilhadas
-nem envio de texto entre dispositivos. A participação somente por texto deve ser
-possível sem ativar mídia.
-
-### Fluxos prioritários
-
-- **Professor → aluno:** ativação explícita da transcrição; atualizar uma legenda
-  parcial sem duplicar trechos; fixar o texto final no histórico da sessão; oferecer
-  tamanho/contraste ajustáveis e manter o texto utilizável mesmo se o avatar falhar.
-- **Aluno → professor:** digitar ou gerar um rascunho pelo reconhecimento; revisar
-  e corrigir; confirmar em **Enviar**; apresentar autoria e estado de entrega ao
-  professor; permitir ao receptor reproduzir, pausar, repetir ou descartar a voz.
-- **Voz:** listar vozes disponíveis, priorizar `pt-BR`, oferecer teste/velocidade/tom
-  e impedir falas sobrepostas. Respeitar as políticas de reprodução do navegador.
-
-### Protocolo proposto
-
-A proposta inicial é usar **WebSocket para mensagens de texto** e manter **WebRTC
-para áudio/vídeo**. DataChannel é uma alternativa, não uma exigência paralela.
-Versionar eventos separados dos eventos de sinalização SDP/ICE. O protocolo deve
-definir IDs de sessão/mensagem/segmento, autoria confiável no servidor, revisão de
-transcrição, sequência por sessão e confirmação de entrega.
-
-Eventos candidatos: `caption.partial`, `caption.final`, `student.message`,
-`message.ack`, `playback.status` e `session.closed`. Parciais atrasados não podem
-sobrescrever uma transcrição final; reenvios não devem criar mensagens duplicadas;
-confirmação de entrega não significa que a mensagem foi ouvida. Reconexão não deve
-reproduzir automaticamente mensagens já concluídas. O servidor deve validar vínculo,
-papel e sala, sem confiar em `role`, `senderId` ou `sessionId` arbitrários enviados
-pelo cliente.
-
-### Acessibilidade, dados e validação
-
-Definir limites de texto, frequência, tamanho da fila, retenção e exclusão antes do
-piloto. Não presumir que reconhecimento de fala ou voz do navegador funcionem
-totalmente offline. A mídia da videochamada é transmitida entre pares; o treino de
-gestos permanece local no navegador. Preferências locais não são sincronização por
-conta. A integração VLibras não oferece atualmente contrato próprio de fila ou
-controle automático do avatar; manter seleção manual até que a interface suportada
-seja comprovada.
-
-Validar em dispositivos e redes diferentes, incluindo perda de conexão, acesso
-somente por texto, ausência de câmera/microfone, legendas longas, pausas/reinícios,
-duplicação de mensagens e falhas de voz. Avaliar fluxos com alunos surdos e
-profissionais de Libras. Um teste com duas abas não comprova capacidade de turma;
-autenticação/autorização, isolamento entre salas e proteção contra abuso são
-pré-requisitos para um piloto com participantes reais.
-
-**Aceite mínimo:** o texto chega aos participantes autorizados; mensagens são
-revisadas/confirmadas; parciais viram finais sem duplicação; voz não se sobrepõe;
-reconexão não repete falas concluídas; legendas permanecem acessíveis sem câmera,
-microfone ou avatar.
+- [ ] Testes descritos com resultados e limitações, distinguindo simulação de uso real.
+- [ ] Imports, entradas de compilação e usos indiretos conferidos.
+- [ ] Documentação condiz com a entrega e preserva o resultado final planejado.
+- [ ] Próximos passos do reconhecimento temporal registrados no PR.
+- [ ] Revisão e verificações concluídas antes de integrar à `main`.

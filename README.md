@@ -4,39 +4,39 @@ Protótipo de apoio à comunicação em sala de aula, com texto para voz e
 reconhecimento experimental de gestos pela webcam. O objetivo é ampliar as formas
 de participação de alunos surdos.
 
-**O modelo base reconhece 15 letras estáticas; ele não traduz Libras completa.**
+**O modelo experimental inclui as 26 letras de A a Z; ele não traduz Libras completa.**
+H, J, K, X e Z são classificados pela pose, sem validar o movimento completo.
+Ç ainda não está incluído. Modelos pessoais mantêm prioridade sobre o modelo base.
+Veja os resultados e limites do treino com as duas bases em
+[Treinamento do alfabeto](docs/TREINAMENTO_ALFABETO.md).
 O reconhecimento depende dos dados de treino e precisa de avaliação com usuários.
 
 ## O que está disponível
 
 | Recurso | Funcionamento atual |
 | --- | --- |
-| Modo Aluno | Digitar e ouvir no próprio dispositivo; Enter fala e Shift+Enter insere linha |
-| Reconhecimento estático | MediaPipe + TensorFlow.js, 15 letras no modelo base ou modelo pessoal |
-| Sinais dinâmicos | Treino local com clipes das mãos; depende das amostras do usuário |
+| Modo Aluno | Enviar texto confirmado ao professor da mesma sala; voz local opcional |
+| Salas | Laboratórios A/B/C e salas 01/02; seleção após login, presença e troca de sala |
+| Reconhecimento por pose | MediaPipe + TensorFlow.js, A–Z experimental ou modelo pessoal |
+| Sinais dinâmicos | Treino local experimental; captura precisa preservar trajetória antes da próxima coleta |
 | VLibras | Widget opcional no Modo Aluno para traduzir o texto exibido na página |
-| Modo Professor | Transcrição de fala para texto no próprio navegador |
+| Modo Professor | Receber mensagens dos alunos e compartilhar frases finais da transcrição na sala |
 
-A próxima direção é compartilhar texto acessível entre participantes presenciais e remotos,
-com mensagens confirmadas, legendas e voz. A proposta e os critérios de aceite estão no
-[plano de implementação](docs/GUIA_IMPLEMENTACAO.md).
+A comunicação por texto usa o servidor independente e reaproveita o login Microsoft
+já existente. Consulte o [guia de salas e autenticação](server/README.md).
+Não é necessário fornecer Tenant ID da faculdade ou cadastrar docentes no Entra.
 
 ## Executar localmente
 
-> **Pendência conhecida na main:** a instalação de `client/` conclui, mas o
-> início do Vite acusa `@radix-ui/react-dialog` ausente; `typecheck` e `build`
-> também falham em dependências e exports legados. Os comandos abaixo documentam
-> o fluxo previsto, ainda dependente da regularização do pacote do cliente.
-> Esta atualização de documentação não corrige esses arquivos de aplicação.
-
-Use Node.js 22 e npm, um navegador com WebGL e câmera para reconhecimento. A
+Use Node.js 22 ou posterior e npm, um navegador com WebGL e câmera para reconhecimento. A
 digitação com voz não exige ligar a câmera.
 
 ```bash
 git clone https://github.com/KaioAmim/TeachLi.git
-cd TeachLi/client
-npm ci
-npm run dev
+cd TeachLi
+npm ci --prefix client
+npm ci --prefix server
+npm run dev:classroom
 ```
 
 Abra `http://127.0.0.1:5173` (ou `http://localhost:5173` se cadastrado na Microsoft).
@@ -46,10 +46,25 @@ não mudará automaticamente para 5174. Não altere a porta sem cadastrar també
 o novo endereço de retorno na Microsoft.
 O comando copia automaticamente o runtime WASM do MediaPipe para `client/public/`.
 
+## Iniciar site e servidor juntos
+
+Após instalar as dependências em `client/` e `server/`, execute na raiz:
+
+```bash
+npm run dev:classroom
+```
+
+Esse comando inicia os dois serviços e os encerra juntos com Ctrl+C. Encerre
+instâncias anteriores antes de usá-lo, pois a porta do site continua fixa em
+5173. `npm run dev` dentro de `client/` inicia somente a página. O servidor
+reutiliza o Client ID público já configurado no cliente; `server/.env` é opcional.
+O login Microsoft funciona independentemente do servidor de salas. Se este estiver
+indisponível, a seleção de sala permite tentar novamente sem refazer o login.
+
 ## Configurar login Microsoft
 
-Os botões **Aluno** e **Professor** direcionam para a Microsoft e retornam ao
-modo escolhido. Antes de testar, registre um aplicativo de página única (SPA) no
+Os botões **Aluno** e **Professor** direcionam para a Microsoft e retornam à
+seleção de sala. Antes de testar, registre um aplicativo de página única (SPA) no
 Microsoft Entra e defina `VITE_MICROSOFT_CLIENT_ID` em `client/.env.local`:
 
 ```bash
@@ -78,12 +93,18 @@ do outro domínio; contas externas, sem e-mail e o domínio fictício
 `@prof.unibarretos.com.br` são recusados. Sessões salvas são reavaliadas ao abrir
 as rotas, incluindo o treino de aluno. Não há exceção Microsoft para professor demo.
 
-Essa checagem no navegador corrige a seleção indevida de perfil, mas não substitui
-autorização de servidor: a sessão local é editável e o fluxo atual não verifica a
-assinatura do ID token. Antes de proteger dados ou ações de servidor, implementar
-validação criptográfica, tenant institucional permitido e permissões por identidade
-estável (`tid`/`oid`) ou funções atribuídas. O servidor de sala ainda usa login demo
-separado. Execute `npm run test:auth` em `client/` para os testes dessa regra.
+O login preserva o fluxo anterior, direto com a Microsoft, sem exigir Tenant ID
+institucional ou cadastro adicional de docentes. Depois do retorno, o servidor
+valida a assinatura e a validade do token ao preparar a comunicação por sala,
+mantendo os mesmos domínios de perfil já usados pelo protótipo.
+O servidor reaproveita o Client ID público do cliente automaticamente. Execute
+`npm run test:auth` em `client/` e `npm test` em `server/` para verificar os dois lados.
+
+Depois de autenticar, escolha Laboratório A/B/C, Sala 01 ou Sala 02. A sala aparece
+nas telas de comunicação, junto da presença e dos botões de troca/logout.
+Mensagens do aluno exigem confirmação; Enter envia e Shift+Enter insere linha.
+Frases finalizadas do professor são compartilhadas enquanto a transcrição estiver
+ativa. Não há histórico persistente ou envio para participantes de outra sala.
 
 > O `package.json` da raiz pertence ao caminho herdado Express/tRPC/Drizzle,
 > com versões diferentes de React e Vite. Os comandos acima usam os pacotes de
@@ -101,10 +122,13 @@ npm run preview
 ```
 
 O build independente gera `client/dist/`; o preview serve esse build localmente.
-O `npm run typecheck` permanece bloqueado por dependências e arquivos legados
-ausentes, mas o build direto `npx vite build` foi concluído nesta revisão. Não
-use o preview como validação de uma alteração se ele estiver servindo artefatos
-antigos.
+O comando completo verifica os tipos antes de compilar. O TypeScript acompanha
+a entrada `src/main.tsx` e todos os seus imports, as declarações locais e a
+configuração Vite, mantendo o modo estrito. Telas e APIs herdadas têm uma
+auditoria separada, `npm run typecheck:legacy`, que ainda aponta pendências e
+não integra o build do aplicativo atual. Reintroduzir um módulo legado por import
+volta a incluí-lo na checagem normal. Veja a [fronteira de compilação](docs/DOCUMENTACAO.md#fronteira-de-compilação-e-legado).
+Não use o preview como validação se estiver servindo artefatos antigos.
 Para publicar, hospede o frontend com fallback das rotas para `index.html` e
 confira os caminhos dos modelos; o Vite atual usa a base `/`.
 
@@ -129,4 +153,16 @@ redes ou precisão dos modelos. As verificações manuais por recurso devem ser 
 Novas branches usam `feature/`, `bug/`, `documentation/`, `enhancement/`,
 `maintenance/` ou `ui-ux/`, conforme o [padrão completo](docs/BRANCHES.md).
 Cada alteração volta à `main` por PR com escopo, testes e documentação revisados.
-Há modelos de issue e PR em `.github/`.
+Os templates `.github/` citados em versões antigas não estão presentes nesta cópia.
+
+## Direção do projeto e validação
+
+O objetivo continua sendo uma aula presencial, remota ou híbrida acessível, com
+mensagens revisadas, legendas legíveis, voz controlada e apoio em Libras. A etapa
+atual entrega salas e texto compartilhado; legendas parciais, fila de voz,
+movimentos completos, Ç e histórico continuam no [plano de evolução](docs/GUIA_IMPLEMENTACAO.md).
+
+A verificação com contas reais de aluno e professor em dispositivos diferentes
+ainda exige os equipamentos e os logins dos titulares. Testes com identidades
+simuladas e sessões separadas no mesmo computador não substituem essa avaliação.
+Não é necessário compartilhar senhas nem obter Tenant ID institucional para isso.
