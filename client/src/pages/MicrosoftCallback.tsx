@@ -15,9 +15,9 @@ export default function MicrosoftCallback() {
     // StrictMode runs effects twice in development; exchange each code only once.
     login.current ??= finishMicrosoftLogin(window.location.search);
     login.current
-      .then(session => {
+      .then(() => {
         if (active)
-          setLocation(session.role === "aluno" ? "/aluno" : "/professor");
+          setLocation("/salas", { replace: true });
       })
       .catch(reason => {
         if (active)
@@ -56,7 +56,7 @@ export default function MicrosoftCallback() {
             />
             <h1>Preparando seu espaço…</h1>
             <p className="text-sm text-muted-foreground">
-              Você será direcionado para o modo escolhido.
+              Depois do login, escolha sua sala de aula.
             </p>
           </>
         )}

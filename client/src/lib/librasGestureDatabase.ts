@@ -8,9 +8,10 @@ export interface HandDetectionResult {
 }
 
 /**
- * Letras estáticas cobertas pelo modelo base. H, J, K, X, Y e Z envolvem
- * movimento e não estão no dataset — ver docs/MODELO.md.
+ * Rótulos A–Z do modelo experimental de poses. H/J/K/X/Z são avaliados pela
+ * pose, sem validar o movimento completo. Ç não possui amostras nessa base.
+ * Ver docs/TREINAMENTO_ALFABETO.md.
  */
 export const ALPHABET_LABELS = [
-  "A", "B", "C", "D", "E", "I", "L", "M", "N", "O", "R", "S", "U", "V", "W",
+  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
 ] as const;

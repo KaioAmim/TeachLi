@@ -1,3 +1,5 @@
+import { ClassroomRequestError, classroomRequest } from "./classroomApi";
+
 export type AppRole = "aluno" | "professor";
 
 export const MICROSOFT_ROLE_DOMAINS: Record<AppRole, string> = {
@@ -24,6 +26,8 @@ interface PendingLogin {
 }
 
 export interface MicrosoftSession {
+  idToken: string;
+  token?: string;
   role: AppRole;
   profile: {
     name: string;
@@ -154,7 +158,6 @@ export async function finishMicrosoftLogin(search: string): Promise<MicrosoftSes
     throw new Error("A resposta do login Microsoft não passou pela validação da aplicação.");
   }
 
-  const name = typeof claims.name === "string" && claims.name.trim() ? claims.name.trim() : "Usuário(a) Microsoft";
   const email = typeof claims.email === "string"
     ? claims.email
     : typeof claims.preferred_username === "string" ? claims.preferred_username : null;
@@ -162,7 +165,11 @@ export async function finishMicrosoftLogin(search: string): Promise<MicrosoftSes
   if (!email || role !== pending.role) {
     throw new Error(`Para entrar como ${pending.role}, use sua conta @${MICROSOFT_ROLE_DOMAINS[pending.role]}. Volte ao início para escolher outro perfil ou outra conta.`);
   }
-  const session: MicrosoftSession = { role, profile: { name, email: email.trim().toLowerCase(), expiresAt } };
+  const name = typeof claims.name === "string" && claims.name.trim() ? claims.name.trim() : "Usuário(a) Microsoft";
+  const session: MicrosoftSession = {
+    idToken: tokenResult.id_token!, role,
+    profile: { name, email: email.trim().toLowerCase(), expiresAt },
+  };
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }
@@ -173,6 +180,7 @@ export function loadMicrosoftSession(role: AppRole): MicrosoftSession | null {
     if (!raw) return null;
     const session = JSON.parse(raw) as MicrosoftSession;
     if (
+      typeof session.idToken !== "string" || !session.idToken ||
       (session.role !== "aluno" && session.role !== "professor") ||
       typeof session.profile?.name !== "string" ||
       typeof session.profile?.expiresAt !== "number" ||
@@ -193,4 +201,36 @@ export function loadMicrosoftSession(role: AppRole): MicrosoftSession | null {
 
 export function clearMicrosoftSession() {
   sessionStorage.removeItem(SESSION_KEY);
+}
+
+export async function logoutMicrosoftSession(): Promise<void> {
+  const session = loadMicrosoftSession("aluno") || loadMicrosoftSession("professor");
+  if (session?.token) {
+    try { await classroomRequest("/auth/logout", session.token, {}); }
+    catch (error) {
+      // A rejected/expired token has no remote session left to revoke.
+      if (!(error instanceof ClassroomRequestError) || error.status !== 401) throw error;
+    }
+  }
+  clearMicrosoftSession();
+}
+
+
+let roomSessionRequest: { idToken: string; promise: Promise<MicrosoftSession & { token: string }> } | null = null;
+
+// Room service connectivity is needed only after the original Microsoft login finishes.
+export function prepareClassroomSession(): Promise<MicrosoftSession & { token: string }> {
+  const session = loadMicrosoftSession("aluno") || loadMicrosoftSession("professor");
+  if (!session) return Promise.reject(new Error("Entre novamente pela Microsoft."));
+  if (roomSessionRequest?.idToken === session.idToken) return roomSessionRequest.promise;
+  const promise = classroomRequest("/auth/microsoft/session", undefined, { idToken: session.idToken, role: session.role })
+    .then(result => {
+      const current = loadMicrosoftSession(session.role);
+      if (current?.idToken !== session.idToken) throw new Error("A conta foi alterada. Entre novamente na sala.");
+      const next = { ...current, token: result.token as string };
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
+      return next;
+    }).finally(() => { if (roomSessionRequest?.promise === promise) roomSessionRequest = null; });
+  roomSessionRequest = { idToken: session.idToken, promise };
+  return promise;
 }

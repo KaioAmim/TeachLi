@@ -11,7 +11,8 @@
     "prebuild": "npm run copy-wasm",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:legacy": "tsc --noEmit --project tsconfig.legacy.json"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.35",

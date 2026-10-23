@@ -13,11 +13,13 @@ const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStor
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
 before(async () => {
-  const source = await readFile(new URL("../src/lib/microsoftAuth.ts", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/lib/classroomApi.ts", import.meta.url), "utf8");
+  const source = api + (await readFile(new URL("../src/lib/microsoftAuth.ts", import.meta.url), "utf8")).replace('import { ClassroomRequestError, classroomRequest } from "./classroomApi";', "");
   const { code } = await transformWithEsbuild(source, "microsoftAuth.ts", {
     loader: "ts",
     format: "esm",
     define: {
+      "import.meta.env.VITE_SIGNALING_URL": JSON.stringify("ws://localhost:8787"),
       "import.meta.env.VITE_MICROSOFT_CLIENT_ID": JSON.stringify(clientId),
       "import.meta.env.VITE_MICROSOFT_TENANT_ID": JSON.stringify("organizations"),
     },
@@ -39,6 +41,7 @@ beforeEach(() => {
     configurable: true,
     value: { location: { origin: "http://localhost:5173", assign: url => { redirect = new URL(url); } } },
   });
+  redirect = null;
   globalThis.fetch = async () => { throw new Error("Unexpected network request"); };
 });
 
@@ -119,4 +122,62 @@ test("rejeita state, nonce, audiência e expiração inválidos", async () => {
     await assert.rejects(callback("aluno", { email: "aluno@alunos.unibarretos.com.br", ...claims }), /validação da aplicação/);
     assert.equal(sessionStorage.getItem(sessionKey), null);
   }
+});
+
+
+
+test("login Microsoft funciona sem servidor de salas e sem Tenant ID institucional", async () => {
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  await auth.startMicrosoftLogin('aluno');
+  assert.equal(redirect.hostname, 'login.microsoftonline.com');
+  assert.equal(redirect.pathname, '/organizations/oauth2/v2.0/authorize');
+  assert.ok(JSON.parse(sessionStorage.getItem(pendingKey)).nonce);
+});
+
+test("retorno Microsoft salva login sem consultar o servidor de salas", async () => {
+  await auth.startMicrosoftLogin('professor');
+  const pending = JSON.parse(sessionStorage.getItem(pendingKey));
+  const payload = { aud: clientId, nonce: pending.nonce, exp: Math.floor(Date.now() / 1000) + 3600, email: 'p@unibarretos.com.br' };
+  const calls = [];
+  globalThis.fetch = async url => {
+    calls.push(String(url));
+    assert.ok(String(url).startsWith('https://login.microsoftonline.com/'));
+    return { ok: true, json: async () => ({ id_token: `a.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.b` }) };
+  };
+  const session = await auth.finishMicrosoftLogin(`?code=x&state=${pending.state}`);
+  assert.equal(session.role, 'professor');
+  assert.equal(session.token, undefined);
+  assert.equal(calls.length, 1);
+  await auth.logoutMicrosoftSession(); // local logout needs no room server either
+  assert.equal(sessionStorage.getItem(sessionKey), null);
+});
+
+test("falha da sala preserva login e retry prepara apenas uma sessão compartilhada", async () => {
+  await callback('aluno', { email: 'a@alunos.unibarretos.com.br' });
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  await assert.rejects(auth.prepareClassroomSession(), /servidor de salas está iniciado/);
+  assert.ok(auth.loadMicrosoftSession('aluno'));
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ({ token: 'room-token' }) }; };
+  const [first, second] = await Promise.all([auth.prepareClassroomSession(), auth.prepareClassroomSession()]);
+  assert.equal(first.token, 'room-token');
+  assert.equal(second.token, 'room-token');
+  assert.equal(calls, 1);
+});
+
+test("logout limpa token rejeitado e retorno tardio da sala não recria login", async () => {
+  await callback('aluno', { email: 'a@alunos.unibarretos.com.br' });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ token: 'room-token' }) });
+  await auth.prepareClassroomSession();
+  globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: 'Sessão inválida' }) });
+  await auth.logoutMicrosoftSession();
+  assert.equal(sessionStorage.getItem(sessionKey), null);
+  await callback('aluno', { email: 'a@alunos.unibarretos.com.br' });
+  let resolve;
+  globalThis.fetch = () => new Promise(done => { resolve = done; });
+  const pending = auth.prepareClassroomSession();
+  await auth.logoutMicrosoftSession();
+  resolve({ ok: true, json: async () => ({ token: 'late-token' }) });
+  await assert.rejects(pending, /conta foi alterada/);
+  assert.equal(sessionStorage.getItem(sessionKey), null);
 });

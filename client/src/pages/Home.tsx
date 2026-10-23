@@ -23,7 +23,6 @@ import {
   Volume2,
 } from "lucide-react";
 import { useMotionPreference } from "@/components/MotionPreference";
-import { useSectionScroll } from "@/hooks/useSectionScroll";
 import { TeachLiBrand } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { MICROSOFT_ROLE_DOMAINS } from "@/lib/microsoftAuth";
@@ -134,7 +133,6 @@ export default function Home() {
   const [featureCycle, setFeatureCycle] = useState(0);
   const [featureLeaving, setFeatureLeaving] = useState(false);
   const featureTimer = useRef<ReturnType<typeof setTimeout>>();
-  useSectionScroll(reduced);
 
   function selectFeature(index: number) {
     clearTimeout(featureTimer.current);

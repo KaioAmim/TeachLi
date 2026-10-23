@@ -17,5 +17,6 @@
     },
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "vite.config.ts"]
+  "files": ["src/main.tsx", "vite.config.ts"],
+  "include": ["src/**/*.d.ts"]
 }

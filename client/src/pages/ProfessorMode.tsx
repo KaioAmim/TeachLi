@@ -1,3 +1,5 @@
+import { ClassroomPanel } from "@/components/ClassroomPanel";
+import { useClassroomConnection } from "@/contexts/ClassroomContext";
 import { WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +9,10 @@ import { toast } from "sonner";
 import VLibrasWidget from "@/components/VLibrasWidget";
 
 export default function ProfessorMode() {
+  const classroom = useClassroomConnection();
+  const sendRef = useRef(classroom.send);
+  sendRef.current = classroom.send;
+  const recordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [currentSentence, setCurrentSentence] = useState("");
@@ -44,6 +50,7 @@ export default function ProfessorMode() {
 
       if (finalTranscript) {
         setTranscript(prev => prev + finalTranscript);
+        sendRef.current(finalTranscript.trim());
         setCurrentSentence(finalTranscript.trim());
       } else {
         setCurrentSentence(interimTranscript);
@@ -52,6 +59,10 @@ export default function ProfessorMode() {
 
     recognition.onerror = (event: any) => {
       console.error('Erro no reconhecimento de fala:', event.error);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'audio-capture') {
+        recordingRef.current = false;
+        setIsRecording(false);
+      }
       if (event.error === 'no-speech') {
         toast.error('Nenhuma fala detectada. Fale mais alto ou verifique o microfone.');
       } else if (event.error === 'not-allowed') {
@@ -62,8 +73,8 @@ export default function ProfessorMode() {
     };
 
     recognition.onend = () => {
-      if (isRecording) {
-        recognition.start();
+      if (recordingRef.current) {
+        try { recognition.start(); } catch { recordingRef.current = false; setIsRecording(false); }
       }
     };
 
@@ -71,22 +82,38 @@ export default function ProfessorMode() {
 
     return () => {
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        recordingRef.current = false;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.abort();
       }
     };
-  }, [isRecording]);
+  }, []);
+
+  useEffect(() => {
+    if (classroom.status !== "connected") { recordingRef.current = false; recognitionRef.current?.stop(); setIsRecording(false); }
+  }, [classroom.status]);
 
   const startRecording = () => {
     if (recognitionRef.current) {
       setTranscript("");
-      recognitionRef.current.start();
-      setIsRecording(true);
-      toast.success('Gravação iniciada. Fale algo!');
+      recordingRef.current = true;
+      try {
+        recognitionRef.current.start();
+        setIsRecording(true);
+        toast.success('Gravação iniciada. Fale algo!');
+      } catch {
+        recordingRef.current = false;
+        setIsRecording(false);
+        toast.error('Não foi possível iniciar o microfone. Tente novamente.');
+      }
     }
   };
 
   const stopRecording = () => {
     if (recognitionRef.current) {
+      recordingRef.current = false;
       recognitionRef.current.stop();
       setIsRecording(false);
       toast.info('Gravação parada');
@@ -104,6 +131,7 @@ export default function ProfessorMode() {
       <VLibrasWidget />
       <WorkspaceHeading title="A sua fala, mais acessível." description="Fale, acompanhe a transcrição e compartilhe com a turma." />
 
+      <ClassroomPanel />
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
         <div className="professor-layout">
           <div className="professor-main-column">
@@ -126,11 +154,11 @@ export default function ProfessorMode() {
                   )}
                 </div>
                 <div className="professor-recording-toolbar">
-                  <Button variant={isRecording ? "destructive" : "default"} onClick={isRecording ? stopRecording : startRecording}>
+                  <Button disabled={classroom.status !== "connected"} variant={isRecording ? "destructive" : "default"} onClick={isRecording ? stopRecording : startRecording}>
                     {isRecording ? <MicOff size={18} aria-hidden="true" /> : <Mic size={18} aria-hidden="true" />}
                     {isRecording ? "Parar gravação" : "Iniciar gravação"}
                   </Button>
-                  <p>{isRecording ? "Ao terminar, pare a gravação para revisar o texto." : "Permita o acesso ao microfone para começar."}</p>
+                  <p>{isRecording ? "Ao terminar, pare a gravação para revisar o texto." : "Ao iniciar, as frases finalizadas serão compartilhadas com os alunos desta sala."}</p>
                 </div>
               </CardContent>
             </Card>

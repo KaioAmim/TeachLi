@@ -14,10 +14,10 @@ export function TeachLiBrand({ large = false }: { large?: boolean }) {
   return (
     <img
       className={large ? "teachli-logo teachli-logo-large" : "teachli-logo"}
-      src="/brand/teachli.jpg"
+      src="/brand/teachli-outline.png"
       alt="TeachLi"
-      width="1024"
-      height="770"
+      width="1446"
+      height="1087"
     />
   );
 }

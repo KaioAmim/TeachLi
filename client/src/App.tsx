@@ -1,3 +1,6 @@
+import "@/classroom.css";
+import { ClassroomProvider, useClassroomConnection } from "@/contexts/ClassroomContext";
+import RoomSelection from "@/pages/RoomSelection";
 import { AppHeader, AppFooter } from "@/components/AppShell";
 import { Link, Route, Switch } from "wouter";
 import { Toaster } from "sonner";
@@ -10,16 +13,18 @@ import MicrosoftCallback from "@/pages/MicrosoftCallback";
 import { loadMicrosoftSession } from "@/lib/microsoftAuth";
 
 function StudentRoute() {
+  const { room } = useClassroomConnection();
   return loadMicrosoftSession("aluno") ? (
-    <StudentMode />
+    room ? <StudentMode /> : <RoomSelection />
   ) : (
     <LoginRequired role="aluno" />
   );
 }
 
 function ProfessorRoute() {
+  const { room } = useClassroomConnection();
   return loadMicrosoftSession("professor") ? (
-    <ProfessorMode />
+    room ? <ProfessorMode /> : <RoomSelection />
   ) : (
     <LoginRequired role="professor" />
   );
@@ -35,12 +40,13 @@ function TrainRoute() {
 
 export default function App() {
   return (
-    <div className="app-frame">
+    <ClassroomProvider><div className="app-frame">
       <AppHeader />
       <Toaster richColors position="top-center" />
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/entrar" component={MicrosoftCallback} />
+        <Route path="/salas" component={RoomSelection} />
         <Route path="/aluno" component={StudentRoute} />
         <Route path="/aluno/treinar" component={TrainRoute} />
         <Route path="/professor" component={ProfessorRoute} />
@@ -60,6 +66,6 @@ export default function App() {
         </Route>
       </Switch>
       <AppFooter />
-    </div>
+    </div></ClassroomProvider>
   );
 }

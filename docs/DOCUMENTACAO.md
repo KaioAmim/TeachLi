@@ -1,359 +1,241 @@
 # Documentação técnica do TeachLi
 
+Atualizada em 23/10/2026 para a branch `feature/entrada-salas-aula`.
+O estado abaixo descreve a aplicação atual. O resultado final desejado e seus
+critérios de aceite continuam no [plano de implementação](GUIA_IMPLEMENTACAO.md).
+Implementação no código e teste automatizado não substituem avaliação com a turma.
+
 ## Escopo e estado atual
 
-O TeachLi é um protótipo de apoio à comunicação. O aplicativo em `client/`
-combina reconhecimento experimental de gestos, digitação com leitura em voz alta,
-treinamento local e um modo de fala para texto para professores. O modelo base classifica
-15 letras estáticas do alfabeto manual; isso não equivale a interpretar Libras
-como língua nem traduzir frases sinalizadas.
+TeachLi é um protótipo de apoio à comunicação entre aluno e professor. O aluno
+pode digitar ou formar um rascunho com reconhecimento experimental, revisar e
+confirmar o envio. O professor recebe o texto e pode ouvi-lo; ao ativar a
+transcrição, compartilha frases finalizadas com os alunos da mesma sala.
 
-Esta documentação foi reconciliada com a `main` em `5cf6d3c`. O documento reúne a
-arquitetura atual, os limites do reconhecimento e um resumo das métricas históricas;
-propostas e prioridades de evolução estão no [plano de implementação](GUIA_IMPLEMENTACAO.md).
-
-| Recurso | Estado comprovado no código | Limite |
+| Recurso | Implementado | Limite atual |
 | --- | --- | --- |
-| Reconhecimento estático | MediaPipe + TensorFlow.js no navegador; modelo base ou pessoal | 15 letras no modelo base, sem interpretação de Libras completa |
-| Reconhecimento dinâmico | Conv1D sobre sequências das duas mãos; treino próprio | Sem modelo base de palavras distribuído |
-| Digitar e Ouvir | Texto digitado falado no dispositivo atual | Sem envio a outro computador ou fila compartilhada |
-| VLibras | Widget externo opcional no Modo Aluno | Tradução de texto selecionado na página; sem API própria de geração de vídeo |
-| Modo Professor | Transcrição de fala para texto no próprio navegador | Depende do suporte de reconhecimento de fala do navegador |
-| Comunicação compartilhada | Planejada | Não há chamada, legenda ou mensagem entre dispositivos na interface atual |
-| Histórico persistente de aulas | Não conectado à interface atual | Há código legado de API e uma página de demonstração fora das rotas |
+| Login | Microsoft com PKCE, `state` e nonce; perfis por domínio institucional | Sem matrícula por turma ou comprovação administrativa de função docente |
+| Salas | Laboratórios A/B/C, Sala 01/02; seleção após login, presença, troca e logout | Um professor por sala; estado em memória, uma instância |
+| Mensagem do aluno | Digitação ou rascunho reconhecido, edição e envio explícito ao professor | Sem fila para destinatário ausente; confirmação não comprova leitura |
+| Fala do professor | Transcrição local e envio de frases finais aos alunos da sala | Sem legendas parciais compartilhadas; depende do navegador |
+| Voz | Leitura local e botão de ouvir no painel do professor | Sem fila automática de reprodução |
+| Reconhecimento por pose | Modelo experimental A–Z ou modelo pessoal | H/J/K/X/Z sem validação do movimento completo; sem Ç |
+| Reconhecimento dinâmico | Captura de clipes e treino Conv1D local | Sem modelo temporal base; representação precisa preservar deslocamento |
+| VLibras | Widget externo para texto selecionado na página | Sem contrato próprio de fila ou controle automático do avatar |
+| Identidade visual | Logo transparente com contorno branco, também usada no favicon; rolagem nativa | Acessibilidade precisa de avaliação com usuários |
+| Histórico de aulas | Não implementado no fluxo atual | Há código legado fora das rotas |
+| Videochamada | Código legado preservado | Não integra as salas atuais |
 
-## Arquitetura
+## Arquitetura e rotas
 
-O fluxo de desenvolvimento recomendado usa dois pacotes independentes:
-
-| Pacote | Tecnologias | Entrada e saída |
+| Pacote | Papel | Entrada e saída |
 | --- | --- | --- |
-| `client/` | React 18, TypeScript, Vite 5, Tailwind CSS 3, Wouter, MediaPipe, TensorFlow.js | `client/src/main.tsx` → `App.tsx`; build em `client/dist/` |
-| `server/` | Node.js e `ws` | Código de sinalização preservado, sem rota acessível na interface atual |
+| `client/` | React 18, TypeScript, Vite 5, Tailwind 3, Wouter, MediaPipe e TensorFlow.js | `index.html` → `src/main.tsx` → `App.tsx`; saída `client/dist/` |
+| `server/` | Node.js, `ws` e `jose`; autenticação da comunicação e encaminhamento de texto | `index.mjs` → `classrooms.mjs` e `microsoft.mjs` |
+| Raiz, `server/_core`, `drizzle/`, `shared/` | Aplicação herdada Express/tRPC/Drizzle, com outro manifesto | Não necessária para iniciar o protótipo atual |
 
-O reconhecimento e o treino executam no navegador. O servidor WebSocket troca
-mensagens para estabelecer conexões WebRTC; a mídia trafega entre os participantes.
-O frontend cria uma conexão entre o professor e cada aluno, sem conexões entre
-alunos. A banda de saída do professor cresce com o número de participantes.
+O reconhecimento e o treino acontecem no navegador. O servidor recebe o texto
+confirmado e as frases finais e encaminha apenas para o perfil oposto na mesma
+sala. Não transmite câmera, vídeo ou áudio nesta versão.
 
-```text
-TeachLi/
-├── client/
-│   ├── package.json              # comandos do frontend independente
-│   ├── public/                   # assets copiados para o build
-│   │   ├── datasets/             # imagens e landmarks presentes na main
-│   │   └── models/gesture-classifier/
-│   ├── scripts/copy-mediapipe-wasm.mjs
-│   └── src/
-│       ├── App.tsx               # rotas efetivas
-│       ├── pages/                # telas atuais e arquivos legados
-│       ├── hooks/                # detecção, classificadores e chamada
-│       └── lib/                  # treino, features e sinalização
-├── server/
-│   ├── index.mjs                 # sinalização usada pela Sala de Aula
-│   ├── package.json
-│   ├── _core/                    # infraestrutura Express/Manus legada
-│   ├── routers.ts                # API tRPC legada
-│   └── db.ts
-├── drizzle/                      # schema e migrações legados
-├── scripts/dataset/              # pipeline Python offline, ainda não portátil
-├── docs/
-└── package.json                  # configuração separada, herdada da aplicação completa
-```
-
-### Rotas efetivas
-
-As rotas são declaradas em `client/src/App.tsx`:
-
-| Rota | Tela |
+| Rota | Uso |
 | --- | --- |
-| `/` | Home: acessos aos modos Aluno e Professor |
-| `/entrar` | Retorno Microsoft: valida o fluxo e o domínio do perfil escolhido |
-| `/aluno` | StudentMode: câmera, digitação, voz e opção VLibras |
-| `/aluno/treinar` | TrainMode: amostras e modelos pessoais |
-| `/professor` | ProfessorMode: transcrição de fala para texto |
+| `/` | Apresentação e escolha do perfil |
+| `/entrar` | Retorno do login Microsoft |
+| `/salas` | Preparação da sessão de comunicação e seleção de sala |
+| `/aluno` | Câmera, rascunho, digitação, voz e mensagens da sala |
+| `/aluno/treinar` | Amostras e modelos pessoais do aluno |
+| `/professor` | Mensagens recebidas e transcrição compartilhada |
 
-`History.tsx`, a sinalização WebRTC e as telas de sala continuam no repositório,
-mas não estão registrados como rotas. A presença desses arquivos não disponibiliza
-esses fluxos ao usuário do aplicativo atual.
+As telas de comunicação exigem login do perfil correspondente e sala selecionada.
+Atualizar a página exige selecionar a sala novamente. `History.tsx`,
+`SalaAula.tsx`, `Classroom.tsx`, `TrainGestures.tsx` e `ComponentShowcase.tsx`
+não são rotas atuais. A presença desses arquivos não torna seus recursos disponíveis.
 
-### Configuração da raiz e código legado
+### Fronteira de compilação e legado
 
-A raiz mantém outro `package.json`: React 19, Tailwind CSS 4, Express/tRPC,
-Drizzle/MySQL e comandos pnpm. Seu Vite também aponta para `client/`, mas gera
-`dist/public/`, e o build do servidor gera `dist/index.js`. Essa configuração não
-é o pacote independente descrito acima; comandos de um não devem ser aplicados
-como se pertencessem ao outro.
+`client/tsconfig.json` verifica `src/main.tsx`, todos os imports transitivos
+(inclusive componentes, hooks e módulos de treino), as declarações locais e
+`vite.config.ts`. Essa é a entrada usada por `client/index.html`. Novos módulos
+importados pela aplicação passam automaticamente a ser verificados. Uma nova
+entrada independente, como um worker não importado, precisa ser cadastrada também.
+O modo `strict` permanece ativo; o build continua executando TypeScript antes do Vite.
 
-A API legada contém `auth.me/logout`, `system.health/notifyOwner`, operações
-`session.create/end/list/getById` e `translation.save/listBySession`. O schema
-preserva `users`, `sessions`, `translations` e `gestures`. Não há
-`professor.translateToLibras`, `student.recognizeGesture` ou `server/vlibras.ts`.
-O treino e os modos Aluno e Professor atuais não dependem dessas tabelas.
+A verificação antiga de toda a árvore está preservada em
+`client/tsconfig.legacy.json`, acessível por `npm run typecheck:legacy`. Ela ainda
+aponta dependências e contratos incompatíveis nos arquivos herdados, como tRPC,
+`@shared`, componentes de demonstração e exports antigos. Essa auditoria não é
+uma etapa de publicação do cliente atual. Antes de reintegrar qualquer módulo
+legado, é necessário corrigir suas dependências e tipos; importá-lo no aplicativo
+faz seus erros voltarem à verificação normal. Não foram apagadas telas antigas
+nem instaladas todas as dependências do outro aplicativo para contornar o problema.
 
-OAuth Manus, migrações e `vercel.json` permanecem como infraestrutura herdada;
-não são pré-requisitos do fluxo independente. A revisão documental não removeu
-nem certificou essa aplicação completa. Se a API voltar a servir dados reais,
-será necessário revisar autorização por sessão: exigir login não verifica
-sozinho que o usuário é dono do ID consultado ou alterado.
+O manifesto da raiz mantém React 19, Vite 7, Express/tRPC e Drizzle/MySQL.
+Não misture suas instalações com `client/`. `npm run dev:classroom` é o atalho
+na raiz para iniciar os dois pacotes atuais. Migrações, OAuth Manus e configuração
+antiga de publicação não são pré-requisitos deste fluxo. A API legada de sessões
+não foi certificada: se reutilizada, precisa de autorização por participante e sessão.
 
-## Instalação e comandos
+## Instalação, login e publicação
 
-Use Node.js 22 ou superior como referência de desenvolvimento e npm. A partir
-da raiz do repositório, em terminais separados:
-
-**Falha conhecida:** os comandos abaixo descrevem os pontos de entrada do projeto,
-mas a instalação atual não produz uma aplicação independente validada. Além da
-falha de tipos/build, o teste de desenvolvimento encontrou dependência ativa não
-resolvida (`@radix-ui/react-dialog`). Consulte o bloqueio na seção de verificação.
-
-```bash
-cd client
-npm ci
-npm run dev
-```
-
-O cliente usa `http://localhost:5173` por padrão. O terminal do Vite informa a
-porta efetiva se a padrão estiver ocupada. Os modos atuais usam recursos do
-cliente; não é necessário banco ou login para esse fluxo.
-
-### Login Microsoft dos modos
-
-Os acessos Aluno e Professor iniciam o fluxo OAuth 2.0 Authorization Code com
-PKCE no endpoint Microsoft `organizations`, solicitando seleção da conta. O cliente
-confere `state`, `nonce`, audiência e expiração e exige o domínio exato correspondente
-ao perfil escolhido: `@alunos.unibarretos.com.br` para aluno e `@unibarretos.com.br`
-para professor. O papel é derivado do domínio retornado e deve coincidir com a
-opção escolhida; contas externas, sem e-mail e o domínio fictício de professor são
-recusados. Não há exceção Microsoft para professor demo. A sessão
-fica apenas em `sessionStorage`; nenhum Client Secret é usado ou deve ser colocado
-em variável `VITE_*`.
-
-O fluxo exige `VITE_MICROSOFT_CLIENT_ID`, obtido no registro do aplicativo, e uma
-URL de retorno do tipo **SPA** que corresponda exatamente a
-`http://127.0.0.1:5173/entrar` no desenvolvimento. Para `localhost`, cadastre a
-segunda URL equivalente. Sem Client ID, o aplicativo informa a configuração
-ausente e não inicia um redirecionamento inválido.
-
-O valor padrão `VITE_MICROSOFT_TENANT_ID=organizations` permite contas de
-organizações Microsoft. As rotas de aluno, treino e professor revalidam domínio,
-perfil e expiração da sessão; sessões antigas incompatíveis são removidas. Uma
-nova tentativa de login limpa a sessão anterior, e o callback evita consumir o
-mesmo código duas vezes nos efeitos do React StrictMode.
-
-Limite atual: o ID token é decodificado, sem verificação criptográfica da assinatura,
-e `sessionStorage` pode ser editado pelo usuário. A checagem de e-mail é uma regra
-de navegação do protótipo, não uma fronteira de segurança. O servidor de sala
-continua com seu fluxo demo separado (professor com domínio exato e código demo;
-alunos entram com código de sala). Para autorização institucional de servidor,
-validar assinatura, emissor, audiência, validade, tenant permitido e identidade
-estável (`tid`/`oid`), com permissões atribuídas; não autorizar apenas por e-mail.
-
-Os testes `npm run test:auth` em `client/` simulam respostas Microsoft para verificar
-perfis cruzados, domínios externos, sessões antigas e verificações do callback.
-Não substituem teste real com o Entra nem validam assinatura de tokens.
-
-Os comandos `predev` e `prebuild` copiam os arquivos WASM da versão instalada do
-MediaPipe para `client/public/mediapipe/wasm/`. O modelo HandLandmarker ainda é
-baixado de `storage.googleapis.com`; o widget VLibras carrega recursos de
-`vlibras.gov.br`. Portanto, processamento local não significa uso totalmente
-offline nem ausência de serviços externos.
-
-### Configuração e publicação
-
-| Configuração | Local | Uso |
-| --- | --- | --- |
-| `VITE_SIGNALING_URL` | `client/.env.local` ou ambiente de build | URL pública do servidor de sinalização; padrão local `ws://localhost:8787` |
-| `PORT` | Ambiente do processo `server/index.mjs` | Porta do WebSocket; padrão `8787` |
-
-Variáveis `VITE_*` são incorporadas ao frontend e não devem conter segredos.
-Após mudar a URL para uma publicação, gere o build novamente. Sirva `client/dist/`
-por HTTPS com fallback das rotas para `index.html`, e hospede a sinalização em um
-serviço que mantenha um processo Node/WebSocket. Use `wss://` com o site em HTTPS.
-
-O código usa caminhos absolutos como `/models/` e `/mediapipe/wasm`, e o Vite do
-cliente não configura uma base de subdiretório. Hospedagem em subpasta exige
-adaptação e verificação desses caminhos. Nenhum destino de publicação é
-certificado apenas pela existência de configuração antiga no repositório.
-Detalhes em [server/README.md](server/README.md).
-
-## Reconhecimento, treino e armazenamento
-
-O `useHandLandmarker` detecta até duas mãos, tenta GPU e usa CPU se a inicialização
-falhar. O reconhecimento estático usa a primeira mão detectada: 21 landmarks
-normalizados em 63 valores. `gestureClassifier.ts` tenta carregar um modelo
-pessoal salvo em IndexedDB; na ausência de um modelo utilizável, tenta o modelo
-base em `client/public/models/gesture-classifier/`.
-
-As classes base são **A, B, C, D, E, I, L, M, N, O, R, S, U, V, W**. O caminho
-dinâmico representa as duas mãos, reamostra os clipes para 40 quadros e usa Conv1D.
-Depende de amostras e modelo treinados pelo próprio usuário.
-
-O Modo Aluno filtra predições com confiança maior que 0,75 e margem entre as duas
-primeiras classes maior que 0,15. Há contagem de estabilidade para registrar o
-histórico de gestos; esses filtros não são uma classe treinada de “nenhum sinal”.
-O botão **Adicionar ao Texto** acrescenta e fala o sinal selecionado. O botão
-**Falar**, na seção Texto Reconhecido, lê o texto acumulado. A detecção sozinha não dispara fala.
-
-Modelos pessoais ficam em IndexedDB; rótulos e amostras de treino ficam em
-localStorage. Esses dados pertencem à origem e ao navegador utilizados: não são
-contas sincronizadas nem histórico compartilhado. Texto digitado/reconhecido e
-histórico de gestos da tela ficam no estado da página. Limpar os dados do site
-pode apagar modelos e amostras pessoais.
-
-### Métricas históricas e limites do modelo
-
-O pipeline offline extrai landmarks com MediaPipe e treina um MLP `63→256→128→64→15`,
-exportado para TensorFlow.js. O relato histórico registra 2.409 amostras detectadas
-após recuperação, 4.818 após espelhamento e 20.304 amostras após augmentation.
-O modelo base e os landmarks processados ficam em `client/public/models/gesture-classifier/`
-e `client/public/datasets/libras-landmarks.json`.
-
-A avaliação histórica registrou **97,47% de acurácia em blocos não vistos (n=948)**,
-usando divisão agrupada por sequência em vez de divisão aleatória. Esses números não
-foram reproduzidos nesta revisão e não representam desempenho garantido em webcam.
-O conjunto tem 15 classes estáticas: A, B, C, D, E, I, L, M, N, O, R, S, U, V e W.
-Não reconhece Libras completa, movimento lexical, expressões não manuais ou frases.
-O limiar de confiança e a margem entre as duas primeiras classes reduzem algumas
-predições incertas, mas não substituem uma classe negativa treinada para “nenhum sinal”.
-
-O classificador dinâmico usa sequências de 40 quadros das duas mãos e Conv1D, mas
-depende de clipes gravados pelo usuário. Não há dataset público de palavras integrado
-e validado no pipeline atual. Candidatos pesquisados anteriormente incluem
-[MALTA-LIBRAS/ISLR_LIBRAS](https://github.com/Malta-Lab/ISLR_LIBRAS),
-[V-LIBRASIL](https://libras.cin.ufpe.br/),
-[o corpus Libras-UFPel](https://aclanthology.org/2026.propor-1.112/) e
-[LIBRAS-UFOP (Kinect)](https://www.ufop.br/); formato, licença e permissões dos dados
-precisam ser confirmados antes de qualquer uso. VLibrasBD é textual e não serve
-diretamente para treinar um classificador visual de gestos.
-
-O pipeline de treino em `scripts/dataset/` ainda contém caminhos absolutos e
-dependências de arquivos intermediários, incluindo `probe_X.npy`. Portanto, não é
-reproduzível de ponta a ponta sem adaptação. Qualquer avaliação futura deve separar
-sinalizadores/vídeos entre treino e teste, incluir exemplos negativos e medir o
-resultado com participantes e condições de captura reais. As métricas acima são
-referência histórica, não validação clínica, pedagógica ou de produção.
-
-## Digitação, voz e VLibras
-
-Em **Digitar e Ouvir**, o usuário revisa o texto e aciona **Falar** ou Enter;
-Shift+Enter insere uma quebra de linha. O navegador usa `speechSynthesis` com
-idioma `pt-BR` e tenta selecionar uma voz desse idioma. A saída toca no dispositivo
-atual; não é enviada ao professor pelo servidor de sinalização.
-
-Ao habilitar a opção VLibras, o texto da última leitura fica visível para seleção
-no widget externo. `VLibrasWidget.tsx` incorpora um script e um avatar; o projeto
-não solicita nem armazena vídeos traduzidos por uma API própria. Qualidade,
-disponibilidade, vozes e permissões precisam ser avaliadas no navegador real.
-
-## Evolução: comunicação por texto compartilhado
-
-A prioridade proposta é permitir que participantes presenciais e remotos compartilhem
-texto acessível. O aluno deve revisar e confirmar qualquer texto reconhecido antes
-do envio; a videochamada atual é complementar e não substitui legendas ou mensagens
-nos dispositivos dos participantes. O protocolo, os fluxos professor↔aluno, a fila
-de voz, as legendas, a integração com VLibras e os critérios de aceite estão
-consolidados no [plano de implementação](GUIA_IMPLEMENTACAO.md). Esses recursos
-compartilhados ainda não devem ser considerados implementados.
-
-## Sala de Aula: contratos e limites
-
-`SalaAula.tsx` gera um código de seis caracteres para o professor. O aluno informa
-o código e o nome segue na URL; a identidade de professor vem de uma sessão demo
-assinada pelo servidor. `useClassroom` solicita câmera e microfone
-antes de abrir a sinalização. O servidor aceita no máximo um professor por sala
-e recusa aluno quando não há professor conectado.
-
-A entrada WebSocket usa `room`, `role` e `name`. Os eventos são `joined`,
-`peer-joined`, `peer-left`, `signal`, `room-closed` e `error`. Mensagens `signal`
-transportam ofertas/respostas SDP e candidatos ICE no cliente. Não existe
-protocolo implementado de chat, legendas, fila de áudio ou confirmação de leitura.
-
-O papel é informado pelo próprio cliente, sem comprovação de vínculo. As salas
-ficam em memória e não têm persistência ou sincronização entre processos. Quando
-o professor desconecta, o servidor avisa os alunos com `room-closed`. Reiniciar
-a sinalização perde o estado das salas; conexões P2P já estabelecidas podem
-continuar temporariamente, e o cliente não implementa recuperação automática.
-
-Só há STUN configurado; redes restritivas podem exigir TURN, ainda não incluído.
-Conseguir entrar no WebSocket não comprova que a mídia WebRTC conectou. O fluxo
-pede acesso aos dois dispositivos de captura e depende das políticas de mídia do
-navegador. Escala, reconexão e uso em redes reais precisam de teste específico.
-
-## Verificação e contribuição
-
-### Verificação da autenticação demo — 15 de outubro de 2026
-
-Nesta implementação, `node --check server/index.mjs` e `npm test` em `server/`
-passaram. O teste inicia um servidor local temporário e confirma que: uma conta de
-aluno é recusada como professor, código errado é recusado, `role=professor` sem
-sessão é recusado, código de sala inválido é recusado e uma sessão demo válida
-permite professor e aluno entrarem na mesma sala. O build direto `npx vite build`
-em `client/` também gerou `client/dist/` com sucesso.
-
-`npm run typecheck` continua falhando em arquivos e dependências legadas fora do
-escopo desta mudança, conforme o bloqueio abaixo; por isso `npm run build` também
-não é uma verificação disponível enquanto ele executar `tsc -b`. Não foi feita
-alteração para ocultar esses erros. A auditoria de produção do servidor não apontou
-vulnerabilidades. A auditoria do cliente apontou três vulnerabilidades moderadas
-transitivas em `sprintf-js`, trazidas por `@tensorflow/tfjs`; o reparo automático
-sugerido troca TensorFlow.js por versão incompatível e não foi aplicado.
-
-Para o cliente:
+Use Node.js 22 ou posterior e npm. A validação desta revisão usa Node.js 24.21.0;
+a versão 22 não foi executada nesta revisão. Na raiz:
 
 ```bash
-cd client
-npm run typecheck
-npm run build
+npm ci --prefix client
+npm ci --prefix server
+npm run dev:classroom
 ```
 
-### Bloqueio de verificação encontrado na base atual
+O site usa a porta fixa 5173; o servidor, 8787. Porta ocupada gera erro, sem mudar
+silenciosamente para 5174. Pode-se iniciar separadamente com `npm run dev` em
+`client/` e `npm start` em `server/`. Não é necessário banco de dados.
 
-Na revisão desta documentação, `npm ci` em `client/` e em `server/` foi concluído,
-mas `npm run typecheck` falhou com o código funcional da `main` inalterado.
-`client/tsconfig.json` inclui toda a pasta `src`, inclusive arquivos legados fora
-das rotas. Entre os problemas estão imports de pacotes ausentes no manifesto do
-cliente independente, como `@trpc/client` e `@radix-ui/*`, o alias legado
-`@shared` sem configuração nesse pacote e exports incompatíveis como
-`buttonVariants` e `LIBRAS_GESTURES`.
+O aplicativo Microsoft existente precisa de Client ID público e retorno SPA
+cadastrado para a origem exata: `http://localhost:5173/entrar` e/ou
+`http://127.0.0.1:5173/entrar`. A configuração local usa
+`VITE_MICROSOFT_TENANT_ID=organizations`. **Não exige Tenant ID da faculdade,
+novo aplicativo ou cadastro adicional de docentes nesta entrega.** Nunca coloque
+Client Secret em variáveis `VITE_*`. Consulte o [README](../README.md) e o
+[guia do servidor](../server/README.md) para configuração completa.
 
-`npm run build` também falhou no TypeScript, depois de copiar os arquivos WASM.
-O teste de `npm run dev` iniciou o Vite, mas reportou `@radix-ui/react-dialog`
-não resolvido em `client/src/components/ui/dialog.tsx`, usado pelo caminho ativo
-da interface. Portanto, o problema não se limita a fontes legadas alcançadas
-apenas pela checagem de tipos; o início do Vite não comprova quickstart funcional.
+O login acontece diretamente com a Microsoft. Depois do retorno, o servidor
+verifica a assinatura RS256, emissor do token e da chave, audiência e expiração
+antes de emitir uma sessão opaca. O perfil deriva do domínio exato:
+`@alunos.unibarretos.com.br` para aluno e `@unibarretos.com.br` para professor.
+Editar armazenamento, URL ou autoria no cliente não autoriza comunicação no servidor.
+Essa regra não equivale à validação administrativa da função de professor;
+políticas institucionais adicionais ficam para uma etapa acordada com a faculdade.
 
-Instalar o lockfile do cliente não resolve essas divergências entre configuração
-e fontes. Não se deve apresentar a geração de `client/dist/` como validada.
-A correção está proposta em `maintenance/regularizar-build-client`, antes de
-publicação ou ampliação funcional. Esta entrega documental não altera código,
-dependências ou escopo do TypeScript para ocultar o problema.
+A indisponibilidade do servidor não impede o login Microsoft. A tela de salas
+permite tentar novamente mantendo o login. Logout encerra a sessão do TeachLi,
+sem encerrar a conta Microsoft em outros serviços.
 
-O trabalho de manutenção deve separar o que pertence ao cliente independente e
-ao legado, ajustar imports/exports e dependências de maneira explícita e então
-reexecutar instalação, tipos e build. A existência de código de uma funcionalidade
-na árvore não equivale a ter seu pacote de produção aprovado.
+| Configuração | Uso |
+| --- | --- |
+| `VITE_MICROSOFT_CLIENT_ID` | ID público do aplicativo já usado no login |
+| `VITE_MICROSOFT_TENANT_ID` | `organizations` no fluxo atual |
+| `VITE_SIGNALING_URL` | Servidor de salas; padrão `ws://localhost:8787` |
+| `MICROSOFT_CLIENT_ID` no servidor | Opcional: mesmo ID, quando hospedado separadamente do cliente |
+| `TEACHLI_CORS_ORIGIN` | Origens exatas autorizadas; padrão localhost/127.0.0.1:5173 |
+| `TEACHLI_ROOMS` | Catálogo opcional de salas com IDs estáveis |
+| `PORT` | Porta do servidor; padrão 8787 |
 
-As verificações desta entrega usaram Node.js 18.19.1 e npm 9.2.0, disponíveis no
-ambiente. Node.js 22 é a referência recomendada no guia, mas não foi testado nesta
-revisão. Imports/exports ausentes foram constatados também por inspeção do código
-e manifesto; não há comprovação de que trocar apenas a versão do Node resolva o
-problema. Repetir a validação no ambiente recomendado faz parte da manutenção.
+Em publicação, sirva `client/dist/` por HTTPS, com fallback para `index.html`,
+e um processo Node/WebSocket com WSS. Cadastre a origem publicada na Microsoft
+e no servidor. `localhost` em outro dispositivo aponta para o próprio dispositivo,
+não para o computador do professor: ambos precisam acessar o mesmo serviço.
+O preview usa 5173 e exige encerrar o servidor de desenvolvimento dessa porta.
 
-### Convenções e outras verificações
+`predev` e `prebuild` copiam o WASM instalado do MediaPipe para `public/`.
+HandLandmarker e VLibras ainda carregam recursos externos. O reconhecimento de
+fala depende do navegador e pode usar serviços externos. O sistema não é
+inteiramente offline. A base Vite é `/`; publicar em subpasta exige adaptação.
+O Vite copia `public/` para o build, inclusive os datasets: revisar esses arquivos
+faz parte da preparação de uma publicação.
 
-As convenções de branch, labels e commits estão em
-[BRANCHES.md](BRANCHES.md). Os scripts `scripts/check-conventions.mjs` e seus
-testes, citados em documentação histórica, não existem nesta cópia do
-repositório e não podem ser usados como verificação atual. Revise manualmente
-branch, título, label e diff antes de abrir um PR. Executar um build não valida
-câmera, precisão do modelo, áudio, widget externo ou comunicação entre
-dispositivos.
+## Contratos das salas e armazenamento
 
-Registros anteriores de testes de convenções não comprovam o estado atual.
-Nesta implementação, a sintaxe do servidor e os testes da autenticação demo
-foram executados; a falha de tipos do cliente continua independente dessas
-verificações.
+O protocolo e os limites completos estão em [server/README.md](../server/README.md).
+Os eventos principais são `joined`, `presence`, `student.message`, `caption.final`,
+`message.ack` e `message.rejected`. Autoria e destino são definidos pelo servidor.
 
-As convenções estão em [BRANCHES.md](BRANCHES.md) e a evolução planejada no
-[guia de implementação](GUIA_IMPLEMENTACAO.md).
+- Aluno pode entrar antes do professor; não há envio pendente para entrega futura.
+- Um professor por sala e uma conexão por sessão. Trocar sala remove a associação anterior.
+- Texto limitado a 2.000 caracteres; limites de frequência e deduplicação no servidor.
+- `message.ack` confirma encaminhamento à conexão, não leitura ou reprodução.
+- Estado em memória, sem sincronização entre servidores ou recuperação de histórico.
+- O cliente mantém até 100 mensagens recebidas; sair ou trocar sala limpa esse painel.
+- Desconexão requer entrada explícita novamente. Sessões duram no máximo uma hora,
+  limitadas também pela expiração Microsoft.
+- Qualquer conta aceita pelo perfil pode escolher qualquer sala; não há matrícula.
+
+O ID token e a sessão de comunicação ficam em `sessionStorage`. Modelos pessoais
+ficam em IndexedDB; rótulos e amostras de treino, em localStorage. São dados por
+origem/navegador, não sincronizados por conta. Limpar os dados do site pode apagar
+o treino pessoal. Não registrar tokens nem dados de participantes em logs de teste.
+
+## Reconhecimento e treinamento
+
+A detecção encontra até duas mãos; a classificação por pose usa a primeira mão,
+com 21 pontos normalizados em 63 valores. O modelo pessoal tem prioridade sobre
+o modelo base em `public/models/gesture-classifier-26/`: MLP `63→256→128→64→26`,
+com A–Z experimental. H/J/K/X/Z são classificados pela posição da mão, sem validar
+o movimento completo. Ç não está no modelo distribuído.
+
+O modelo original de 15 letras foi preservado em `public/models/gesture-classifier/`.
+A importação manual de imagens/landmarks continua cobrindo essas 15 letras.
+Os artefatos novos incluem origem, licenças e código de reprodução. O experimento
+misturou os landmarks legados e a base LibraSign; recuperou o acerto das letras
+antigas de 93,26% no primeiro candidato para 97,61% no recorte interno atual.
+Isso é avaliação de regressão, não estimativa independente de acerto em webcam.
+Métricas, versões e limitações estão em [TREINAMENTO_ALFABETO.md](TREINAMENTO_ALFABETO.md).
+
+O classificador temporal usa sequências de 40 quadros e treino local Conv1D.
+Ainda não existe um modelo temporal base distribuído. A normalização atual
+centraliza cada mão em cada quadro e perde deslocamento global; também é preciso
+separar gravações antes de gerar variações para validação. Esses pontos devem ser
+corrigidos antes de uma campanha de coleta de movimentos.
+
+Fotos/amostras isoladas descrevem poses; movimentos precisam de clipes ordenados.
+A próxima etapa deve preservar trajetória e tempo, conferir os rótulos com pessoa
+fluente em Libras, incluir Ç e exemplos negativos e avaliar por participante e
+por gravação. Coletar amostras não treina automaticamente um modelo. Versionar o
+novo formato e preservar os dados pessoais antigos faz parte dessa evolução.
+O plano detalhado da próxima etapa deve também acompanhar a descrição do PR.
+
+Confiança, margem entre classes e estabilidade filtram predições; não garantem
+correção nem constituem uma classe negativa treinada. O reconhecimento produz
+um rascunho: o aluno pode corrigir e deve confirmar o envio à sala. O aplicativo
+não traduz Libras completa, expressões não manuais ou frases sinalizadas.
+
+## Texto, voz e VLibras
+
+Na mensagem digitada, Enter envia ao professor e Shift+Enter insere nova linha.
+Os botões de ouvir executam síntese de voz no dispositivo atual. O professor
+pode ouvir cada mensagem recebida manualmente; não há reprodução automática ou
+fila compartilhada. Ao iniciar gravação, frases finais da transcrição são enviadas
+aos alunos; parciais permanecem locais. Não há confirmação de leitura.
+
+VLibras é um widget externo para texto selecionado. Não há API própria de vídeo,
+fila automática ou sincronização garantida com as legendas. O texto original
+continua sendo o canal disponível quando o widget não é usado.
+
+## Verificações e aceite
+
+```bash
+npm run typecheck --prefix client
+npm run build --prefix client
+npm run test:auth --prefix client
+npm test --prefix server
+```
+
+Os testes automatizados de autenticação/salas cobrem perfis, callback, assinatura
+com chaves de teste, expiração, logout, isolamento, troca de sala e entradas
+malformadas. Respostas Microsoft simuladas não comprovam login no Entra real.
+O teste de interface com duas sessões isoladas verifica interação entre aluno e
+professor no mesmo computador; não equivale a dois dispositivos físicos.
+
+### Resultado da revisão de 23/10/2026
+
+| Verificação | Resultado |
+| --- | --- |
+| Instalação limpa dos lockfiles de `client/` e `server/` em cópia temporária | Passou, com Node.js 24.21.0 e cache local do npm |
+| `npm run typecheck` e `npm run build` do cliente | Passaram no projeto e na cópia limpa; permanece aviso de tamanho do JavaScript |
+| Autenticação e salas | 21 testes passaram: 14 do cliente e sete do servidor |
+| Checagem estrita da aplicação | Erro proposital inserido apenas em memória em `StudentMode.tsx` foi detectado; nenhum arquivo funcional foi alterado por essa prova |
+| Interface sobre o build de produção | Duas sessões isoladas, aluno em 390px e professor em 1440px: login simulado, indisponibilidade/retry do servidor, texto, legenda simulada, troca de sala e logout passaram |
+| Favicon | HTML aponta para a variante com contorno branco; PNG servido com sucesso no build |
+| Contas Microsoft reais, microfone real e dois dispositivos físicos | Não executado; requer equipamentos e participação dos titulares das contas |
+
+Para a conferência real, use uma conta de aluno e outra de professor em dispositivos
+diferentes, acessando a mesma instalação. Verifique texto nos dois sentidos,
+troca e isolamento de salas, saída, reconexão, permissão de microfone e transcrição.
+Os titulares fazem o login; não é necessário compartilhar senhas. Essa validação
+permanece pendente enquanto equipamentos e contas não estiverem disponíveis.
+Build aprovado não comprova precisão em câmera, qualidade em Libras ou capacidade
+de uma turma. O resultado exato de cada execução deve constar no PR.
+
+As convenções de branch, commit e PR estão em [BRANCHES.md](BRANCHES.md).
+Os antigos scripts de convenções e templates `.github/` não estão presentes
+nesta cópia. Revise título, labels, diff e testes antes do merge.

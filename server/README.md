@@ -1,121 +1,103 @@
-# Servidor de sinalização — Sala de Aula
+# Servidor de salas TeachLi
 
-`server/index.mjs` usa WebSocket para trocar mensagens que estabelecem uma
-conexão WebRTC entre professor e alunos. No fluxo implementado, ofertas/respostas
-SDP e candidatos ICE passam por aqui; áudio e vídeo trafegam entre os navegadores.
-O servidor recebe código de sala e nome do participante. Para criar sala, o
-professor também precisa de uma sessão demo assinada pelo próprio servidor.
+O login Microsoft existente continua direto entre navegador e Microsoft, usando
+`organizations`. **Não é necessário obter ou configurar Tenant ID da faculdade,
+nem cadastrar professores no Entra para usar esta etapa do protótipo.**
 
-Este processo é independente do servidor Express/tRPC legado em `server/_core/`.
-`npm start` executado nesta pasta inicia somente a sinalização.
+Depois do login, o servidor conecta aluno e professor à sala escolhida. Há
+Laboratório A, B e C, Sala 01 e Sala 02. A sala aparece na comunicação, com presença,
+troca e saída da conta. Alunos podem aguardar a chegada do professor.
 
-## Rodar localmente
+## Executar
 
-A partir da raiz do repositório, em um terminal:
-
-```bash
-cd server
-npm ci
-npm start
-```
-
-O padrão é `ws://localhost:8787`. A variável de ambiente `PORT` pode alterar a
-porta do processo. Em outro terminal, também a partir da raiz:
+Use Node.js 22 ou posterior. Instale as dependências de `client/` e `server/` com
+`npm ci` em cada pasta. Na raiz, execute:
 
 ```bash
-cd client
-npm ci
-npm run dev
+npm run dev:classroom
 ```
 
-As telas de Sala de Aula estão preservadas no código, mas as rotas `/sala` e
-`/sala/:roomId` foram retiradas da navegação atual. Para verificar o servidor
-independentemente dessas telas, execute `npm test` nesta pasta.
+O comando inicia os dois serviços e encerra ambos com Ctrl+C. A página usa 5173;
+o servidor, 8787. Encerre instâncias anteriores para evitar conflito de portas.
+Também é possível executar `npm start` em `server/` e `npm run dev` em `client/`
+em terminais separados. Este servidor é independente do Express/tRPC legado.
 
-O fluxo demo preservado usa e-mail `@unibarretos.com.br` e código demo para o
-professor, e código de sala para o aluno. Ambos os lados solicitam câmera e
-microfone ao entrar pela interface. Em desenvolvimento, o código demo padrão é
-`teachli-professor-demo`; troque-o por variável de ambiente antes de demonstrar
-para outras pessoas.
-O cliente lê a URL de [config.ts](../client/src/lib/webrtc/config.ts), cujo padrão
-é `ws://localhost:8787`. Para outro endereço, defina `VITE_SIGNALING_URL` em
-`client/.env.local` e reinicie o Vite. `localhost` sempre identifica o dispositivo
-que está executando o navegador; testar duas máquinas exige URL acessível a ambas.
+O servidor reutiliza automaticamente o **Client ID público que já está configurado
+no cliente**. Não exige novo registro do aplicativo ou Client Secret. Para um
+servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID`.
+`server/.env` é opcional e carregado automaticamente, quando existir.
 
-## Sessão demo de professor
-
-`POST /auth/demo/login` recebe nome, e-mail e código de demonstração. O endpoint
-aceita apenas o domínio exato `@unibarretos.com.br`; endereços
-`@alunos.unibarretos.com.br` não podem iniciar aulas. Ao validar o código, ele
-devolve sessão assinada com validade de oito horas. O código e o segredo nunca
-devem ir para `client/`, `.env.local` do frontend ou GitHub.
-
-| Variável do servidor | Desenvolvimento | Demonstração publicada |
-| --- | --- | --- |
-| `DEMO_PROFESSOR_ACCESS_CODE` | padrão local temporário | obrigatório, longo e compartilhado apenas com professores demo |
-| `DEMO_SESSION_SECRET` | aleatório por processo | obrigatório, aleatório e com ao menos 32 caracteres |
-| `TEACHLI_CORS_ORIGIN` | `http://localhost:5173` | URL HTTPS exata do frontend |
-
-O cliente envia a sessão pelo subprotocolo WebSocket, não por parâmetro de URL. O
-servidor ignora um pedido de `role=professor` sem sessão válida e usa o nome assinado
-da sessão. O limite de cinco tentativas de código por IP/minuto é apenas uma proteção
-contra tentativas casuais em uma única instância; não substitui autenticação Microsoft.
-
-## Protocolo atual
-
-A conexão WebSocket recebe `room`, `role` e `name` na query. O código de sala é
-normalizado para maiúsculas. `role=professor` só é aceito quando a sessão demo no
-subprotocolo é válida; os demais entram como aluno. Sem professor, o aluno é recusado.
-
-| Evento | Uso |
+| Configuração opcional | Uso |
 | --- | --- |
-| `joined` | Confirma entrada, ID próprio e IDs dos pares iniciais |
-| `peer-joined` | Avisa o professor da chegada de aluno |
-| `peer-left` | Avisa o professor da saída de aluno |
-| `signal` | Encaminha `data` do remetente ao ID `to` encontrado na mesma sala |
-| `room-closed` | Informa aos alunos a saída do professor |
-| `error` | Informa recusa de entrada |
+| `MICROSOFT_CLIENT_ID` | Sobrescreve o Client ID público lido de `client/.env*` |
+| `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
+| `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |
+| `PORT` | Porta do servidor, padrão 8787 |
+| `VITE_SIGNALING_URL` no cliente | Endereço do servidor, padrão `ws://localhost:8787` |
 
-O cliente usa `data.kind` igual a `offer`, `answer` ou `ice-candidate`. O servidor
-repassa `data` sem validar sua estrutura; não o trate como conteúdo confiável.
-Não existe aqui protocolo de chat, legenda, fila de voz ou gravação da aula.
+## Fluxo e isolamento
 
-## Hospedagem
+1. Os botões de acesso iniciam o fluxo Microsoft anterior, com `state`, nonce e PKCE.
+   O servidor de salas não participa dessa etapa e sua indisponibilidade não impede
+   o redirecionamento nem a conclusão do login Microsoft.
+2. Depois do retorno, `/salas` troca o ID token Microsoft por uma sessão de comunicação.
+   Apenas essa etapa depende do servidor. Falhas de conexão permitem tentar novamente
+   sem perder o login.
+3. O servidor verifica assinatura RS256, chaves oficiais Microsoft, emissor do token
+   e da chave, audiência e validade. A origem organizacional vem do próprio token,
+   verificado criptograficamente; não há lista/configuração de Tenant IDs.
+4. Mantém-se a regra de perfil do protótipo: `@alunos.unibarretos.com.br` para aluno
+   e `@unibarretos.com.br` para professor. Não se exige app role ou lista de docentes.
+   Essa regra por domínio não equivale à comprovação administrativa de vínculo ou
+   função docente. Uma política institucional mais restrita é uma evolução futura,
+   fora do escopo atual; não bloqueia a implementação das salas.
+5. O servidor decide autoria, papel e sala das mensagens. Alterar URL ou payload não
+   muda o perfil verificado nem permite encaminhar mensagens a outra sala.
+6. Logout invalida a sessão de comunicação e remove o login local. Sessões perdidas
+   após reinício do servidor também podem ser encerradas. Esse logout é do TeachLi,
+   não revoga a conta Microsoft em outros aplicativos.
 
-O frontend é um build estático; o WebSocket precisa de serviço com processo Node
-de longa duração e suporte a conexões persistentes. Esta documentação não atesta
-uma publicação existente nem planos ou preços de provedores.
+O ID token fica no `sessionStorage` durante o login, com validade Microsoft; a
+sessão opaca de comunicação dura no máximo uma hora e nunca ultrapassa esse prazo.
+Não registre tokens em logs. A aplicação depende de HTTPS/WSS ao ser publicada.
 
-1. Instale dependências em `server/` com `npm ci` e inicie com `npm start`.
-2. Configure HTTPS/TLS no provedor ou proxy para expor uma URL `wss://`.
-3. Defina `VITE_SIGNALING_URL=wss://seu-servidor.exemplo.com` no ambiente de build
-   do cliente ou em `client/.env.local`.
-4. Execute `npm run build` em `client/` e publique `client/dist/` em HTTPS.
-5. Configure fallback de rotas para `index.html` e teste entradas diretas em
-   `/sala` e `/sala/CODIGO`, além dos assets em `/models/` e `/mediapipe/wasm`.
+A validação segue a [orientação Microsoft para emissores e chaves de múltiplas organizações](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens).
 
-A URL `VITE_*` fica no frontend e não pode conter segredos. Não é necessário
-configurar banco de dados para a sinalização. Para testes entre dispositivos,
-use um contexto seguro com acesso à câmera/microfone e URL WebSocket acessível;
-o endereço local de desenvolvimento sozinho não resolve publicação em rede.
+## Protocolo de comunicação
 
-## Limites conhecidos
+| Endpoint/evento | Uso |
+| --- | --- |
+| `POST /auth/microsoft/session` | Verifica ID token já obtido no login e emite sessão de comunicação |
+| `GET /classrooms` | Lista as cinco salas, com Bearer da sessão TeachLi |
+| `POST /auth/logout` | Encerra sessão de comunicação; idempotente |
+| `WS /classroom?room=ID` | Subprotocolos `teachli-session` e token opaco; sem credencial na URL |
+| `joined`, `presence` | Sala confirmada e participantes conectados |
+| `student.message` | Texto confirmado do aluno → professor da mesma sala |
+| `caption.final` | Frase final do professor → alunos da mesma sala |
+| `message.ack`, `message.rejected` | Encaminhamento à conexão ou recusa; não comprova leitura |
 
-- **Autenticação ainda demonstrativa:** professor precisa de sessão assinada e código
-  demo, mas o sistema não confirma posse de uma conta Microsoft. Alunos entram por
-  código de sala e não têm identidade institucional verificada.
-- **Sem TURN:** [config.ts](../client/src/lib/webrtc/config.ts) configura somente
-  STUN público. Redes com NAT/firewall restritivo podem impedir a mídia.
-- **Topologia em estrela no cliente, sem SFU:** o professor envia uma cópia de sua
-  mídia a cada aluno. Capacidade de turma depende de banda e equipamento e não
-  foi estabelecida por esta revisão.
-- **Estado em memória:** salas não persistem nem são compartilhadas entre instâncias.
-  Reiniciar o servidor perde esse estado. Mídia P2P já conectada pode continuar
-  temporariamente; não há recuperação automática implementada no cliente.
-- **Sinalização não comprova mídia:** o status de entrada pode estar conectado
-  antes de a negociação WebRTC funcionar. Erros e reconexão precisam de evolução.
-- **Sem gravação implementada:** este processo não grava mídia ou histórico. Isso
-  não impede gravação por participantes nem descreve logs de um provedor externo.
+Há um professor por sala e uma conexão por sessão. Trocar sala remove a associação
+anterior. Sem professor, o aluno espera; não existe fila de mensagens para entrega
+futura. O professor pode ouvir uma mensagem manualmente; não há áudio automático.
+Texto tem limite de 2.000 caracteres. Há limites de 60 eventos/10 segundos por
+conexão e 30 trocas de sessão/IP/minuto. Os últimos 500 IDs por conexão não são
+retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expiração.
 
-Veja a [documentação técnica](../docs/DOCUMENTACAO.md) e os
-[próximos passos](../docs/GUIA_IMPLEMENTACAO.md).
+## Limites e verificação
+
+- Estado em memória, uma instância: sem banco, gravação, histórico persistente ou
+  sincronização entre servidores. O cliente mostra até 100 mensagens recebidas.
+- Reconexão explícita; atualizar a página exige escolher a sala novamente.
+- Qualquer conta aceita pelo perfil pode escolher qualquer sala cadastrada;
+  não há matrícula por turma ou disciplina.
+- Contagem de presença é de conexões; sessões em dispositivos diferentes podem
+  representar a mesma pessoa.
+- Texto não exige câmera/microfone. A transcrição depende do navegador/permissão.
+- O processo antigo de demo/sinalização foi substituído; as telas WebRTC legadas
+  continuam fora das rotas e esta entrega não inclui videochamada.
+
+Execute `npm test` em `server/` e `npm run test:auth` em `client/`. Os testes cobrem
+login independente do servidor, perfis por domínio, validação criptográfica sem
+Tenant ID configurado, isolamento, troca de sala, logout, expiração e requisições
+malformadas. A conferência com contas Microsoft reais e dispositivos da turma
+continua sendo validação manual, sem depender de obter o Tenant ID da faculdade.
