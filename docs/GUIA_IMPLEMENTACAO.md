@@ -47,7 +47,11 @@ um teste com duas sessões para capacidade de uma turma.
 
 ## 2. Identidade e autorização — base implementada
 
-- [x] Login Microsoft existente, com `organizations`, PKCE, `state` e nonce.
+- [x] Login Microsoft existente, com `organizations` ou Tenant ID da instituição, PKCE, `state` e nonce.
+- [x] Restringir o login ao tenant configurado (cliente confere `tid`; servidor recusa outro tenant).
+- [ ] Confirmar se as contas de alunos (`@alunos.unibarretos.com.br`) pertencem ao mesmo
+  tenant dos professores; se não, o GUID único as bloqueia e a restrição precisa ser revista.
+- [ ] Confirmar no Entra o registro SPA com os URIs `/entrar` e testar um login real.
 - [x] Verificar token no servidor antes da comunicação; definir autoria e papel.
 - [x] Aplicar domínios de aluno/professor; rejeitar perfil forjado e conta externa.
 - [x] Testar expiração, logout e isolamento com identidades de teste.
@@ -55,8 +59,8 @@ um teste com duas sessões para capacidade de uma turma.
 - [ ] Avaliar com a faculdade a administração do aplicativo Microsoft e eventual
   política de vínculo, grupos ou funções de docentes.
 
-**Tenant ID da faculdade e novo cadastro de docentes não são exigidos nesta
-entrega.** A regra atual por domínio não prova administrativamente a função de
+**O Tenant ID da faculdade é opcional e restringe o login a esse tenant; novo cadastro
+de docentes não é exigido nesta entrega.** A regra atual por domínio não prova administrativamente a função de
 professor. Restrições adicionais dependerão do acordo com a instituição.
 Se a API legada de sessões for reutilizada, autorizar cada consulta/alteração por
 participação; exigir login sozinho não basta.

@@ -177,6 +177,6 @@ não adicionar fundo, placa, sombra ou novos elementos; pequena margem transpare
 O login Microsoft anterior foi restaurado: não há consulta ao servidor de salas
 antes do redirecionamento ou no retorno Microsoft. A seleção de sala prepara a
 sessão de comunicação e permite tentar novamente sem perder o login caso o
-servidor esteja indisponível. Não se exige Tenant ID da faculdade, função Entra
-ou cadastro extra de professores. O scroll nativo e a logo transparente com
+servidor esteja indisponível. O Tenant ID da faculdade é opcional (restringe o login);
+não se exige função Entra nem cadastro extra de professores. O scroll nativo e a logo transparente com
 contorno branco permanecem aplicados.

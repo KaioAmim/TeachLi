@@ -40,6 +40,8 @@ const PENDING_LOGIN_KEY = "teachli.microsoft.pending-login";
 const SESSION_KEY = "teachli.microsoft.session";
 const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID as string | undefined;
 const tenant = (import.meta.env.VITE_MICROSOFT_TENANT_ID as string | undefined) || "organizations";
+// "organizations"/"common"/"consumers" aceitam vários tenants; um GUID restringe ao tenant da instituição.
+const isTenantRestricted = !["organizations", "common", "consumers"].includes(tenant.toLowerCase());
 
 function base64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -156,6 +158,9 @@ export async function finishMicrosoftLogin(search: string): Promise<MicrosoftSes
   const expiresAt = typeof claims?.exp === "number" ? claims.exp * 1000 : 0;
   if (claims?.aud !== clientId || claims?.nonce !== pending.nonce || expiresAt <= Date.now()) {
     throw new Error("A resposta do login Microsoft não passou pela validação da aplicação.");
+  }
+  if (isTenantRestricted && String(claims?.tid ?? "").toLowerCase() !== tenant.toLowerCase()) {
+    throw new Error("Use uma conta do tenant institucional configurado para esta aplicação.");
   }
 
   const email = typeof claims.email === "string"
