@@ -32,7 +32,6 @@ transcrição, compartilha frases finalizadas com os alunos da mesma sala.
 | --- | --- | --- |
 | `client/` | React 18, TypeScript, Vite 5, Tailwind 3, Wouter, MediaPipe e TensorFlow.js | `index.html` → `src/main.tsx` → `App.tsx`; saída `client/dist/` |
 | `server/` | Node.js, `ws` e `jose`; autenticação da comunicação e encaminhamento de texto | `index.mjs` → `classrooms.mjs` e `microsoft.mjs` |
-| Raiz, `server/_core`, `drizzle/`, `shared/` | Aplicação herdada Express/tRPC/Drizzle, com outro manifesto | Não necessária para iniciar o protótipo atual |
 
 O reconhecimento e o treino acontecem no navegador. O servidor recebe o texto
 confirmado e as frases finais e encaminha apenas para o perfil oposto na mesma
@@ -61,20 +60,9 @@ importados pela aplicação passam automaticamente a ser verificados. Uma nova
 entrada independente, como um worker não importado, precisa ser cadastrada também.
 O modo `strict` permanece ativo; o build continua executando TypeScript antes do Vite.
 
-A verificação antiga de toda a árvore está preservada em
-`client/tsconfig.legacy.json`, acessível por `npm run typecheck:legacy`. Ela ainda
-aponta dependências e contratos incompatíveis nos arquivos herdados, como tRPC,
-`@shared`, componentes de demonstração e exports antigos. Essa auditoria não é
-uma etapa de publicação do cliente atual. Antes de reintegrar qualquer módulo
-legado, é necessário corrigir suas dependências e tipos; importá-lo no aplicativo
-faz seus erros voltarem à verificação normal. Não foram apagadas telas antigas
-nem instaladas todas as dependências do outro aplicativo para contornar o problema.
-
-O manifesto da raiz mantém React 19, Vite 7, Express/tRPC e Drizzle/MySQL.
-Não misture suas instalações com `client/`. `npm run dev:classroom` é o atalho
-na raiz para iniciar os dois pacotes atuais. Migrações, OAuth Manus e configuração
-antiga de publicação não são pré-requisitos deste fluxo. A API legada de sessões
-não foi certificada: se reutilizada, precisa de autorização por participante e sessão.
+O `package.json` da raiz contém apenas o atalho `npm run dev:classroom`, que inicia os dois
+pacotes atuais. O backend herdado (Express/tRPC/Drizzle/MySQL, OAuth e integrações de terceiros
+do template anterior) foi removido do repositório.
 
 ## Instalação, login e publicação
 

@@ -21,7 +21,7 @@ npm run dev:classroom
 O comando inicia os dois serviços e encerra ambos com Ctrl+C. A página usa 5173;
 o servidor, 8787. Encerre instâncias anteriores para evitar conflito de portas.
 Também é possível executar `npm start` em `server/` e `npm run dev` em `client/`
-em terminais separados. Este servidor é independente do Express/tRPC legado.
+em terminais separados.
 
 O servidor reutiliza automaticamente o **Client ID público que já está configurado
 no cliente**. Não exige novo registro do aplicativo ou Client Secret. Para um

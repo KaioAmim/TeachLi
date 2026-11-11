@@ -24,7 +24,7 @@ avaliação de alunos surdos e profissionais de Libras.
 
 - [x] Definir a fronteira do cliente a partir de `src/main.tsx` e todos os imports,
   das declarações locais e da configuração Vite, mantendo TypeScript estrito.
-- [x] Preservar o código herdado e sua auditoria em `npm run typecheck:legacy`.
+- [x] Remover o backend e as integrações herdadas do template anterior (Manus).
 - [x] Manter TypeScript no comando completo de build, antes do Vite.
 - [ ] Regularizar separadamente telas e APIs legadas, caso sejam reintegradas.
 
