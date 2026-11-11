@@ -39,9 +39,10 @@ export interface MicrosoftSession {
 const PENDING_LOGIN_KEY = "teachli.microsoft.pending-login";
 const SESSION_KEY = "teachli.microsoft.session";
 const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID as string | undefined;
-const tenant = (import.meta.env.VITE_MICROSOFT_TENANT_ID as string | undefined) || "organizations";
-// "organizations"/"common"/"consumers" aceitam vários tenants; um GUID restringe ao tenant da instituição.
-const isTenantRestricted = !["organizations", "common", "consumers"].includes(tenant.toLowerCase());
+const tenant = ((import.meta.env.VITE_MICROSOFT_TENANT_ID as string | undefined) ?? "").trim().toLowerCase();
+// O Tenant ID institucional é obrigatório: precisa ser o GUID do tenant (não vale "organizations"/"common").
+const isTenantConfigured = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(tenant);
+const TENANT_MISSING_MESSAGE = "O Tenant ID institucional (VITE_MICROSOFT_TENANT_ID) é obrigatório e deve ser o GUID do tenant.";
 
 function base64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -89,13 +90,15 @@ function readJwtPayload(token: unknown): Record<string, unknown> | null {
 }
 
 export function isMicrosoftLoginConfigured(): boolean {
-  return Boolean(clientId);
+  return Boolean(clientId) && isTenantConfigured;
 }
 
 export async function startMicrosoftLogin(role: AppRole): Promise<void> {
   if (!clientId) {
     throw new Error("O login Microsoft ainda precisa do Client ID configurado no ambiente.");
   }
+
+  if (!isTenantConfigured) throw new Error(TENANT_MISSING_MESSAGE);
 
   clearMicrosoftSession();
 
@@ -122,6 +125,7 @@ export async function startMicrosoftLogin(role: AppRole): Promise<void> {
 export async function finishMicrosoftLogin(search: string): Promise<MicrosoftSession> {
   clearMicrosoftSession();
   if (!clientId) throw new Error("O Client ID do login Microsoft não está configurado.");
+  if (!isTenantConfigured) throw new Error(TENANT_MISSING_MESSAGE);
 
   const params = new URLSearchParams(search);
   const providerError = params.get("error_description") || params.get("error");
@@ -159,7 +163,7 @@ export async function finishMicrosoftLogin(search: string): Promise<MicrosoftSes
   if (claims?.aud !== clientId || claims?.nonce !== pending.nonce || expiresAt <= Date.now()) {
     throw new Error("A resposta do login Microsoft não passou pela validação da aplicação.");
   }
-  if (isTenantRestricted && String(claims?.tid ?? "").toLowerCase() !== tenant.toLowerCase()) {
+  if (String(claims?.tid ?? "").toLowerCase() !== tenant) {
     throw new Error("Use uma conta do tenant institucional configurado para esta aplicação.");
   }
 

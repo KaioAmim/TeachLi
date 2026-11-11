@@ -7,8 +7,8 @@ const sessionKey = "teachli.microsoft.session";
 const pendingKey = "teachli.microsoft.pending-login";
 const clientId = "test-client";
 let auth;
-let restricted;
-const institutionTenant = "2431f40d-aa2e-4b81-ad64-765595682ee6";
+let unconfigured;
+const institutionTenant = "11111111-2222-4333-8444-555555555555";
 let redirect;
 const originalFetch = globalThis.fetch;
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
@@ -30,8 +30,8 @@ async function loadAuth(tenant) {
 }
 
 before(async () => {
-  auth = await loadAuth("organizations");
-  restricted = await loadAuth(institutionTenant);
+  auth = await loadAuth(institutionTenant);
+  unconfigured = await loadAuth("organizations");
 });
 
 beforeEach(() => {
@@ -63,7 +63,7 @@ after(() => {
 async function callback(role, claims = {}) {
   await auth.startMicrosoftLogin(role);
   const pending = JSON.parse(sessionStorage.getItem(pendingKey));
-  const payload = { aud: clientId, nonce: pending.nonce, exp: Math.floor(Date.now() / 1000) + 3600, name: "Teste", ...claims };
+  const payload = { aud: clientId, nonce: pending.nonce, exp: Math.floor(Date.now() / 1000) + 3600, name: "Teste", tid: institutionTenant, ...claims };
   // Fixture for the existing token-response parser, not proof of signature validation.
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ id_token: `header.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature` }) });
   return auth.finishMicrosoftLogin(`?code=test-code&state=${pending.state}`);
@@ -133,46 +133,42 @@ test("rejeita state, nonce, audiência e expiração inválidos", async () => {
 
 
 
-async function restrictedCallback(role, claims = {}) {
-  await restricted.startMicrosoftLogin(role);
-  const pending = JSON.parse(sessionStorage.getItem(pendingKey));
-  const payload = { aud: clientId, nonce: pending.nonce, exp: Math.floor(Date.now() / 1000) + 3600, name: "Teste", ...claims };
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ id_token: `header.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature` }) });
-  return restricted.finishMicrosoftLogin(`?code=test-code&state=${pending.state}`);
-}
-
-test("com Tenant ID configurado, o login usa a autoridade do tenant da instituição", async () => {
-  await restricted.startMicrosoftLogin("professor");
+test("o login usa a autoridade do tenant da instituição", async () => {
+  await auth.startMicrosoftLogin("professor");
+  assert.equal(redirect.hostname, "login.microsoftonline.com");
   assert.equal(redirect.pathname, `/${institutionTenant}/oauth2/v2.0/authorize`);
   assert.equal(redirect.searchParams.get("client_id"), clientId);
 });
 
-test("com Tenant ID configurado, aceita só token do tenant da instituição", async () => {
-  const session = await restrictedCallback("professor", { email: "testelibras@unibarretos.com.br", tid: institutionTenant.toUpperCase() });
+test("aceita só token do tenant da instituição", async () => {
+  const session = await callback("professor", { email: "testelibras@unibarretos.com.br", tid: institutionTenant.toUpperCase() });
   assert.equal(session.role, "professor");
   for (const tid of ["87654321-1234-1234-1234-123456789abc", undefined, ""]) {
-    await assert.rejects(restrictedCallback("professor", { email: "testelibras@unibarretos.com.br", tid }), /tenant institucional/);
+    await assert.rejects(callback("professor", { email: "testelibras@unibarretos.com.br", tid }), /tenant institucional/);
     assert.equal(sessionStorage.getItem(sessionKey), null);
   }
 });
 
-test("sem Tenant ID configurado, o tid do token não é exigido", async () => {
-  const session = await callback("professor", { email: "docente@unibarretos.com.br", tid: "87654321-1234-1234-1234-123456789abc" });
-  assert.equal(session.role, "professor");
+test("Tenant ID é obrigatório: sem GUID o login não inicia nem conclui", async () => {
+  assert.equal(unconfigured.isMicrosoftLoginConfigured(), false);
+  assert.equal(auth.isMicrosoftLoginConfigured(), true);
+  await assert.rejects(unconfigured.startMicrosoftLogin("aluno"), /Tenant ID institucional/);
+  assert.equal(redirect, null);
+  await assert.rejects(unconfigured.finishMicrosoftLogin("?code=x&state=y"), /Tenant ID institucional/);
 });
 
-test("login Microsoft funciona sem servidor de salas e sem Tenant ID institucional", async () => {
+test("login Microsoft funciona sem servidor de salas", async () => {
   globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
   await auth.startMicrosoftLogin('aluno');
   assert.equal(redirect.hostname, 'login.microsoftonline.com');
-  assert.equal(redirect.pathname, '/organizations/oauth2/v2.0/authorize');
+  assert.equal(redirect.pathname, `/${institutionTenant}/oauth2/v2.0/authorize`);
   assert.ok(JSON.parse(sessionStorage.getItem(pendingKey)).nonce);
 });
 
 test("retorno Microsoft salva login sem consultar o servidor de salas", async () => {
   await auth.startMicrosoftLogin('professor');
   const pending = JSON.parse(sessionStorage.getItem(pendingKey));
-  const payload = { aud: clientId, nonce: pending.nonce, exp: Math.floor(Date.now() / 1000) + 3600, email: 'p@unibarretos.com.br' };
+  const payload = { aud: clientId, nonce: pending.nonce, exp: Math.floor(Date.now() / 1000) + 3600, email: 'p@unibarretos.com.br', tid: institutionTenant };
   const calls = [];
   globalThis.fetch = async url => {
     calls.push(String(url));

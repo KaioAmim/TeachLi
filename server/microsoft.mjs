@@ -20,8 +20,7 @@ export function microsoftClientId(env = process.env) {
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Tenant ID da instituição. Quando definido, somente tokens desse tenant são aceitos;
-// ausente (ou "organizations"), vale qualquer conta organizacional Microsoft.
+// Tenant ID da instituição: obrigatório. Somente tokens desse tenant são aceitos.
 export function microsoftTenantId(env = process.env) {
   let value = env.MICROSOFT_TENANT_ID || env.VITE_MICROSOFT_TENANT_ID;
   if (!value) {
@@ -34,21 +33,21 @@ export function microsoftTenantId(env = process.env) {
     }
   }
   value = value?.trim();
-  if (!value || value.toLowerCase() === 'organizations') return undefined;
-  if (!GUID.test(value)) throw new Error('MICROSOFT_TENANT_ID deve ser o GUID do tenant ou "organizations".');
+  if (!value) throw new Error('Configure MICROSOFT_TENANT_ID (ou VITE_MICROSOFT_TENANT_ID) com o GUID do tenant da instituição.');
+  if (!GUID.test(value)) throw new Error('MICROSOFT_TENANT_ID deve ser o GUID do tenant da instituição.');
   return value.toLowerCase();
 }
 
 export function createMicrosoftVerifier(env = process.env, keySet) {
   const audience = microsoftClientId(env);
   const tenant = microsoftTenantId(env);
-  const keys = keySet ?? createRemoteJWKSet(new URL(`https://login.microsoftonline.com/${tenant ?? 'organizations'}/discovery/v2.0/keys`));
+  const keys = keySet ?? createRemoteJWKSet(new URL(`https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys`));
   return async token => {
     if (!audience) throw new Error('Configure o mesmo Client ID público já usado pelo login Microsoft.');
     // Unverified tid only constructs the expected issuer. It never selects a network host.
     const { tid } = decodeJwt(token);
     if (typeof tid !== 'string' || !GUID.test(tid) || tid === '9188040d-6c67-4c5b-b112-36a304b66dad') throw new Error('Use uma conta organizacional Microsoft.');
-    if (tenant && tid.toLowerCase() !== tenant) throw new Error('Use uma conta do tenant institucional configurado.');
+    if (tid.toLowerCase() !== tenant) throw new Error('Use uma conta do tenant institucional configurado.');
     const issuer = `https://login.microsoftonline.com/${tid}/v2.0`;
     const resolveKey = async (header, jwt) => {
       const key = await keys(header, jwt);
