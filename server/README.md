@@ -33,6 +33,7 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
 | `MICROSOFT_TENANT_ID` | **Obrigatório** (ou `VITE_MICROSOFT_TENANT_ID` em `client/.env*`): GUID do tenant da instituição |
 | `MICROSOFT_CLIENT_ID` | Sobrescreve o Client ID público lido de `client/.env*` |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
+| `TEACHLI_TRUST_PROXY` | `1` apenas atrás de proxy que sobrescreve `X-Forwarded-For` (limites por IP real) |
 | `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |
 | `PORT` | Porta do servidor, padrão 8787 |
 | `VITE_SIGNALING_URL` no cliente | Endereço do servidor, padrão `ws://localhost:8787` |
@@ -105,3 +106,7 @@ login independente do servidor, perfis por domínio, validação criptográfica 
 com Tenant ID obrigatório, isolamento, troca de sala, logout, expiração e
 requisições malformadas. A conferência com contas Microsoft reais e dispositivos da
 turma continua sendo validação manual.
+
+## Segurança e privacidade
+
+Cabeçalhos de segurança, limites de abuso e o registro de auditoria (sem token, e-mail ou nome) estão descritos em [Segurança e LGPD](../docs/SEGURANCA_E_LGPD.md).

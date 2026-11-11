@@ -264,6 +264,12 @@ export default function TrainMode() {
     <div className="workspace-page">
       <WorkspaceHeading title="Cada gesto, um novo aprendizado." description="Capture amostras e personalize o reconhecimento no seu navegador." backTo="/aluno" />
 
+      <p className="container" role="note" style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
+        Privacidade: as amostras de gestos (pontos das suas mãos) e o modelo treinado ficam
+        somente neste navegador, não são enviados ao servidor e servem apenas para melhorar o
+        reconhecimento para você. Em computador compartilhado, use <strong>Limpar</strong> ao terminar para apagá-los.
+      </p>
+
       <main id="conteudo" tabIndex={-1} className="container workspace-content grid lg:grid-cols-2 gap-8">
         <Card>
           <CardHeader>

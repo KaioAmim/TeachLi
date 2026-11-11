@@ -11,7 +11,8 @@ import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from 'jose';
 const origin = 'http://localhost:5173';
 async function setup(t) {
   let now = Date.now();
-  const app = createClassroomServer({ now: () => now, verifyIdentity: async token => {
+  const audit = [];
+  const app = createClassroomServer({ now: () => now, audit: event => audit.push(event), verifyIdentity: async token => {
     const identity = JSON.parse(token);
     return identity;
   } });
@@ -40,7 +41,7 @@ async function setup(t) {
     await first;
     return { ws, events, next, send: data => ws.send(JSON.stringify(data)) };
   };
-  return { base, request, login, connect, advance: ms => { now += ms; } };
+  return { base, audit, request, login, connect, advance: ms => { now += ms; } };
 }
 
 test('autenticação obrigatória, catálogo e origem', async t => {
@@ -192,4 +193,36 @@ test('URL malformada e frame inválido em socket recusado não derrubam o servi�
     });
     assert.equal((await request('/classrooms')).status, 401);
   }
+});
+
+test('respostas HTTP trazem cabeçalhos de segurança', async t => {
+  const { request } = await setup(t);
+  const response = await request('/classrooms');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('x-frame-options'), 'DENY');
+  assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+  assert.match(response.headers.get('content-security-policy'), /default-src 'none'/);
+  assert.match(response.headers.get('strict-transport-security'), /max-age=/);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal((await request('/classrooms', null, undefined, 'http://evil.test')).status, 403);
+});
+
+test('auditoria registra eventos sem token, e-mail ou nome', async t => {
+  const { request, login, audit } = await setup(t);
+  const token = await login('aluno', 'ana.silva');
+  await request('/auth/logout', token, {});
+  await request('/auth/microsoft/session', null, { idToken: 'x', role: 'aluno' }).catch(() => {});
+  const events = audit.map(e => e.event);
+  assert.ok(events.includes('login.ok') && events.includes('logout'));
+  const dump = JSON.stringify(audit);
+  assert.ok(!dump.includes(token) && !dump.includes('ana.silva') && !dump.includes('unibarretos'));
+  assert.ok(audit.every(e => typeof e.ts === 'string'));
+});
+
+test('limita tentativas de login por endereço e não confia em X-Forwarded-For por padrão', async t => {
+  const { base, audit } = await setup(t);
+  const post = () => fetch(base + '/auth/microsoft/session', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Forwarded-For': `10.0.0.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify({ idToken: 'x', role: 'aluno' }) });
+  let last; for (let i = 0; i < 31; i++) last = await post();
+  assert.equal(last.status, 429);
+  assert.ok(audit.some(e => e.event === 'login.rate_limited'));
 });
