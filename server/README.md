@@ -1,8 +1,9 @@
 # Servidor de salas TeachLi
 
-O login Microsoft existente continua direto entre navegador e Microsoft, usando
-`organizations`. **Não é necessário obter ou configurar Tenant ID da faculdade,
-nem cadastrar professores no Entra para usar esta etapa do protótipo.**
+O login Microsoft existente continua direto entre navegador e Microsoft, restrito
+ao tenant da instituição. **O Tenant ID é
+obrigatório e restringe o acesso; não é necessário cadastrar professores no Entra para
+usar esta etapa do protótipo.**
 
 Depois do login, o servidor conecta aluno e professor à sala escolhida. Há
 Laboratório A, B e C, Sala 01 e Sala 02. A sala aparece na comunicação, com presença,
@@ -27,8 +28,9 @@ no cliente**. Não exige novo registro do aplicativo ou Client Secret. Para um
 servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID`.
 `server/.env` é opcional e carregado automaticamente, quando existir.
 
-| Configuração opcional | Uso |
+| Configuração | Uso |
 | --- | --- |
+| `MICROSOFT_TENANT_ID` | **Obrigatório** (ou `VITE_MICROSOFT_TENANT_ID` em `client/.env*`): GUID do tenant da instituição |
 | `MICROSOFT_CLIENT_ID` | Sobrescreve o Client ID público lido de `client/.env*` |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
 | `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |
@@ -45,7 +47,9 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
    sem perder o login.
 3. O servidor verifica assinatura RS256, chaves oficiais Microsoft, emissor do token
    e da chave, audiência e validade. A origem organizacional vem do próprio token,
-   verificado criptograficamente; não há lista/configuração de Tenant IDs.
+   verificado criptograficamente. Com `MICROSOFT_TENANT_ID` (ou
+   `VITE_MICROSOFT_TENANT_ID` no cliente), obrigatório, tokens de outro tenant
+   são recusados e o servidor não inicia sem ele.
 4. Mantém-se a regra de perfil do protótipo: `@alunos.unibarretos.com.br` para aluno
    e `@unibarretos.com.br` para professor. Não se exige app role ou lista de docentes.
    Essa regra por domínio não equivale à comprovação administrativa de vínculo ou
@@ -98,6 +102,6 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
 
 Execute `npm test` em `server/` e `npm run test:auth` em `client/`. Os testes cobrem
 login independente do servidor, perfis por domínio, validação criptográfica sem
-Tenant ID configurado, isolamento, troca de sala, logout, expiração e requisições
-malformadas. A conferência com contas Microsoft reais e dispositivos da turma
-continua sendo validação manual, sem depender de obter o Tenant ID da faculdade.
+com Tenant ID obrigatório, isolamento, troca de sala, logout, expiração e
+requisições malformadas. A conferência com contas Microsoft reais e dispositivos da
+turma continua sendo validação manual.

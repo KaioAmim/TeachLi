@@ -5,7 +5,7 @@ import { connect as connectTcp } from 'node:net';
 import test from 'node:test';
 import WebSocket from 'ws';
 import { createClassroomServer } from './classrooms.mjs';
-import { createMicrosoftVerifier } from './microsoft.mjs';
+import { createMicrosoftVerifier, microsoftTenantId } from './microsoft.mjs';
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from 'jose';
 
 const origin = 'http://localhost:5173';
@@ -108,23 +108,51 @@ test('limita login, rejeita perfil forjado e segundo professor', async t => {
   assert.equal((await request('/auth/microsoft/session', null, {})).status, 429);
 });
 
-test('valida identidade Microsoft sem Tenant ID configurado e sem cadastro adicional de docente', async () => {
+test('valida identidade Microsoft do tenant configurado e sem cadastro adicional de docente', async () => {
   const tenant = '12345678-1234-1234-1234-123456789abc';
   const issuerTemplate = 'https://login.microsoftonline.com/{tenantid}/v2.0';
   const { privateKey, publicKey } = await generateKeyPair('RS256');
   const jwk = { ...await exportJWK(publicKey), kid: 'test', issuer: issuerTemplate };
-  const verify = createMicrosoftVerifier({ MICROSOFT_CLIENT_ID: 'client' }, createLocalJWKSet({ keys: [jwk] }));
+  const verify = createMicrosoftVerifier({ MICROSOFT_CLIENT_ID: 'client', MICROSOFT_TENANT_ID: tenant }, createLocalJWKSet({ keys: [jwk] }));
   const claims = { tid: tenant, oid: 'user-id', email: 'ana@alunos.unibarretos.com.br', iss: issuerTemplate.replace('{tenantid}', tenant), aud: 'client', sub: 'user', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 };
   const sign = patch => new SignJWT({ ...claims, ...patch }).setProtectedHeader({ alg: 'RS256', kid: 'test' }).sign(privateKey);
   const token = await sign({}); assert.equal((await verify(token)).role, 'aluno');
   assert.equal((await verify(await sign({ email: 'p@unibarretos.com.br' }))).role, 'professor');
   const otherTenant = '87654321-1234-1234-1234-123456789abc';
-  assert.equal((await verify(await sign({ tid: otherTenant, iss: issuerTemplate.replace('{tenantid}', otherTenant) }))).role, 'aluno');
-  for (const patch of [{ aud: 'other' }, { tid: 'other' }, { iss: 'other' }, { exp: 1 }, { nbf: claims.exp + 1000 }, { email: 'a@external.test' }, { email: 'a@unibarretos.com.br.evil.test' }, { tid: '9188040d-6c67-4c5b-b112-36a304b66dad' }]) await assert.rejects(verify(await sign(patch)));
+  await assert.rejects(verify(await sign({ tid: otherTenant, iss: issuerTemplate.replace('{tenantid}', otherTenant) })), /tenant institucional/);
+  for (const patch of [{ aud: 'other' }, { iss: 'other' }, { exp: 1 }, { nbf: claims.exp + 1000 }, { email: 'a@external.test' }, { email: 'a@unibarretos.com.br.evil.test' }, { tid: '9188040d-6c67-4c5b-b112-36a304b66dad' }]) await assert.rejects(verify(await sign(patch)));
   const parts = token.split('.'); parts[1] = Buffer.from(JSON.stringify({ ...claims, email: 'p@unibarretos.com.br' })).toString('base64url');
   await assert.rejects(verify(parts.join('.')));
-  const wrongKeyIssuer = createMicrosoftVerifier({ MICROSOFT_CLIENT_ID: 'client' }, createLocalJWKSet({ keys: [{ ...jwk, issuer: 'https://evil.test' }] }));
+  const wrongKeyIssuer = createMicrosoftVerifier({ MICROSOFT_CLIENT_ID: 'client', MICROSOFT_TENANT_ID: tenant }, createLocalJWKSet({ keys: [{ ...jwk, issuer: 'https://evil.test' }] }));
   await assert.rejects(wrongKeyIssuer(token), /Emissor da chave/);
+});
+
+test('restringe a identidade ao Tenant ID institucional configurado', async () => {
+  const tenant = '11111111-2222-4333-8444-555555555555';
+  const otherTenant = '87654321-1234-1234-1234-123456789abc';
+  const issuerTemplate = 'https://login.microsoftonline.com/{tenantid}/v2.0';
+  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const jwk = { ...await exportJWK(publicKey), kid: 'test', issuer: issuerTemplate };
+  const keys = createLocalJWKSet({ keys: [jwk] });
+  const verify = createMicrosoftVerifier({ MICROSOFT_CLIENT_ID: 'client', MICROSOFT_TENANT_ID: tenant.toUpperCase() }, keys);
+  const claims = { tid: tenant, oid: 'user-id', email: 'testelibras@unibarretos.com.br', iss: issuerTemplate.replace('{tenantid}', tenant), aud: 'client', sub: 'user', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 };
+  const sign = patch => new SignJWT({ ...claims, ...patch }).setProtectedHeader({ alg: 'RS256', kid: 'test' }).sign(privateKey);
+  const identity = await verify(await sign({}));
+  assert.equal(identity.role, 'professor');
+  assert.equal(identity.id, `${tenant}:user-id`);
+  // Conta organizacional válida, mas de outro tenant, é recusada mesmo com assinatura e emissor corretos.
+  await assert.rejects(verify(await sign({ tid: otherTenant, iss: issuerTemplate.replace('{tenantid}', otherTenant) })), /tenant institucional/);
+  // O tenant do token não pode ser forjado: o emissor precisa corresponder ao tenant configurado.
+  await assert.rejects(verify(await sign({ iss: issuerTemplate.replace('{tenantid}', otherTenant) })));
+});
+
+test('lê e valida o Tenant ID da configuração', () => {
+  const tenant = '11111111-2222-4333-8444-555555555555';
+  assert.equal(microsoftTenantId({ MICROSOFT_TENANT_ID: tenant.toUpperCase() }), tenant);
+  assert.equal(microsoftTenantId({ VITE_MICROSOFT_TENANT_ID: tenant }), tenant);
+  assert.throws(() => microsoftTenantId({ MICROSOFT_TENANT_ID: 'organizations' }), /GUID/);
+  assert.throws(() => microsoftTenantId({ MICROSOFT_TENANT_ID: 'nao-e-guid' }), /GUID/);
+  assert.throws(() => createMicrosoftVerifier({ MICROSOFT_CLIENT_ID: 'client', MICROSOFT_TENANT_ID: 'nao-e-guid' }), /GUID/);
 });
 
 test('logout de sessão perdida é idempotente', async t => {

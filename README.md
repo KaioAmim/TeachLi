@@ -24,7 +24,7 @@ O reconhecimento depende dos dados de treino e precisa de avaliação com usuár
 
 A comunicação por texto usa o servidor independente e reaproveita o login Microsoft
 já existente. Consulte o [guia de salas e autenticação](server/README.md).
-Não é necessário fornecer Tenant ID da faculdade ou cadastrar docentes no Entra.
+O Tenant ID da instituição é obrigatório e restringe o login a esse tenant; não é necessário cadastrar docentes no Entra.
 
 ## Executar localmente
 
@@ -69,17 +69,23 @@ Microsoft Entra e defina `VITE_MICROSOFT_CLIENT_ID` em `client/.env.local`:
 
 ```bash
 VITE_MICROSOFT_CLIENT_ID=application-client-id-da-microsoft
-VITE_MICROSOFT_TENANT_ID=organizations
+VITE_MICROSOFT_TENANT_ID=guid-do-tenant-da-instituicao
 ```
 
-O arquivo `client/.env.local` com o Client ID público do TeachLi e `organizations`
-foi incluído neste repositório para facilitar o teste local. Ele não contém senha
-nem Client Secret; não acrescente credenciais privadas a esse arquivo versionado.
+`VITE_MICROSOFT_TENANT_ID` é obrigatório e deve ser o GUID do tenant da instituição
+(`organizations` não é aceito). O login usa a autoridade desse tenant, o cliente confere
+o `tid` do token e o servidor de salas recusa tokens de qualquer outro tenant. O perfil
+continua vindo do domínio do e-mail.
+
+Copie `client/.env.example` para `client/.env.local` e preencha os valores. O
+`client/.env.local` é ignorado pelo Git: Client ID e Tenant ID reais não devem ser
+versionados nem publicados no GitHub; peça-os à coordenação do projeto.
 
 No registro do aplicativo, cadastre como URLs de redirecionamento do tipo **SPA**
 `http://127.0.0.1:5173/entrar` e, se for usar esse endereço, também
-`http://localhost:5173/entrar`. O valor `organizations` usa contas organizacionais
-Microsoft. Não use Client Secret no frontend.
+`http://localhost:5173/entrar`. O GUID do tenant restringe o login à instituição. Se as contas de alunos
+pertencerem a outro tenant, a restrição por um único GUID as bloqueará. Não use
+Client Secret no frontend.
 
 Se aparecer `AADSTS50011` com `http://127.0.0.1:5174/entrar`, abra o TeachLi em
 `http://127.0.0.1:5173` e inicie o login novamente. Não basta trocar a porta
@@ -93,8 +99,8 @@ do outro domínio; contas externas, sem e-mail e o domínio fictício
 `@prof.unibarretos.com.br` são recusados. Sessões salvas são reavaliadas ao abrir
 as rotas, incluindo o treino de aluno. Não há exceção Microsoft para professor demo.
 
-O login preserva o fluxo anterior, direto com a Microsoft, sem exigir Tenant ID
-institucional ou cadastro adicional de docentes. Depois do retorno, o servidor
+O login preserva o fluxo anterior, direto com a Microsoft, e é restrito ao
+Tenant ID da instituição (obrigatório), sem cadastro adicional de docentes. Depois do retorno, o servidor
 valida a assinatura e a validade do token ao preparar a comunicação por sala,
 mantendo os mesmos domínios de perfil já usados pelo protótipo.
 O servidor reaproveita o Client ID público do cliente automaticamente. Execute
@@ -165,4 +171,4 @@ movimentos completos, Ç e histórico continuam no [plano de evolução](docs/GU
 A verificação com contas reais de aluno e professor em dispositivos diferentes
 ainda exige os equipamentos e os logins dos titulares. Testes com identidades
 simuladas e sessões separadas no mesmo computador não substituem essa avaliação.
-Não é necessário compartilhar senhas nem obter Tenant ID institucional para isso.
+Não é necessário compartilhar senhas para isso. 

@@ -93,9 +93,9 @@ silenciosamente para 5174. Pode-se iniciar separadamente com `npm run dev` em
 
 O aplicativo Microsoft existente precisa de Client ID público e retorno SPA
 cadastrado para a origem exata: `http://localhost:5173/entrar` e/ou
-`http://127.0.0.1:5173/entrar`. A configuração local usa
-`VITE_MICROSOFT_TENANT_ID=organizations`. **Não exige Tenant ID da faculdade,
-novo aplicativo ou cadastro adicional de docentes nesta entrega.** Nunca coloque
+`http://127.0.0.1:5173/entrar`. O Tenant ID da instituição é obrigatório em
+`VITE_MICROSOFT_TENANT_ID` (GUID; `organizations` não é aceito). **O Tenant ID restringe o acesso, mas não substitui a regra de perfil
+por domínio nem exige cadastro adicional de docentes nesta entrega.** Nunca coloque
 Client Secret em variáveis `VITE_*`. Consulte o [README](../README.md) e o
 [guia do servidor](../server/README.md) para configuração completa.
 
@@ -114,9 +114,10 @@ sem encerrar a conta Microsoft em outros serviços.
 | Configuração | Uso |
 | --- | --- |
 | `VITE_MICROSOFT_CLIENT_ID` | ID público do aplicativo já usado no login |
-| `VITE_MICROSOFT_TENANT_ID` | `organizations` no fluxo atual |
+| `VITE_MICROSOFT_TENANT_ID` | GUID do tenant da instituição (obrigatório; restringe o login) |
 | `VITE_SIGNALING_URL` | Servidor de salas; padrão `ws://localhost:8787` |
 | `MICROSOFT_CLIENT_ID` no servidor | Opcional: mesmo ID, quando hospedado separadamente do cliente |
+| `MICROSOFT_TENANT_ID` no servidor | Mesmo tenant (obrigatório; lido do cliente se não definido); o servidor recusa tokens de outro tenant |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas autorizadas; padrão localhost/127.0.0.1:5173 |
 | `TEACHLI_ROOMS` | Catálogo opcional de salas com IDs estáveis |
 | `PORT` | Porta do servidor; padrão 8787 |
