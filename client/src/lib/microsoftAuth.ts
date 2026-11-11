@@ -222,6 +222,7 @@ export async function logoutMicrosoftSession(): Promise<void> {
     }
   }
   clearMicrosoftSession();
+  sessionStorage.removeItem(PENDING_LOGIN_KEY);
 }
 
 

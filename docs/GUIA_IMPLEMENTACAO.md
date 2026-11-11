@@ -24,12 +24,12 @@ avaliação de alunos surdos e profissionais de Libras.
 
 - [x] Definir a fronteira do cliente a partir de `src/main.tsx` e todos os imports,
   das declarações locais e da configuração Vite, mantendo TypeScript estrito.
-- [x] Preservar o código herdado e sua auditoria em `npm run typecheck:legacy`.
+- [x] Remover o backend e as integrações herdadas do template anterior (Manus).
 - [x] Manter TypeScript no comando completo de build, antes do Vite.
-- [ ] Regularizar separadamente telas e APIs legadas, caso sejam reintegradas.
+- [ ] Regularizar separadamente telas antigas (`SalaAula`, `Classroom`, `TrainGestures`, WebRTC) caso sejam reintegradas.
 
-Os pacotes atuais são `client/` e `server/`; o manifesto completo da raiz é
-herdado. A auditoria legada ainda possui erros e não é apresentada como aprovada.
+Os pacotes atuais são `client/` e `server/`; o `package.json` da raiz só expõe o
+atalho `npm run dev:classroom`.
 O aceite desta etapa exige instalação limpa, tipos e build do pacote atual,
 sem remover a checagem ou silenciar erros. Resultados das execuções ficam no PR.
 

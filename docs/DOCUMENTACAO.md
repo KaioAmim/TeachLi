@@ -23,8 +23,8 @@ transcrição, compartilha frases finalizadas com os alunos da mesma sala.
 | Reconhecimento dinâmico | Captura de clipes e treino Conv1D local | Sem modelo temporal base; representação precisa preservar deslocamento |
 | VLibras | Widget externo para texto selecionado na página | Sem contrato próprio de fila ou controle automático do avatar |
 | Identidade visual | Logo transparente com contorno branco, também usada no favicon; rolagem nativa | Acessibilidade precisa de avaliação com usuários |
-| Histórico de aulas | Não implementado no fluxo atual | Há código legado fora das rotas |
-| Videochamada | Código legado preservado | Não integra as salas atuais |
+| Histórico de aulas | Não implementado | O backend e a tela de histórico foram removidos |
+| Videochamada | Código WebRTC antigo fora das rotas | Não integra as salas atuais |
 
 ## Arquitetura e rotas
 
@@ -32,7 +32,6 @@ transcrição, compartilha frases finalizadas com os alunos da mesma sala.
 | --- | --- | --- |
 | `client/` | React 18, TypeScript, Vite 5, Tailwind 3, Wouter, MediaPipe e TensorFlow.js | `index.html` → `src/main.tsx` → `App.tsx`; saída `client/dist/` |
 | `server/` | Node.js, `ws` e `jose`; autenticação da comunicação e encaminhamento de texto | `index.mjs` → `classrooms.mjs` e `microsoft.mjs` |
-| Raiz, `server/_core`, `drizzle/`, `shared/` | Aplicação herdada Express/tRPC/Drizzle, com outro manifesto | Não necessária para iniciar o protótipo atual |
 
 O reconhecimento e o treino acontecem no navegador. O servidor recebe o texto
 confirmado e as frases finais e encaminha apenas para o perfil oposto na mesma
@@ -48,9 +47,8 @@ sala. Não transmite câmera, vídeo ou áudio nesta versão.
 | `/professor` | Mensagens recebidas e transcrição compartilhada |
 
 As telas de comunicação exigem login do perfil correspondente e sala selecionada.
-Atualizar a página exige selecionar a sala novamente. `History.tsx`,
-`SalaAula.tsx`, `Classroom.tsx`, `TrainGestures.tsx` e `ComponentShowcase.tsx`
-não são rotas atuais. A presença desses arquivos não torna seus recursos disponíveis.
+Atualizar a página exige selecionar a sala novamente. `SalaAula.tsx`,
+`Classroom.tsx` e `TrainGestures.tsx` não são rotas atuais. A presença desses arquivos não torna seus recursos disponíveis.
 
 ### Fronteira de compilação e legado
 
@@ -61,20 +59,12 @@ importados pela aplicação passam automaticamente a ser verificados. Uma nova
 entrada independente, como um worker não importado, precisa ser cadastrada também.
 O modo `strict` permanece ativo; o build continua executando TypeScript antes do Vite.
 
-A verificação antiga de toda a árvore está preservada em
-`client/tsconfig.legacy.json`, acessível por `npm run typecheck:legacy`. Ela ainda
-aponta dependências e contratos incompatíveis nos arquivos herdados, como tRPC,
-`@shared`, componentes de demonstração e exports antigos. Essa auditoria não é
-uma etapa de publicação do cliente atual. Antes de reintegrar qualquer módulo
-legado, é necessário corrigir suas dependências e tipos; importá-lo no aplicativo
-faz seus erros voltarem à verificação normal. Não foram apagadas telas antigas
-nem instaladas todas as dependências do outro aplicativo para contornar o problema.
+Segurança, privacidade e pendências institucionais estão em
+[SEGURANCA_E_LGPD.md](SEGURANCA_E_LGPD.md).
 
-O manifesto da raiz mantém React 19, Vite 7, Express/tRPC e Drizzle/MySQL.
-Não misture suas instalações com `client/`. `npm run dev:classroom` é o atalho
-na raiz para iniciar os dois pacotes atuais. Migrações, OAuth Manus e configuração
-antiga de publicação não são pré-requisitos deste fluxo. A API legada de sessões
-não foi certificada: se reutilizada, precisa de autorização por participante e sessão.
+O `package.json` da raiz contém apenas o atalho `npm run dev:classroom`, que inicia os dois
+pacotes atuais. O backend herdado (Express/tRPC/Drizzle/MySQL, OAuth e integrações de terceiros
+do template anterior) foi removido do repositório.
 
 ## Instalação, login e publicação
 
@@ -216,6 +206,16 @@ com chaves de teste, expiração, logout, isolamento, troca de sala e entradas
 malformadas. Respostas Microsoft simuladas não comprovam login no Entra real.
 O teste de interface com duas sessões isoladas verifica interação entre aluno e
 professor no mesmo computador; não equivale a dois dispositivos físicos.
+
+### Resultado da revisão de segurança de 11/11/2026
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm test` em `server/` | 12 testes passaram (autenticação, tenant, papéis, origem, cabeçalhos, auditoria, limite de tentativas) |
+| `npm run test:auth` em `client/` | 17 testes passaram |
+| `npm run typecheck` e `npm run build` em `client/` | Passaram, com CSP injetada no `index.html`; permanece o aviso de tamanho do JavaScript |
+| `npm audit` em `server/` e `client/` (dependências de produção) | 0 vulnerabilidades |
+| CSP com VLibras, câmera e login Microsoft em navegador | Não executado; conferir manualmente |
 
 ### Resultado da revisão de 23/10/2026
 

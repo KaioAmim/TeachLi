@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { createMicrosoftVerifier } from './microsoft.mjs';
@@ -11,20 +11,41 @@ export const DEFAULT_ROOMS = [
   { id: 'sala-02', name: 'Sala 02' },
 ];
 
-export function createClassroomServer({ env = process.env, verifyIdentity = createMicrosoftVerifier(env), now = Date.now } = {}) {
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Cross-Origin-Resource-Policy': 'same-site',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+};
+
+export function createClassroomServer({ env = process.env, verifyIdentity = createMicrosoftVerifier(env), now = Date.now, audit = event => console.log(JSON.stringify(event)) } = {}) {
   const catalog = env.TEACHLI_ROOMS ? JSON.parse(env.TEACHLI_ROOMS) : DEFAULT_ROOMS;
   if (!Array.isArray(catalog) || !catalog.length || catalog.length > 100 || catalog.some(r => !/^[a-z0-9-]{1,60}$/.test(r.id) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100) || new Set(catalog.map(r => r.id)).size !== catalog.length) throw new Error('TEACHLI_ROOMS inválido.');
   const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set() }]));
   const origins = (env.TEACHLI_CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   const sessions = new Map();
   const attempts = new Map();
+  const sockets = new Map();
+  const MAX_ATTEMPT_ENTRIES = 10000, MAX_SOCKETS_PER_IP = 20;
+  // Atrás de proxy reverso o IP real vem de X-Forwarded-For. Só confie nele com TEACHLI_TRUST_PROXY=1
+  // e quando o proxy sobrescreve o cabeçalho; caso contrário, qualquer cliente poderia forjá-lo.
+  const trustProxy = env.TEACHLI_TRUST_PROXY === '1';
+  const clientIp = req => {
+    const forwarded = trustProxy ? req.headers['x-forwarded-for']?.split(',').pop()?.trim() : undefined;
+    return forwarded || req.socket.remoteAddress || 'unknown';
+  };
+  // Registro de auditoria sem token, e-mail ou nome: o usuário é identificado por hash curto do ID Microsoft.
+  const who = id => createHash('sha256').update(String(id)).digest('hex').slice(0, 12);
+  const log = (event, fields = {}) => { try { audit({ ts: new Date(now()).toISOString(), event, ...fields }); } catch { /* auditoria nunca derruba o serviço */ } };
   const opaque = () => randomBytes(32).toString('base64url');
   const send = (ws, event) => { if (ws.readyState === 1) ws.send(JSON.stringify(event)); };
   const allowed = req => origins.includes(req.headers.origin);
   const validSession = token => { const session = sessions.get(token); return session?.expiresAt > now() ? session : null; };
   const bearer = req => req.headers.authorization?.replace(/^Bearer /, '');
   const json = (req, res, status, body) => {
-    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Origin', ...(allowed(req) ? { 'Access-Control-Allow-Origin': req.headers.origin } : {}) });
+    res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Origin', ...(allowed(req) ? { 'Access-Control-Allow-Origin': req.headers.origin } : {}) });
     res.end(JSON.stringify(body));
   };
   const readJson = async req => {
@@ -45,32 +66,36 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const server = createServer(async (req, res) => {
     if (!allowed(req)) return json(req, res, 403, { error: 'Origem não autorizada.' });
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, { 'Access-Control-Allow-Origin': req.headers.origin, 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' });
+      res.writeHead(204, { ...SECURITY_HEADERS, 'Access-Control-Allow-Origin': req.headers.origin, 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' });
       return res.end();
     }
     try {
       if (!/^\/(?!\/)/.test(req.url ?? '')) return json(req, res, 400, { error: 'Endereço inválido.' });
       const path = new URL(req.url, 'http://localhost').pathname;
       if (req.method === 'POST' && path === '/auth/microsoft/session') {
-        const ip = req.socket.remoteAddress;
+        const ip = clientIp(req);
         let limit = attempts.get(ip);
-        if (!limit || limit.until <= now()) { limit = { count: 0, until: now() + 60000 }; attempts.set(ip, limit); }
-        if (++limit.count > 30) return json(req, res, 429, { error: 'Muitas tentativas. Aguarde um minuto.' });
+        if (!limit || limit.until <= now()) {
+          if (!limit && attempts.size >= MAX_ATTEMPT_ENTRIES) return json(req, res, 429, { error: 'Muitas tentativas. Aguarde um minuto.' });
+          limit = { count: 0, until: now() + 60000 }; attempts.set(ip, limit);
+        }
+        if (++limit.count > 30) { log('login.rate_limited'); return json(req, res, 429, { error: 'Muitas tentativas. Aguarde um minuto.' }); }
         const body = await readJson(req);
         if (typeof body?.idToken !== 'string' || !body.idToken) return json(req, res, 401, { error: 'Entre novamente pela Microsoft antes de acessar as salas.' });
         let identity;
         try { identity = await verifyIdentity(body.idToken); }
-        catch { return json(req, res, 401, { error: 'Não foi possível validar sua conta. Entre novamente com sua conta institucional Microsoft.' }); }
-        if (identity.role !== body.role) return json(req, res, 403, { error: 'Esta conta não tem permissão para o perfil escolhido.' });
+        catch { log('login.failed'); return json(req, res, 401, { error: 'Não foi possível validar sua conta. Entre novamente com sua conta institucional Microsoft.' }); }
+        if (identity.role !== body.role) { log('login.role_denied', { user: who(identity.id) }); return json(req, res, 403, { error: 'Esta conta não tem permissão para o perfil escolhido.' }); }
         if (sessions.size >= 10000) return json(req, res, 503, { error: 'Serviço ocupado. Tente novamente.' });
         const token = opaque(); const expiresAt = Math.min(identity.exp * 1000, now() + 3600000);
         if (expiresAt <= now()) return json(req, res, 401, { error: 'Sessão expirada.' });
         sessions.set(token, { ...identity, expiresAt });
+        log('login.ok', { user: who(identity.id), role: identity.role });
         return json(req, res, 200, { token, role: identity.role, profile: { name: identity.name, email: identity.email, expiresAt } });
       }
       const token = bearer(req);
       // Logout is idempotent, including sessions lost after a server restart.
-      if (path === '/auth/logout' && req.method === 'POST') { revoke(token); return json(req, res, 200, { ok: true }); }
+      if (path === '/auth/logout' && req.method === 'POST') { if (sessions.has(token)) log('logout', { user: who(sessions.get(token).id) }); revoke(token); return json(req, res, 200, { ok: true }); }
       const session = validSession(token);
       if (!session) return json(req, res, 401, { error: 'Sua sessão expirou. Entre novamente pela Microsoft.' });
       if (path === '/classrooms' && req.method === 'GET') return json(req, res, 200, { rooms: catalog });
@@ -90,7 +115,11 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     const protocols = (req.headers['sec-websocket-protocol'] ?? '').split(',').map(s => s.trim());
     const token = protocols.find(p => p !== 'teachli-session');
     const session = validSession(token);
-    if (!allowed(req) || url.pathname !== '/classroom' || !session) return reject('Sessão inválida. Entre novamente pela Microsoft.');
+    if (!allowed(req) || url.pathname !== '/classroom' || !session) { log('ws.denied'); return reject('Sessão inválida. Entre novamente pela Microsoft.'); }
+    const ip = clientIp(req);
+    if ((sockets.get(ip) ?? 0) >= MAX_SOCKETS_PER_IP) return reject('Muitas conexões deste endereço.');
+    sockets.set(ip, (sockets.get(ip) ?? 0) + 1);
+    ws.on('close', () => { const n = (sockets.get(ip) ?? 1) - 1; if (n > 0) sockets.set(ip, n); else sockets.delete(ip); });
     const room = rooms.get(url.searchParams.get('room'));
     if (!room) return reject('Sala não cadastrada. Escolha uma sala da lista.');
     if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.token !== token)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
@@ -98,6 +127,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     for (const r of rooms.values()) for (const old of [...r.clients]) if (old.token === token) { remove(old); old.ws.close(1000, 'Sala alterada'); }
     const client = { ws, token, session, room, seen: new Set(), count: 0, until: now() + 10000 };
     room.clients.add(client);
+    log('room.join', { user: who(session.id), role: session.role, room: room.id });
     send(ws, { type: 'joined', room: { id: room.id, name: room.name }, role: session.role });
     presence(room);
     ws.on('message', raw => {

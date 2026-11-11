@@ -22,6 +22,9 @@ O reconhecimento depende dos dados de treino e precisa de avaliação com usuár
 | VLibras | Widget opcional no Modo Aluno para traduzir o texto exibido na página |
 | Modo Professor | Receber mensagens dos alunos e compartilhar frases finais da transcrição na sala |
 
+Segurança, privacidade (LGPD) e os pontos que dependem da instituição estão em
+[Segurança e LGPD](docs/SEGURANCA_E_LGPD.md).
+
 A comunicação por texto usa o servidor independente e reaproveita o login Microsoft
 já existente. Consulte o [guia de salas e autenticação](server/README.md).
 O Tenant ID da instituição é obrigatório e restringe o login a esse tenant; não é necessário cadastrar docentes no Entra.
@@ -112,10 +115,8 @@ Mensagens do aluno exigem confirmação; Enter envia e Shift+Enter insere linha.
 Frases finalizadas do professor são compartilhadas enquanto a transcrição estiver
 ativa. Não há histórico persistente ou envio para participantes de outra sala.
 
-> O `package.json` da raiz pertence ao caminho herdado Express/tRPC/Drizzle,
-> com versões diferentes de React e Vite. Os comandos acima usam os pacotes de
-> `client/` e `server/`. Não misture instalações nem execute migrações para
-> iniciar a aplicação atual. Consulte [arquitetura e legado](docs/DOCUMENTACAO.md).
+> O `package.json` da raiz só expõe o atalho `npm run dev:classroom`. Instale as
+> dependências em `client/` e `server/` separadamente com `npm ci`.
 
 ## Verificar e gerar o site
 
@@ -130,10 +131,7 @@ npm run preview
 O build independente gera `client/dist/`; o preview serve esse build localmente.
 O comando completo verifica os tipos antes de compilar. O TypeScript acompanha
 a entrada `src/main.tsx` e todos os seus imports, as declarações locais e a
-configuração Vite, mantendo o modo estrito. Telas e APIs herdadas têm uma
-auditoria separada, `npm run typecheck:legacy`, que ainda aponta pendências e
-não integra o build do aplicativo atual. Reintroduzir um módulo legado por import
-volta a incluí-lo na checagem normal. Veja a [fronteira de compilação](docs/DOCUMENTACAO.md#fronteira-de-compilação-e-legado).
+configuração Vite, mantendo o modo estrito. Veja a [fronteira de compilação](docs/DOCUMENTACAO.md#fronteira-de-compilação-e-legado).
 Não use o preview como validação se estiver servindo artefatos antigos.
 Para publicar, hospede o frontend com fallback das rotas para `index.html` e
 confira os caminhos dos modelos; o Vite atual usa a base `/`.
