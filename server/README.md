@@ -102,6 +102,7 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
   continuam fora das rotas e esta entrega não inclui videochamada.
 
 Execute `npm test` em `server/` e `npm run test:auth` em `client/`. Os testes cobrem
+cabeçalhos de segurança, auditoria sem dados pessoais, limite de tentativas,
 login independente do servidor, perfis por domínio, validação criptográfica sem
 com Tenant ID obrigatório, isolamento, troca de sala, logout, expiração e
 requisições malformadas. A conferência com contas Microsoft reais e dispositivos da

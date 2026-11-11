@@ -22,6 +22,9 @@ O reconhecimento depende dos dados de treino e precisa de avaliação com usuár
 | VLibras | Widget opcional no Modo Aluno para traduzir o texto exibido na página |
 | Modo Professor | Receber mensagens dos alunos e compartilhar frases finais da transcrição na sala |
 
+Segurança, privacidade (LGPD) e os pontos que dependem da instituição estão em
+[Segurança e LGPD](docs/SEGURANCA_E_LGPD.md).
+
 A comunicação por texto usa o servidor independente e reaproveita o login Microsoft
 já existente. Consulte o [guia de salas e autenticação](server/README.md).
 O Tenant ID da instituição é obrigatório e restringe o login a esse tenant; não é necessário cadastrar docentes no Entra.

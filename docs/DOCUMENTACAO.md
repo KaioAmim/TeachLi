@@ -23,8 +23,8 @@ transcrição, compartilha frases finalizadas com os alunos da mesma sala.
 | Reconhecimento dinâmico | Captura de clipes e treino Conv1D local | Sem modelo temporal base; representação precisa preservar deslocamento |
 | VLibras | Widget externo para texto selecionado na página | Sem contrato próprio de fila ou controle automático do avatar |
 | Identidade visual | Logo transparente com contorno branco, também usada no favicon; rolagem nativa | Acessibilidade precisa de avaliação com usuários |
-| Histórico de aulas | Não implementado no fluxo atual | Há código legado fora das rotas |
-| Videochamada | Código legado preservado | Não integra as salas atuais |
+| Histórico de aulas | Não implementado | O backend e a tela de histórico foram removidos |
+| Videochamada | Código WebRTC antigo fora das rotas | Não integra as salas atuais |
 
 ## Arquitetura e rotas
 
@@ -47,9 +47,8 @@ sala. Não transmite câmera, vídeo ou áudio nesta versão.
 | `/professor` | Mensagens recebidas e transcrição compartilhada |
 
 As telas de comunicação exigem login do perfil correspondente e sala selecionada.
-Atualizar a página exige selecionar a sala novamente. `History.tsx`,
-`SalaAula.tsx`, `Classroom.tsx`, `TrainGestures.tsx` e `ComponentShowcase.tsx`
-não são rotas atuais. A presença desses arquivos não torna seus recursos disponíveis.
+Atualizar a página exige selecionar a sala novamente. `SalaAula.tsx`,
+`Classroom.tsx` e `TrainGestures.tsx` não são rotas atuais. A presença desses arquivos não torna seus recursos disponíveis.
 
 ### Fronteira de compilação e legado
 
@@ -59,6 +58,9 @@ não são rotas atuais. A presença desses arquivos não torna seus recursos dis
 importados pela aplicação passam automaticamente a ser verificados. Uma nova
 entrada independente, como um worker não importado, precisa ser cadastrada também.
 O modo `strict` permanece ativo; o build continua executando TypeScript antes do Vite.
+
+Segurança, privacidade e pendências institucionais estão em
+[SEGURANCA_E_LGPD.md](SEGURANCA_E_LGPD.md).
 
 O `package.json` da raiz contém apenas o atalho `npm run dev:classroom`, que inicia os dois
 pacotes atuais. O backend herdado (Express/tRPC/Drizzle/MySQL, OAuth e integrações de terceiros
@@ -204,6 +206,16 @@ com chaves de teste, expiração, logout, isolamento, troca de sala e entradas
 malformadas. Respostas Microsoft simuladas não comprovam login no Entra real.
 O teste de interface com duas sessões isoladas verifica interação entre aluno e
 professor no mesmo computador; não equivale a dois dispositivos físicos.
+
+### Resultado da revisão de segurança de 11/11/2026
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm test` em `server/` | 12 testes passaram (autenticação, tenant, papéis, origem, cabeçalhos, auditoria, limite de tentativas) |
+| `npm run test:auth` em `client/` | 17 testes passaram |
+| `npm run typecheck` e `npm run build` em `client/` | Passaram, com CSP injetada no `index.html`; permanece o aviso de tamanho do JavaScript |
+| `npm audit` em `server/` e `client/` (dependências de produção) | 0 vulnerabilidades |
+| CSP com VLibras, câmera e login Microsoft em navegador | Não executado; conferir manualmente |
 
 ### Resultado da revisão de 23/10/2026
 

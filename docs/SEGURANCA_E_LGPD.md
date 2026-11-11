@@ -154,7 +154,36 @@ possíveis titulares vulneráveis. Pontos a tratar: necessidade e proporcionalid
 6. Decidir sobre papéis adicionais (gestor e admin) e a atribuição de professores **[produto]**.
 7. Reauditar após mudanças relevantes e antes de uso em produção.
 
-## 14. Verificação realizada
+## 14. Tópicos que devem ser tratados pela instituição
+
+**Governança e jurídico**
+1. Nomear o **encarregado (DPO)** e publicar o canal de contato para os titulares.
+2. Definir **controlador e operador** (UniBarretos, fornecedores de hospedagem, Microsoft).
+3. Validar a **base legal de cada finalidade** (seção 3), inclusive a do dado possivelmente sensível.
+4. Decidir se **imagem e pontos das mãos** são dado biométrico/sensível e, se forem, a hipótese do art. 11.
+5. Elaborar o **RIPD** (seção 11) e o **registro das operações de tratamento** (art. 37).
+6. Aprovar e publicar a **política de privacidade** e os avisos na interface (texto-base na seção 9).
+7. Tratar **menores de idade**, se houver alunos com menos de 18 anos (art. 14: melhor interesse e consentimento dos responsáveis quando aplicável).
+8. Revisar **contratos e termos** com Microsoft e com a hospedagem (localização dos dados, transferência internacional, art. 33).
+9. Verificar o tratamento pelo **serviço de fala do navegador** (áudio do professor pode ir a terceiros) e pelo **VLibras** (serviço externo do governo).
+10. Definir **política de exceções**: quem autoriza professores, funcionários e contas especiais.
+
+**Segurança e operação**
+11. Hospedar com **HTTPS/WSS**, firewall, proxy confiável (`TEACHLI_TRUST_PROXY`) e origens explícitas (`TEACHLI_CORS_ORIGIN`).
+12. Guardar **configuração e segredos** em cofre; rotacionar o Client ID se houver suspeita de exposição. Os IDs antigos continuam no histórico do Git.
+13. Definir **retenção, acesso e rotação dos logs de auditoria** e quem monitora alertas.
+14. Aprovar o **plano de resposta a incidentes** e o fluxo de comunicação à ANPD e aos titulares (art. 48).
+15. Definir **backup** da configuração do Entra e da hospedagem, e responsável pela recuperação.
+16. Decidir sobre **papéis de gestor/administrador** e como atribuir professores (hoje, só pelo domínio do e-mail).
+17. Confirmar se **contas de alunos pertencem ao mesmo tenant** dos professores; se não, a restrição por um único GUID bloqueia os alunos.
+18. Planejar **teste de invasão/revisão independente** e reauditoria antes de uso em produção.
+
+**Uso em sala e pessoas**
+19. Orientar alunos a **limpar os dados de treino** em computadores compartilhados dos laboratórios.
+20. Treinar professores e alunos sobre **uso aceitável** e sobre onde reportar problemas.
+21. Definir **base e avaliação com usuários** para o reconhecimento de Libras (experimental; não substitui intérprete).
+
+## 15. Verificação realizada
 
 Os testes automatizados (`npm test` em `server/`, `npm run test:auth` em `client/`) cobrem
 autenticação, autorização por papel, origem, limite de tentativas, cabeçalhos de segurança, auditoria
