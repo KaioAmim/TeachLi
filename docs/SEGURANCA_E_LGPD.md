@@ -19,6 +19,7 @@
 | Cabeçalhos HTTP | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, CSP restritiva, HSTS, `no-store` | `server/classrooms.mjs` |
 | CSP do site | `Content-Security-Policy` injetada no build, limitando scripts, conexões e frames às origens usadas | `client/vite.config.ts` |
 | Auditoria | Eventos JSON sem token, e-mail ou nome (usuário = hash curto do ID) | `server/classrooms.mjs` |
+| Chamada | Sinalização só entre aluno e professor da mesma sala, IDs do perfil oposto, payload ≤ 12 KB, limite próprio de 300 sinais/10 s; mídia ponto a ponto | `server/classrooms.mjs`, `client/src/hooks/useRoomCall.ts` |
 | Segredos | Nenhum segredo no frontend; `client/.env.local` fora do Git; só Client ID e Tenant ID públicos | `.gitignore` |
 
 Fora do escopo do código: HTTPS/WSS obrigatório, firewall, backups e monitoramento dependem da
@@ -32,6 +33,7 @@ hospedagem (seções 7 e 8).
 | Mensagens do aluno e legendas do professor | Digitação, voz, gestos | Memória do servidor, só durante o envio | Comunicação acessível em sala | Não persistidas | Participantes da mesma sala |
 | Áudio do professor | Microfone | Reconhecimento de fala do navegador | Gerar legendas | Não gravado pelo TeachLi; o navegador pode usar serviço próprio de fala **[revisão jurídica]** | Fornecedor do navegador |
 | Imagem da câmera e pontos das mãos (landmarks) | Câmera do aluno | Processados no navegador; amostras de treino em `localStorage`/IndexedDB | Reconhecer gestos de Libras | Até o aluno clicar em **Limpar** ou limpar o navegador | Não enviados ao servidor |
+| Vídeo e áudio da chamada | Câmera do aluno (sem áudio) e câmera e microfone do professor, só após clicar em **Entrar na chamada** | Em trânsito, ponto a ponto (WebRTC); não gravados nem armazenados pelo TeachLi | Comunicação em aula com Libras e fala | Nenhuma (enquanto a chamada durar) | Professor/aluno da sala; STUN público do Google vê o endereço IP; TURN, se configurado **[revisão jurídica]** |
 | Eventos de auditoria | Servidor | Saída padrão do processo | Segurança e investigação | A definir (sugestão: 90 dias) | Operador de infraestrutura |
 
 Não há banco de dados nem upload de arquivos. O backend herdado (Express/tRPC/MySQL, tabelas
@@ -47,7 +49,7 @@ Consentimento não é base universal; sugestão por finalidade:
   (art. 7º, V). Sem armazenamento, o risco é baixo.
 - **Pontos das mãos e imagem para reconhecimento de gestos:** podem configurar dado de
   característica física. Se tratados como biométricos, são **sensíveis** (art. 5º, II; art. 11).
-  Hoje o processamento é local e não identifica o titular, mas é preciso decidir com o encarregado
+  O treino é local e não identifica o titular; já a chamada transmite a imagem do aluno ao professor, o que reforça a necessidade de avaliar o enquadramento, mas é preciso decidir com o encarregado
   se há tratamento pela instituição e, se houver, qual hipótese do art. 11 se aplica (por exemplo,
   consentimento específico e destacado). Alternativa menos invasiva: manter 100 % local e opcional
   (já é assim; o treino é opcional).
@@ -181,7 +183,8 @@ possíveis titulares vulneráveis. Pontos a tratar: necessidade e proporcionalid
 **Uso em sala e pessoas**
 19. Orientar alunos a **limpar os dados de treino** em computadores compartilhados dos laboratórios.
 20. Treinar professores e alunos sobre **uso aceitável** e sobre onde reportar problemas.
-21. Definir **base e avaliação com usuários** para o reconhecimento de Libras (experimental; não substitui intérprete).
+21. Decidir se a **chamada de vídeo** pode ser usada (consentimento/aviso de imagem e voz, gravação proibida, regras para menores) e se haverá **servidor TURN** institucional.
+22. Definir **base e avaliação com usuários** para o reconhecimento de Libras (experimental; não substitui intérprete).
 
 ## 15. Verificação realizada
 

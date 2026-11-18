@@ -1,3 +1,4 @@
+import { CallPanel } from "@/components/CallPanel";
 import { ClassroomPanel } from "@/components/ClassroomPanel";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
 import { WorkspaceHeading } from "@/components/AppShell";
@@ -13,7 +14,7 @@ import { useGestureClassifier } from "@/hooks/useGestureClassifier";
 import { useDynamicGestureClassifier } from "@/hooks/useDynamicGestureClassifier";
 import { twoHandLandmarksToFeatures } from "@/lib/handFeatures";
 import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
-import VLibrasWidget from "@/components/VLibrasWidget";
+import VLibrasWidget, { translateWithVLibras } from "@/components/VLibrasWidget";
 
 interface RecognitionResult {
   gesture: string;
@@ -64,6 +65,17 @@ export default function StudentMode() {
   const [librasEnabled, setLibrasEnabled] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const translatedIds = useRef(new Set<string>());
+  // Apoio em Libras: traduz automaticamente cada nova fala do professor (melhor esforço; se o
+  // VLibras não aceitar o comando, o aluno ainda pode selecionar o texto manualmente).
+  useEffect(() => {
+    if (!librasEnabled) return;
+    for (const message of classroom.messages) {
+      if (message.role !== "professor" || translatedIds.current.has(message.id)) continue;
+      translatedIds.current.add(message.id);
+      translateWithVLibras(message.text);
+    }
+  }, [classroom.messages, librasEnabled]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -408,6 +420,7 @@ export default function StudentMode() {
       </WorkspaceHeading>
 
       <ClassroomPanel />
+      <CallPanel role="aluno" studentStream={stream} />
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
         <div className="student-layout">
           <Card className="student-panel student-camera-panel" role="region" aria-labelledby="camera-title">

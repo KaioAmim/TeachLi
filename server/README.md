@@ -98,8 +98,11 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
 - Contagem de presença é de conexões; sessões em dispositivos diferentes podem
   representar a mesma pessoa.
 - Texto não exige câmera/microfone. A transcrição depende do navegador/permissão.
-- O processo antigo de demo/sinalização foi substituído; as telas WebRTC legadas
-  continuam fora das rotas e esta entrega não inclui videochamada.
+- A chamada de vídeo e áudio é ponto a ponto. O servidor só retransmite a sinalização:
+  `{ type: "signal", to, data }` com `data.kind` em `hello`, `offer`, `answer`, `candidate` ou
+  `bye`, no máximo 12.000 caracteres, entre aluno e professor da mesma sala (aluno↔aluno é
+  recusado). Cada conexão recebe um `selfId` e só vê os IDs do perfil oposto em `presence.peers`.
+  Sem TURN configurado, redes restritivas podem impedir a chamada.
 
 Execute `npm test` em `server/` e `npm run test:auth` em `client/`. Os testes cobrem
 cabeçalhos de segurança, auditoria sem dados pessoais, limite de tentativas,

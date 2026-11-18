@@ -226,3 +226,39 @@ test('limita tentativas de login por endereço e não confia em X-Forwarded-For 
   assert.equal(last.status, 429);
   assert.ok(audit.some(e => e.event === 'login.rate_limited'));
 });
+
+test('sinalização da chamada: só entre aluno e professor da mesma sala, com validação', async t => {
+  const { login, connect } = await setup(t);
+  const professor = await connect(await login('professor', 'prof'));
+  const aluno = await connect(await login('aluno', 'ana'));
+  const outroAluno = await connect(await login('aluno', 'bia'));
+  const outraSala = await connect(await login('aluno', 'cai'), 'sala-01');
+  const joinedAluno = aluno.events.find(e => e.type === 'joined');
+  assert.ok(joinedAluno.selfId);
+  // Cada perfil só conhece os IDs do perfil oposto.
+  await new Promise(r => setTimeout(r, 100));
+  const presAluno = [...aluno.events].reverse().find(e => e.type === 'presence');
+  const presProf = [...professor.events].reverse().find(e => e.type === 'presence');
+  assert.deepEqual(presAluno.peers.map(p => p.role), ['professor']);
+  assert.equal(presProf.peers.length, 2);
+  const profId = presAluno.peers[0].id;
+  const alunoId = joinedAluno.selfId;
+  // aluno -> professor e professor -> aluno chegam com o remetente correto
+  aluno.send({ type: 'signal', to: profId, data: { kind: 'hello' } });
+  const hello = await professor.next('signal');
+  assert.equal(hello.from, alunoId); assert.equal(hello.data.kind, 'hello');
+  professor.send({ type: 'signal', to: alunoId, data: { kind: 'offer', sdp: 'v=0' } });
+  assert.equal((await aluno.next('signal')).data.kind, 'offer');
+  // aluno -> aluno, outra sala, destino inexistente, tipo inválido e payload grande são recusados
+  aluno.send({ type: 'signal', to: outroAluno.events.find(e => e.type === 'joined').selfId, data: { kind: 'hello' } });
+  assert.equal((await aluno.next('signal.rejected')).type, 'signal.rejected');
+  aluno.send({ type: 'signal', to: outraSala.events.find(e => e.type === 'joined').selfId, data: { kind: 'hello' } });
+  await aluno.next('signal.rejected');
+  aluno.send({ type: 'signal', to: 'inexistente', data: { kind: 'hello' } });
+  await aluno.next('signal.rejected');
+  aluno.send({ type: 'signal', to: profId, data: { kind: 'exec' } });
+  await aluno.next('signal.rejected');
+  aluno.send({ type: 'signal', to: profId, data: { kind: 'offer', sdp: 'x'.repeat(13000) } });
+  await aluno.next('signal.rejected');
+  assert.ok(!professor.events.some(e => e.type === 'signal' && e.data.kind !== 'hello'));
+});

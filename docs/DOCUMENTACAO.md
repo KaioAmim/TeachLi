@@ -24,7 +24,7 @@ transcrição, compartilha frases finalizadas com os alunos da mesma sala.
 | VLibras | Widget externo para texto selecionado na página | Sem contrato próprio de fila ou controle automático do avatar |
 | Identidade visual | Logo transparente com contorno branco, também usada no favicon; rolagem nativa | Acessibilidade precisa de avaliação com usuários |
 | Histórico de aulas | Não implementado | O backend e a tela de histórico foram removidos |
-| Videochamada | Código WebRTC antigo fora das rotas | Não integra as salas atuais |
+| Chamada de vídeo e áudio | Aluno e professor na mesma sala, WebRTC ponto a ponto; professor envia câmera e microfone, aluno envia só a câmera; legenda da fala do professor para o aluno e texto dos sinais do aluno (com leitura em voz alta opcional) para o professor | Experimental; só STUN público (rede restritiva pode exigir TURN); sem gravação; não validado com contas reais e dispositivos diferentes |
 
 ## Arquitetura e rotas
 
@@ -35,7 +35,9 @@ transcrição, compartilha frases finalizadas com os alunos da mesma sala.
 
 O reconhecimento e o treino acontecem no navegador. O servidor recebe o texto
 confirmado e as frases finais e encaminha apenas para o perfil oposto na mesma
-sala. Não transmite câmera, vídeo ou áudio nesta versão.
+sala. A mídia da chamada (vídeo e áudio) não passa pelo servidor: segue direto entre os
+navegadores por WebRTC, e o servidor só retransmite a sinalização (SDP e ICE) entre aluno
+e professor da mesma sala. O servidor não grava nem transmite câmera ou áudio.
 
 | Rota | Uso |
 | --- | --- |
@@ -47,8 +49,8 @@ sala. Não transmite câmera, vídeo ou áudio nesta versão.
 | `/professor` | Mensagens recebidas e transcrição compartilhada |
 
 As telas de comunicação exigem login do perfil correspondente e sala selecionada.
-Atualizar a página exige selecionar a sala novamente. `SalaAula.tsx`,
-`Classroom.tsx` e `TrainGestures.tsx` não são rotas atuais. A presença desses arquivos não torna seus recursos disponíveis.
+Atualizar a página exige selecionar a sala novamente. `TrainGestures.tsx` não é rota atual. A chamada aparece nas telas `/aluno` e `/professor`, depois de
+entrar na sala. O aluno precisa ligar a câmera (reconhecimento de gestos) para entrar nela.
 
 ### Fronteira de compilação e legado
 
