@@ -13,7 +13,6 @@ import { useGestureClassifier } from "@/hooks/useGestureClassifier";
 import { useDynamicGestureClassifier } from "@/hooks/useDynamicGestureClassifier";
 import { twoHandLandmarksToFeatures } from "@/lib/handFeatures";
 import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
-import VLibrasWidget from "@/components/VLibrasWidget";
 
 interface RecognitionResult {
   gesture: string;
@@ -61,7 +60,6 @@ export default function StudentMode() {
   const [handDetected, setHandDetected] = useState(false);
   const [typedText, setTypedText] = useState("");
   const [spokenTypedText, setSpokenTypedText] = useState("");
-  const [librasEnabled, setLibrasEnabled] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -397,7 +395,6 @@ export default function StudentMode() {
 
   return (
     <div className="workspace-page student-workspace">
-      {librasEnabled && <VLibrasWidget />}
       <WorkspaceHeading
         title="Seu espaço de comunicação"
         description="Use o teclado para falar ou explore gestos com a câmera."
@@ -559,15 +556,14 @@ export default function StudentMode() {
                   <Button variant="ghost" onClick={clearTypedText} disabled={!typedText && !spokenTypedText}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
                 </div>
                 <div className="student-libras-option">
-                  <label htmlFor="student-libras"><span><strong>Apoio em Libras</strong><small>Mostrar o tradutor VLibras na tela.</small></span>
-                    <input id="student-libras" type="checkbox" role="switch" checked={librasEnabled} onChange={e => setLibrasEnabled(e.target.checked)} />
-                  </label>
-                  {librasEnabled && (
-                    <div className="student-libras-preview">
-                      <p>Abra o ícone azul do VLibras e selecione a mensagem abaixo para traduzir.</p>
-                      <p className="student-spoken-text">{spokenTypedText || "Digite uma mensagem e escolha Ouvir aqui para exibi-la aqui."}</p>
-                    </div>
-                  )}
+                  <div className="student-libras-heading">
+                    <strong>Apoio em Libras</strong>
+                    <small>O VLibras fica disponível pelo ícone azul em todas as telas.</small>
+                  </div>
+                  <div className="student-libras-preview">
+                    <p>Abra o ícone azul e selecione a mensagem abaixo para traduzir.</p>
+                    <p className="student-spoken-text">{spokenTypedText || "Digite uma mensagem e escolha Ouvir aqui para exibi-la aqui."}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

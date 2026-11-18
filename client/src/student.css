@@ -66,13 +66,9 @@
 .student-actions button:first-child { flex: 1; }
 .student-actions button:last-child { color: #53647d; }
 .student-libras-option { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e4ebf5; }
-.student-libras-option label { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.student-libras-heading { display: block; }
 .student-libras-option strong { display: block; font-size: 12px; font-weight: 500; color: #435b80; }
 .student-libras-option small { display: block; font-size: 11px; color: #64748b; margin-top: 4px; }
-.student-libras-option input { appearance: none; display: block; flex-shrink: 0; width: 34px; height: 20px; border-radius: 20px; border: 1px solid #a4b3c8; background: #edf1f7; cursor: pointer; }
-.student-libras-option input::before { content: ""; display: block; width: 12px; height: 12px; margin: 3px; border-radius: 50%; background: #6f819a; }
-.student-libras-option input:checked { background: #2b57a2; border-color: #2b57a2; }
-.student-libras-option input:checked::before { transform: translateX(14px); background: white; }
 .student-libras-preview { margin-top: 16px; padding: 12px; border-radius: 8px; background: #f3f6fb; color: #53647d; font-size: 12px; line-height: 1.65; }
 .student-spoken-text { margin-top: 8px; color: #153566; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* The composed message is distinct from the camera's detection history. */

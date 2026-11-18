@@ -19,7 +19,7 @@ O reconhecimento depende dos dados de treino e precisa de avaliação com usuár
 | Salas | Laboratórios A/B/C e salas 01/02; seleção após login, presença e troca de sala |
 | Reconhecimento por pose | MediaPipe + TensorFlow.js, A–Z experimental ou modelo pessoal |
 | Sinais dinâmicos | Treino local experimental; captura precisa preservar trajetória antes da próxima coleta |
-| VLibras | Widget opcional no Modo Aluno para traduzir o texto exibido na página |
+| VLibras | Widget disponível em todas as telas para traduzir textos selecionados na página |
 | Modo Professor | Receber mensagens dos alunos e compartilhar frases finais da transcrição na sala |
 
 Segurança, privacidade (LGPD) e os pontos que dependem da instituição estão em

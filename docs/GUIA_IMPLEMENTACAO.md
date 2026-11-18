@@ -115,7 +115,7 @@ depende do navegador e precisa de avaliação real com microfone.
 
 ## 6. Apoio em Libras — widget disponível, integração a evoluir
 
-- [x] VLibras para seleção manual do texto exibido, preservando o original.
+- [x] Widget VLibras disponível em todas as telas para seleção manual do texto exibido, preservando o original.
 - [ ] Avaliar tradução com alunos surdos e profissionais de Libras.
 - [ ] Integrar textos finais compartilhados, se a interface suportada permitir.
 - [ ] Conferir controles/eventos disponíveis antes de prometer automação do avatar.

@@ -2,6 +2,7 @@ import "@/classroom.css";
 import { ClassroomProvider, useClassroomConnection } from "@/contexts/ClassroomContext";
 import RoomSelection from "@/pages/RoomSelection";
 import { AppHeader, AppFooter } from "@/components/AppShell";
+import VLibrasWidget from "@/components/VLibrasWidget";
 import { Link, Route, Switch } from "wouter";
 import { Toaster } from "sonner";
 import Home from "@/pages/Home";
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <ClassroomProvider><div className="app-frame">
       <AppHeader />
+      <VLibrasWidget />
       <Toaster richColors position="top-center" />
       <Switch>
         <Route path="/" component={Home} />

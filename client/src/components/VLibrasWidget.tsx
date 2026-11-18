@@ -10,6 +10,7 @@ declare global {
 
 const SCRIPT_ID = "vlibras-plugin-script";
 const APP_URL = "https://vlibras.gov.br/app";
+let widgetInitialized = false;
 
 /**
  * Embute o widget oficial do VLibras (avatar 3D que traduz texto da página
@@ -20,8 +21,9 @@ const APP_URL = "https://vlibras.gov.br/app";
 export default function VLibrasWidget() {
   useEffect(() => {
     function init() {
-      if (window.VLibras) {
+      if (window.VLibras && !widgetInitialized) {
         new window.VLibras.Widget(APP_URL);
+        widgetInitialized = true;
       }
     }
 
