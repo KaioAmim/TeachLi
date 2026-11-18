@@ -10,6 +10,7 @@ declare global {
 
 const SCRIPT_ID = "vlibras-plugin-script";
 const APP_URL = "https://vlibras.gov.br/app";
+let widgetInitialized = false;
 
 /** Pede ao widget que traduza um texto. O VLibras não documenta esta chamada como API
  * estável: devolve false se o widget não estiver carregado ou não aceitar o comando. */
@@ -33,8 +34,9 @@ export function translateWithVLibras(text: string): boolean {
 export default function VLibrasWidget() {
   useEffect(() => {
     function init() {
-      if (window.VLibras) {
+      if (window.VLibras && !widgetInitialized) {
         new window.VLibras.Widget(APP_URL);
+        widgetInitialized = true;
       }
     }
 

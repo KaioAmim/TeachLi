@@ -190,8 +190,9 @@ pode ouvir cada mensagem recebida manualmente; não há reprodução automática
 fila compartilhada. Ao iniciar gravação, frases finais da transcrição são enviadas
 aos alunos; parciais permanecem locais. Não há confirmação de leitura.
 
-VLibras é um widget externo para texto selecionado. Não há API própria de vídeo,
-fila automática ou sincronização garantida com as legendas. O texto original
+VLibras é um widget externo, disponível em todas as telas da aplicação, inclusive
+a tela inicial, para traduzir texto selecionado. Não há API própria de vídeo, fila
+automática ou sincronização garantida com as legendas. O texto original
 continua sendo o canal disponível quando o widget não é usado.
 
 ## Verificações e aceite

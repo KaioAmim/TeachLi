@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Mic, MicOff, FileText, Languages, Trash2, ChevronDown, ArrowUpRight } from "lucide-react";
 import { toast } from "sonner";
-import VLibrasWidget from "@/components/VLibrasWidget";
 
 export default function ProfessorMode() {
   const classroom = useClassroomConnection();
@@ -129,7 +128,6 @@ export default function ProfessorMode() {
 
   return (
     <div className="workspace-page professor-workspace">
-      <VLibrasWidget />
       <WorkspaceHeading title="A sua fala, mais acessível." description="Fale, acompanhe a transcrição e compartilhe com a turma." />
 
       <ClassroomPanel />
