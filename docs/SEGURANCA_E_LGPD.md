@@ -17,7 +17,7 @@
 | Abuso | 30 logins/min por IP, 60 mensagens/10 s por conexão, 20 conexões por IP, 10.000 sessões, corpo ≤ 32 KB, mensagem ≤ 2.000 caracteres | `server/classrooms.mjs` |
 | Origem/CORS | Lista exata de origens (`TEACHLI_CORS_ORIGIN`), também no WebSocket | `server/classrooms.mjs` |
 | Cabeçalhos HTTP | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, CSP restritiva, HSTS, `no-store` | `server/classrooms.mjs` |
-| CSP do site | `Content-Security-Policy` injetada no build, limitando scripts, conexões e frames às origens usadas | `client/vite.config.ts` |
+| CSP do site | `Content-Security-Policy` injetada no build, limitando scripts, conexões e frames às origens usadas; fontes do VLibras podem redirecionar para `cdn.jsdelivr.net` | `client/vite.config.ts` |
 | Auditoria | Eventos JSON sem token, e-mail ou nome (usuário = hash curto do ID) | `server/classrooms.mjs` |
 | Segredos | Nenhum segredo no frontend; `client/.env.local` fora do Git; só Client ID e Tenant ID públicos | `.gitignore` |
 

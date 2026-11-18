@@ -16,7 +16,7 @@ function contentSecurityPolicy(signalingUrl: string): Plugin {
     `connect-src 'self' ${connect.join(" ")} https://login.microsoftonline.com https://storage.googleapis.com https://vlibras.gov.br`,
     "img-src 'self' data: blob: https://vlibras.gov.br",
     "style-src 'self' 'unsafe-inline' https://vlibras.gov.br",
-    "font-src 'self' data: https://vlibras.gov.br",
+    "font-src 'self' data: https://vlibras.gov.br https://cdn.jsdelivr.net",
     "media-src 'self' blob: https://vlibras.gov.br",
     "worker-src 'self' blob:",
     "frame-src https://vlibras.gov.br",
