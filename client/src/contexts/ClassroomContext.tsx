@@ -11,6 +11,7 @@ type Status = 'idle' | 'connecting' | 'connected' | 'disconnected';
 interface ClassroomState {
   room: Room | null; status: Status; error: string; professor: boolean; students: number;
   messages: RoomMessage[]; sendStatus: string; selfId: string; peers: Peer[];
+  autoSpeak: boolean; setAutoSpeak: (enabled: boolean) => void;
   sendSignal: (to: string, data: Record<string, unknown>) => boolean; onSignal: (handler: SignalHandler) => () => void;
   join: (room: Room) => Promise<void>; leave: () => void; send: (text: string) => boolean;
 }
@@ -27,6 +28,8 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const [sendStatus, setSendStatus] = useState('');
   const [selfId, setSelfId] = useState('');
   const [peers, setPeers] = useState<Peer[]>([]);
+  const [autoSpeak, setAutoSpeak] = useState(false);
+  const spokenMessageIds = useRef(new Set<string>());
   const signalHandlers = useRef(new Set<SignalHandler>());
   const socket = useRef<WebSocket | null>(null);
   const role = useRef<'aluno' | 'professor'>('aluno');
@@ -34,12 +37,27 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const clearPending = () => { for (const timer of pending.current.values()) clearTimeout(timer); pending.current.clear(); };
   const leave = useCallback(() => {
     socket.current?.close(); socket.current = null; clearPending();
-    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]);
+    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false);
     window.speechSynthesis?.cancel();
   }, []);
   useEffect(() => {
-    if (!["/aluno", "/professor", "/aluno/treinar"].includes(location)) leave();
+    if (!["/aluno", "/professor", "/aluno/treinar", "/ead"].includes(location)) leave();
   }, [location, leave]);
+  useEffect(() => {
+    if (!autoSpeak) {
+      messages.filter(message => message.role === 'aluno').forEach(message => spokenMessageIds.current.add(message.id));
+      window.speechSynthesis?.cancel();
+      return;
+    }
+    if (!("speechSynthesis" in window)) return;
+    for (const message of messages) {
+      if (message.role !== 'aluno' || spokenMessageIds.current.has(message.id)) continue;
+      spokenMessageIds.current.add(message.id);
+      const utterance = new SpeechSynthesisUtterance(message.text);
+      utterance.lang = 'pt-BR';
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [autoSpeak, messages]);
   useEffect(() => () => { socket.current?.close(); socket.current = null; clearPending(); }, []);
   const join = useCallback((selected: Room) => new Promise<void>((resolve, reject) => {
     const session = loadMicrosoftSession('aluno') || loadMicrosoftSession('professor');
@@ -88,7 +106,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     socket.current.send(JSON.stringify({ type: 'signal', to, data })); return true;
   }, []);
   const onSignal = useCallback((handler: SignalHandler) => { signalHandlers.current.add(handler); return () => { signalHandlers.current.delete(handler); }; }, []);
-  return <Context.Provider value={{ room, status, error, professor, students, messages, sendStatus, selfId, peers, sendSignal, onSignal, join, leave, send }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ room, status, error, professor, students, messages, sendStatus, selfId, peers, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send }}>{children}</Context.Provider>;
 }
 export function useClassroomConnection() {
   const context = useContext(Context);

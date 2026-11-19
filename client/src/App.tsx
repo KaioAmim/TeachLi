@@ -9,6 +9,7 @@ import Home from "@/pages/Home";
 import StudentMode from "@/pages/StudentMode";
 import TrainMode from "@/pages/TrainMode";
 import ProfessorMode from "@/pages/ProfessorMode";
+import EadMode from "@/pages/EadMode";
 import LoginRequired from "@/pages/LoginRequired";
 import MicrosoftCallback from "@/pages/MicrosoftCallback";
 import { loadMicrosoftSession } from "@/lib/microsoftAuth";
@@ -39,6 +40,13 @@ function TrainRoute() {
   );
 }
 
+function EadRoute() {
+  const session = loadMicrosoftSession();
+  const { room } = useClassroomConnection();
+  if (!session) return <LoginRequired role="aluno" />;
+  return room ? <EadMode role={session.role} /> : <RoomSelection />;
+}
+
 export default function App() {
   return (
     <ClassroomProvider><div className="app-frame">
@@ -52,6 +60,7 @@ export default function App() {
         <Route path="/aluno" component={StudentRoute} />
         <Route path="/aluno/treinar" component={TrainRoute} />
         <Route path="/professor" component={ProfessorRoute} />
+        <Route path="/ead" component={EadRoute} />
         <Route>
           <main id="conteudo" tabIndex={-1} className="auth-page">
             <div className="auth-card">
