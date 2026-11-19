@@ -13,14 +13,14 @@ export interface DynamicGesturePrediction {
 /**
  * Carrega o classificador de sinais dinâmicos (sequência de quadros) salvo
  * pelo usuário no IndexedDB, análogo a useGestureClassifier mas operando
- * sobre um clipe inteiro em vez de um quadro isolado. Não existe modelo
- * base pré-treinado para sinais dinâmicos ainda — hasModel só fica true
- * depois que o usuário treina o próprio em Treinar Gestos.
+ * sobre um clipe inteiro em vez de um quadro isolado. Sem modelo do
+ * usuário, cai no modelo base pré-treinado (source = "pretrained"), se publicado.
  */
 export function useDynamicGestureClassifier() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasModel, setHasModel] = useState(false);
   const [labels, setLabels] = useState<string[]>([]);
+  const [source, setSource] = useState<"user" | "pretrained" | null>(null);
   const classifierRef = useRef<LoadedDynamicClassifier | null>(null);
 
   useEffect(() => {
@@ -35,6 +35,7 @@ export function useDynamicGestureClassifier() {
         classifierRef.current = classifier;
         setHasModel(classifier !== null);
         setLabels(classifier?.labels ?? []);
+        setSource(classifier?.source ?? null);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -53,5 +54,5 @@ export function useDynamicGestureClassifier() {
     return classifier.predict(frames);
   }, []);
 
-  return { isLoading, hasModel, labels, predict };
+  return { isLoading, hasModel, labels, source, predict };
 }

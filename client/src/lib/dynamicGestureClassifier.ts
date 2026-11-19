@@ -181,31 +181,58 @@ export async function trainDynamicClassifier(
   return { labels, finalAccuracy };
 }
 
+/** Modelo base treinado offline (training/), servido de public/. */
+const PRETRAINED_MODEL_URL = "/models/gesture-classifier-dynamic/model.json";
+const PRETRAINED_LABELS_URL = "/models/gesture-classifier-dynamic/labels.json";
+
 export interface LoadedDynamicClassifier {
+  /** "user" = treinado pelo usuário; "pretrained" = modelo base do dataset Libras-EQT-UECE. */
+  source: "user" | "pretrained";
   labels: string[];
   predict: (frames: Float32Array[]) => { label: string; confidence: number; margin: number };
   dispose: () => void;
 }
 
-/** Carrega o classificador dinâmico treinado pelo usuário (não há modelo base pré-treinado ainda). */
+/**
+ * Carrega o classificador dinâmico: o modelo treinado pelo usuário tem
+ * prioridade; sem ele, usa o modelo base pré-treinado (se estiver publicado).
+ */
 export async function loadDynamicClassifier(): Promise<LoadedDynamicClassifier | null> {
+  const user = await loadUserModel();
+  if (user) return buildClassifier("user", user.labels, user.model);
+  const base = await loadPretrainedModel();
+  return base ? buildClassifier("pretrained", base.labels, base.model) : null;
+}
+
+async function loadUserModel(): Promise<{ labels: string[]; model: tf.LayersModel } | null> {
   const labelsRaw = localStorage.getItem(LABELS_STORAGE_KEY);
   if (!labelsRaw) return null;
-
-  let labels: string[];
   try {
-    labels = JSON.parse(labelsRaw);
+    const labels = JSON.parse(labelsRaw);
+    if (!Array.isArray(labels) || labels.length === 0) return null;
+    return { labels, model: await tf.loadLayersModel(MODEL_STORAGE_KEY) };
   } catch {
     return null;
   }
-  if (!Array.isArray(labels) || labels.length === 0) return null;
+}
 
-  let model: tf.LayersModel;
+async function loadPretrainedModel(): Promise<{ labels: string[]; model: tf.LayersModel } | null> {
   try {
-    model = await tf.loadLayersModel(MODEL_STORAGE_KEY);
+    const response = await fetch(PRETRAINED_LABELS_URL);
+    if (!response.ok) return null;
+    const labels = await response.json();
+    if (!Array.isArray(labels) || labels.length === 0) return null;
+    return { labels, model: await tf.loadLayersModel(PRETRAINED_MODEL_URL) };
   } catch {
     return null;
   }
+}
+
+function buildClassifier(
+  source: "user" | "pretrained",
+  labels: string[],
+  model: tf.LayersModel,
+): LoadedDynamicClassifier {
 
   const predict = (frames: Float32Array[]) => {
     const resampled = resampleSequence(frames, SEQUENCE_LENGTH);
@@ -230,7 +257,7 @@ export async function loadDynamicClassifier(): Promise<LoadedDynamicClassifier |
     });
   };
 
-  return { labels, predict, dispose: () => model.dispose() };
+  return { source, labels, predict, dispose: () => model.dispose() };
 }
 
 export async function hasDynamicClassifier(): Promise<boolean> {

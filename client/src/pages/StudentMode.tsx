@@ -56,6 +56,8 @@ const CONFIDENCE_THRESHOLD = 0.75;
  */
 const MARGIN_THRESHOLD = 0.15;
 const DYNAMIC_MARGIN_THRESHOLD = 0.15;
+const PRETRAINED_CONFIDENCE_THRESHOLD = 0.85;
+const PRETRAINED_MARGIN_THRESHOLD = 0.3;
 
 /** Quadros sem gesto confiável para considerar que o aluno "soltou" a letra —
  * só depois disso a mesma letra pode ser confirmada de novo (ex.: LL, RR). */
@@ -121,6 +123,7 @@ export default function StudentMode() {
   const {
     hasModel: hasDynamicModel,
     labels: dynamicLabels,
+    source: dynamicSource,
     isLoading: isDynamicClassifierLoading,
     predict: predictDynamicGesture,
   } = useDynamicGestureClassifier();
@@ -132,6 +135,8 @@ export default function StudentMode() {
     detectFace,
   } = useFaceLandmarker(faceEnabled);
 
+  const dynamicSourceRef = useRef<"user" | "pretrained" | null>(null);
+  dynamicSourceRef.current = dynamicSource;
   const faceEnabledRef = useRef(true);
   faceEnabledRef.current = faceEnabled;
   const faceFrameRef = useRef(0);
@@ -285,9 +290,12 @@ export default function StudentMode() {
                 dstable.count = 1;
               }
 
+              // O modelo base tem 178 sinais e nenhuma classe "nenhum sinal":
+              // limiares mais rígidos evitam palavras espúrias no meio da fala.
+              const strict = dynamicSourceRef.current === "pretrained";
               const dynIsConfident =
-                dynPrediction.confidence > DYNAMIC_CONFIDENCE_THRESHOLD &&
-                dynPrediction.margin > DYNAMIC_MARGIN_THRESHOLD;
+                dynPrediction.confidence > (strict ? PRETRAINED_CONFIDENCE_THRESHOLD : DYNAMIC_CONFIDENCE_THRESHOLD) &&
+                dynPrediction.margin > (strict ? PRETRAINED_MARGIN_THRESHOLD : DYNAMIC_MARGIN_THRESHOLD);
 
               if (dynIsConfident) {
                 setCurrentGesture(dynPrediction.label);
@@ -710,7 +718,7 @@ export default function StudentMode() {
                     : "Nenhum classificador estático disponível."}</p>
                   {hasModel && <div className="student-gesture-list" aria-label="Letras disponíveis">{modelLabels.map(label => <span key={label}>{label}</span>)}</div>}
                   <p>{isDynamicClassifierLoading ? "Preparando reconhecimento de movimentos…"
-                    : hasDynamicModel ? `Movimentos disponíveis: ${dynamicLabels.length} sinais.`
+                    : hasDynamicModel ? `${dynamicSource === "pretrained" ? "Modelo base (dataset Libras-EQT-UECE)" : "Seu modelo"}: ${dynamicLabels.length} sinais em movimento.`
                     : "Para reconhecer movimentos, grave clipes em Treinar gestos."}</p>
                   {hasDynamicModel && <div className="student-gesture-list" aria-label="Gestos dinâmicos disponíveis">{dynamicLabels.map(label => <span key={label}>{label}</span>)}</div>}
                   <button type="button" className="student-text-link" onClick={() => setLocation("/aluno/treinar")}>Personalizar meus gestos</button>
