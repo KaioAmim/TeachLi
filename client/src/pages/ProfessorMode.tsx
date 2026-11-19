@@ -1,11 +1,9 @@
 import { ClassroomPanel } from "@/components/ClassroomPanel";
-import { CallPanel } from "@/components/CallPanel";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
-import { WorkspaceHeading } from "@/components/AppShell";
+import { RoomStatus, WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Mic, MicOff, FileText, Languages, Trash2, ChevronDown, ArrowUpRight } from "lucide-react";
+import { Mic, MicOff, Languages, Trash2, ArrowUpRight } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ProfessorMode() {
@@ -128,74 +126,49 @@ export default function ProfessorMode() {
 
   return (
     <div className="workspace-page professor-workspace">
-      <WorkspaceHeading title="A sua fala, mais acessível." description="Fale, acompanhe a transcrição e compartilhe com a turma." />
+      <WorkspaceHeading title="Sua fala em texto" description="Acompanhe as legendas ao vivo e compartilhe com quem está na sala.">
+        <RoomStatus />
+      </WorkspaceHeading>
 
-      <ClassroomPanel />
-      <CallPanel role="professor" />
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
-        <div className="professor-layout">
-          <div className="professor-main-column">
-            <Card className="professor-panel professor-live-panel" role="region" aria-labelledby="speech-title">
-              <CardHeader className="professor-panel-header">
-                <div className="professor-title-row">
-                  <span className="professor-tool-icon"><Mic size={21} aria-hidden="true" /></span>
-                  <div><h2 id="speech-title">Sua fala em texto</h2><p>Acompanhe a frase enquanto você fala.</p></div>
+        <section className="professor-broadcast" aria-labelledby="speech-title">
+          <div className="professor-broadcast-main">
+            <div className="professor-speaking-heading">
+              <div><p className="professor-section-label">Transcrição da aula</p><h2 id="speech-title">Fala do professor</h2></div>
+              <span className="professor-recording-status" data-recording={isRecording} role="status"><i aria-hidden="true" />{isRecording ? "Ouvindo" : "Microfone desligado"}</span>
+            </div>
+            <div className="professor-live-text" data-empty={!currentSentence} aria-label="Fala atual" aria-live="polite" aria-atomic="true">
+              {currentSentence ? <p>{currentSentence}</p> : (
+                <div className="professor-empty-state">
+                  <span className="professor-mic-outline"><Mic size={26} strokeWidth={1.5} aria-hidden="true" /></span>
+                  <strong>{isRecording ? "Pode falar. Estamos ouvindo." : "A legenda aparece aqui"}</strong>
+                  <p>{isRecording ? "Sua fala aparecerá aqui em instantes." : "Inicie o microfone para compartilhar a transcrição com os alunos."}</p>
                 </div>
-                <span className="professor-recording-status" data-recording={isRecording} role="status"><i aria-hidden="true" />{isRecording ? "Ouvindo" : "Microfone desligado"}</span>
-              </CardHeader>
-              <CardContent>
-                <div className="professor-live-text" data-empty={!currentSentence} aria-label="Fala atual" aria-live="polite" aria-atomic="true">
-                  {currentSentence ? <p>{currentSentence}</p> : (
-                    <div className="professor-empty-state">
-                      <span className="professor-mic-outline"><Mic size={28} strokeWidth={1.5} aria-hidden="true" /></span>
-                      <strong>{isRecording ? "Pode falar. Estamos ouvindo." : "Tudo pronto para a sua voz"}</strong>
-                      <p>{isRecording ? "Sua fala aparecerá aqui em instantes." : "Inicie a gravação e fale em português. O texto aparecerá aqui."}</p>
-                    </div>
-                  )}
-                </div>
-                <div className="professor-recording-toolbar">
-                  <Button disabled={classroom.status !== "connected"} variant={isRecording ? "destructive" : "default"} onClick={isRecording ? stopRecording : startRecording}>
-                    {isRecording ? <MicOff size={18} aria-hidden="true" /> : <Mic size={18} aria-hidden="true" />}
-                    {isRecording ? "Parar gravação" : "Iniciar gravação"}
-                  </Button>
-                  <p>{isRecording ? "Ao terminar, pare a gravação para revisar o texto." : "Ao iniciar, as frases finalizadas serão compartilhadas com os alunos desta sala."}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="professor-panel" role="region" aria-labelledby="history-title">
-              <CardHeader className="professor-panel-header">
-                <div className="professor-title-row">
-                  <span className="professor-tool-icon professor-tool-icon-muted"><FileText size={21} aria-hidden="true" /></span>
-                  <div><h2 id="history-title">Histórico da fala</h2><p>As frases reconhecidas ficam reunidas aqui.</p></div>
-                </div>
-                <Button variant="ghost" className="professor-clear" onClick={clearTranscript} disabled={!transcript && !currentSentence}><Trash2 size={16} aria-hidden="true" /> Limpar histórico</Button>
-              </CardHeader>
-              <CardContent>
-                <div className="professor-history" tabIndex={transcript ? 0 : undefined} aria-label="Histórico de transcrição">
-                  <p className={transcript ? undefined : "professor-placeholder"}>{transcript || "Ainda não há transcrição. Suas frases aparecerão conforme você falar."}</p>
-                </div>
-                <p className="professor-history-note">Ao iniciar uma nova gravação, o histórico anterior é limpo.</p>
-              </CardContent>
-            </Card>
+              )}
+            </div>
+            <div className="professor-recording-toolbar">
+              <Button disabled={classroom.status !== "connected"} variant={isRecording ? "destructive" : "default"} onClick={isRecording ? stopRecording : startRecording}>
+                {isRecording ? <MicOff size={18} aria-hidden="true" /> : <Mic size={18} aria-hidden="true" />}
+                {isRecording ? "Parar microfone" : "Ativar microfone"}
+              </Button>
+              <p>{isRecording ? "As frases reconhecidas estão sendo enviadas para a sala." : "As frases finalizadas serão compartilhadas em tempo real."}</p>
+            </div>
           </div>
 
-          <aside className="professor-support" aria-labelledby="libras-title">
-            <div className="professor-support-heading"><span className="professor-tool-icon professor-tool-icon-warm"><Languages size={23} aria-hidden="true" /></span><span>Apoio à comunicação</span></div>
-            <h2 id="libras-title">Leve o texto <br />para Libras.</h2>
-            <p>Use o avatar VLibras para apoiar a tradução do texto da sua fala.</p>
-            <ol className="professor-steps">
-              <li><span aria-hidden="true">1</span><div><strong>Abra o tradutor</strong><p>Clique no ícone azul do VLibras no canto da tela.</p></div></li>
-              <li><span aria-hidden="true">2</span><div><strong>Escolha o texto</strong><p>Com o avatar aberto, selecione a frase ou um trecho do histórico.</p></div></li>
-              <li><span aria-hidden="true">3</span><div><strong>Acompanhe o avatar</strong><p>Veja a tradução do trecho selecionado em Libras.</p></div></li>
-            </ol>
-            <details className="professor-help">
-              <summary>Dicas para uma boa transcrição<ChevronDown size={17} aria-hidden="true" /></summary>
-              <div><p>Fale com clareza e faça pequenas pausas entre as frases. Prefira um ambiente com pouco ruído.</p><p>Se o reconhecimento não estiver disponível, tente usar Chrome ou Edge.</p></div>
-            </details>
-            <a className="professor-about-link" href="https://www.vlibras.gov.br" target="_blank" rel="noopener noreferrer">Conheça o VLibras<ArrowUpRight size={15} aria-hidden="true" /></a>
-          </aside>
-        </div>
+          <ClassroomPanel compact embedded showAutoSpeak />
+        </section>
+
+        <section className="professor-history-section" role="region" aria-labelledby="history-title">
+          <div className="professor-history-heading">
+            <div><p className="professor-section-label">Nesta sessão</p><h2 id="history-title">Transcrição anterior</h2></div>
+            <Button variant="ghost" className="professor-clear" onClick={clearTranscript} disabled={!transcript && !currentSentence}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
+          </div>
+          <div className="professor-history" tabIndex={transcript ? 0 : undefined} aria-label="Histórico de transcrição">
+            <p className={transcript ? undefined : "professor-placeholder"}>{transcript || "As frases reconhecidas nesta sessão aparecerão aqui."}</p>
+          </div>
+          <p className="professor-history-note">O histórico é apagado quando você inicia uma nova gravação.</p>
+        </section>
+        <aside className="professor-libras-note"><Languages size={17} aria-hidden="true" /><span>Apoio em Libras: selecione uma frase e use o avatar VLibras no canto da tela.</span><a href="https://www.vlibras.gov.br" target="_blank" rel="noopener noreferrer">Conheça o VLibras<ArrowUpRight size={14} aria-hidden="true" /></a></aside>
       </main>
     </div>
   );

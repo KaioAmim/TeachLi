@@ -183,7 +183,7 @@ export async function finishMicrosoftLogin(search: string): Promise<MicrosoftSes
   return session;
 }
 
-export function loadMicrosoftSession(role: AppRole): MicrosoftSession | null {
+export function loadMicrosoftSession(role?: AppRole): MicrosoftSession | null {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
@@ -200,7 +200,7 @@ export function loadMicrosoftSession(role: AppRole): MicrosoftSession | null {
       sessionStorage.removeItem(SESSION_KEY);
       return null;
     }
-    if (session.role !== role) return null;
+    if (role && session.role !== role) return null;
     return session;
   } catch {
     sessionStorage.removeItem(SESSION_KEY);

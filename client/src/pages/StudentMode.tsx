@@ -1,12 +1,10 @@
-import { CallPanel } from "@/components/CallPanel";
 import { ClassroomPanel } from "@/components/ClassroomPanel";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
-import { WorkspaceHeading } from "@/components/AppShell";
+import { RoomStatus, WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Video, VideoOff, Volume2, Waves, Keyboard, BookOpen, Plus, Trash2, ScanLine, ChevronDown, Lightbulb } from "lucide-react";
+import { Video, VideoOff, Volume2, Waves, BookOpen, Plus, Trash2, ScanLine, ChevronDown, Lightbulb, MessageSquareText } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
@@ -60,7 +58,6 @@ export default function StudentMode() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [gestureHistory, setGestureHistory] = useState<RecognitionResult[]>([]);
   const [handDetected, setHandDetected] = useState(false);
-  const [typedText, setTypedText] = useState("");
   const [spokenTypedText, setSpokenTypedText] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -368,131 +365,129 @@ export default function StudentMode() {
     toast.success(`Falando: "${text}"`);
   };
 
-  const clearText = () => {
+  const clearDraft = () => {
     setRecognizedText("");
-    setCurrentGesture("");
-    setCurrentGestureKind(null);
-    setGestureHistory([]);
-    setCurrentConfidence(0);
-    toast.info('Texto limpo');
+    setSpokenTypedText("");
   };
 
   const addGestureToText = () => {
     if (currentGesture) {
       const gestureText = currentGesture.replace(/\[(ESQ|DIR)\]\s*/g, '').trim();
-      setRecognizedText(prev => prev + gestureText + ' ');
+      setRecognizedText(prev => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}${gestureText} `);
       speakText(gestureText);
       toast.success(`Adicionado: ${gestureText}`);
     }
   };
 
-  const speakTypedText = () => {
-    if (!typedText.trim()) return;
+  const speakMessage = () => {
+    if (!recognizedText.trim()) return;
     // Mantido num elemento visível (abaixo) para que o VLibras, que traduz o
     // texto presente na página, também consiga traduzir o que foi digitado.
-    setSpokenTypedText(typedText);
-    speakText(typedText);
+    setSpokenTypedText(recognizedText);
+    speakText(recognizedText);
   };
 
-  const handleTypedTextKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+  const sendMessage = () => {
+    if (classroom.send(recognizedText)) clearDraft();
+  };
+
+  const handleMessageKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey && recognizedText.trim() && classroom.status === 'connected' && classroom.professor) {
       event.preventDefault();
-      classroom.send(typedText);
+      sendMessage();
     }
-  };
-
-  const clearTypedText = () => {
-    setTypedText("");
-    setSpokenTypedText("");
   };
 
   return (
     <div className="workspace-page student-workspace">
       <WorkspaceHeading
-        title="Seu espaço de comunicação"
-        description="Use o teclado para falar ou explore gestos com a câmera."
+        title="Comunique-se com sua turma"
+        description="Escreva ou use os gestos para montar sua mensagem."
       >
-        <Button variant="outline" onClick={() => setLocation("/aluno/treinar")}>
-          <BookOpen size={17} aria-hidden="true" /> Treinar gestos
-        </Button>
+        <div className="student-heading-actions">
+          <RoomStatus />
+        </div>
       </WorkspaceHeading>
 
-      <ClassroomPanel />
-      <CallPanel role="aluno" studentStream={stream} />
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
-        <div className="student-layout">
-          <Card className="student-panel student-camera-panel" role="region" aria-labelledby="camera-title">
-            <CardHeader className="student-panel-header">
-              <div className="student-title-row">
-                <span className="student-tool-icon"><Video size={21} aria-hidden="true" /></span>
-                <div><h2 id="camera-title">Reconhecimento de gestos</h2><p>Enquadre sua mão e acompanhe o resultado.</p></div>
+        <div className="student-studio">
+          <section className="student-camera-workspace" aria-labelledby="camera-title">
+            <div className="student-section-heading">
+              <div>
+                <p className="student-section-label">Pela câmera</p>
+                <h2 id="camera-title">Reconhecimento de gestos</h2>
+                <p>Enquadre sua mão para adicionar um gesto à mensagem.</p>
               </div>
               <span className="student-experiment">Experimental</span>
-            </CardHeader>
-            <CardContent className="student-camera-content">
-              <div className="video-container student-camera-stage" data-active={isCapturing}>
-                <video ref={videoRef} autoPlay playsInline muted className="video-mirror block w-full h-auto" />
-                <canvas ref={canvasRef} className="video-mirror absolute inset-0 w-full h-full" />
-                {!isCapturing && (
-                  <div className="student-camera-empty">
-                    <span className="student-viewfinder" aria-hidden="true"><VideoOff size={30} strokeWidth={1.5} /></span>
-                    <strong>Sua câmera está desligada</strong>
-                    <p>Quando estiver pronto, inicie a câmera<br />e posicione a mão no quadro.</p>
-                  </div>
-                )}
-              </div>
-              <div className="student-camera-toolbar">
-                <div className="student-camera-status" role="status">
-                  <span className="student-status-dot" data-ready={!isHandLandmarkerLoading && !handLandmarkerError} />
-                  {isHandLandmarkerLoading ? "Preparando reconhecimento…"
-                    : handLandmarkerError ? "Reconhecimento indisponível"
-                    : isCapturing ? (handDetected ? "Mão detectada" : "Nenhuma mão no quadro")
-                    : "Pronto para começar"}
+            </div>
+
+            <div className="video-container student-camera-stage" data-active={isCapturing}>
+              <video ref={videoRef} autoPlay playsInline muted className="video-mirror block w-full h-auto" />
+              <canvas ref={canvasRef} className="video-mirror absolute inset-0 w-full h-full" />
+              {!isCapturing && (
+                <div className="student-camera-empty">
+                  <span className="student-viewfinder" aria-hidden="true"><VideoOff size={30} strokeWidth={1.5} /></span>
+                  <strong>Sua câmera está desligada</strong>
+                  <p>Inicie a câmera e posicione a mão no quadro.</p>
                 </div>
-                <Button variant={isCapturing ? "destructive" : "default"} onClick={isCapturing ? stopCapture : startCapture}>
-                  {isCapturing ? <VideoOff size={17} aria-hidden="true" /> : <Video size={17} aria-hidden="true" />}
-                  {isCapturing ? "Parar câmera" : "Iniciar câmera"}
+              )}
+              <span className="student-camera-corner student-camera-corner-top" aria-hidden="true" />
+              <span className="student-camera-corner student-camera-corner-bottom" aria-hidden="true" />
+            </div>
+
+            <div className="student-camera-toolbar">
+              <div className="student-camera-status" role="status">
+                <span className="student-status-dot" data-ready={!isHandLandmarkerLoading && !handLandmarkerError} />
+                {isHandLandmarkerLoading ? "Preparando reconhecimento…"
+                  : handLandmarkerError ? "Reconhecimento indisponível"
+                  : isCapturing ? (handDetected ? "Mão detectada" : "Nenhuma mão no quadro")
+                  : "Pronto para começar"}
+              </div>
+              <Button variant={isCapturing ? "destructive" : "default"} onClick={isCapturing ? stopCapture : startCapture}>
+                {isCapturing ? <VideoOff size={17} aria-hidden="true" /> : <Video size={17} aria-hidden="true" />}
+                {isCapturing ? "Parar câmera" : "Iniciar câmera"}
+              </Button>
+            </div>
+            {handLandmarkerError && <p className="student-error" role="alert">Erro: {handLandmarkerError}</p>}
+
+            <div className="student-recognition">
+              <div className="student-recognition-label">
+                {currentGestureKind === "dynamic" ? <Waves size={17} aria-hidden="true" /> : <ScanLine size={17} aria-hidden="true" />}
+                <h3>Gesto reconhecido</h3>
+              </div>
+              <div className="student-recognition-result">
+                <div className="student-result-value">
+                  {currentGesture ? (
+                    <>
+                      <strong className="student-gesture-value">{currentGesture}</strong>
+                      <div className="student-confidence">
+                        <p>{currentGestureKind === "dynamic" ? "Sinal em movimento" : "Letra reconhecida"} · {currentConfidence}% de confiança</p>
+                        <div className="student-confidence-track" role="meter" aria-label="Confiança do reconhecimento" aria-valuemin={0} aria-valuemax={100} aria-valuenow={currentConfidence}>
+                          <span style={{ width: `${currentConfidence}%` }} />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="student-empty-copy">{isCapturing ? "Mantenha a mão visível e faça um gesto pausadamente." : "O gesto identificado aparecerá aqui."}</p>
+                  )}
+                </div>
+                <Button variant="outline" onClick={addGestureToText} disabled={!currentGesture || currentConfidence <= 75}>
+                  <Plus size={17} aria-hidden="true" /> Adicionar ao texto
                 </Button>
               </div>
-              {handLandmarkerError && <p className="student-error" role="alert">Erro: {handLandmarkerError}</p>}
+            </div>
 
-              <div className="student-recognition">
-                <div className="student-recognition-label">
-                  {currentGestureKind === "dynamic" ? <Waves size={17} aria-hidden="true" /> : <ScanLine size={17} aria-hidden="true" />}
-                  <h3>Gesto reconhecido</h3>
+            {gestureHistory.length > 0 && (
+              <details className="student-model-details student-recent-gestures">
+                <summary><span>Últimos gestos detectados</span><ChevronDown size={17} aria-hidden="true" /></summary>
+                <div className="student-model-body">
+                  <p>Use “Adicionar ao texto” para incluir um gesto na mensagem.</p>
+                  <div className="student-gesture-list">{gestureHistory.map((gesture, idx) => <span key={idx} data-dynamic={gesture.kind === "dynamic"}>{gesture.gesture}</span>)}</div>
                 </div>
-                <div className="student-recognition-result">
-                  <div className="student-result-value">
-                    {currentGesture ? (
-                      <>
-                        <strong className="student-gesture-value">{currentGesture}</strong>
-                        <div className="student-confidence">
-                          <p>{currentGestureKind === "dynamic" ? "Sinal em movimento" : "Letra reconhecida"} · {currentConfidence}% de confiança</p>
-                          <div className="student-confidence-track" role="meter" aria-label="Confiança do reconhecimento" aria-valuemin={0} aria-valuemax={100} aria-valuenow={currentConfidence}>
-                            <span style={{ width: `${currentConfidence}%` }} />
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="student-empty-copy">{isCapturing ? "Mantenha a mão visível e faça um gesto pausadamente." : "O gesto identificado aparecerá aqui."}</p>
-                    )}
-                  </div>
-                  <Button variant="outline" onClick={addGestureToText} disabled={!currentGesture || currentConfidence <= 75}>
-                    <Plus size={17} aria-hidden="true" /> Adicionar ao texto
-                  </Button>
-                </div>
-              </div>
+              </details>
+            )}
 
-              {gestureHistory.length > 0 && (
-                <details className="student-model-details student-recent-gestures">
-                  <summary><span>Últimos gestos detectados</span><ChevronDown size={17} aria-hidden="true" /></summary>
-                  <div className="student-model-body">
-                    <p>Este histórico mostra as detecções da câmera. Use Adicionar ao texto para incluir um gesto na sua mensagem.</p>
-                    <div className="student-gesture-list">{gestureHistory.map((gesture, idx) => <span key={idx} data-dynamic={gesture.kind === "dynamic"}>{gesture.gesture}</span>)}</div>
-                  </div>
-                </details>
-              )}
-
+            <div className="student-available-gestures">
               <details className="student-model-details">
                 <summary><span><BookOpen size={17} aria-hidden="true" /> Gestos disponíveis</span><ChevronDown size={17} aria-hidden="true" /></summary>
                 <div className="student-model-body">
@@ -508,94 +503,62 @@ export default function StudentMode() {
                   <button type="button" className="student-text-link" onClick={() => setLocation("/aluno/treinar")}>Personalizar meus gestos</button>
                 </div>
               </details>
-            </CardContent>
-          </Card>
+              <button type="button" className="student-text-link student-train-link" onClick={() => setLocation("/aluno/treinar")}>
+                Treinar gestos
+              </button>
+            </div>
+          </section>
 
-          <div className="student-message-column">
-            <Card className="student-panel student-transcript-panel" role="region" aria-labelledby="transcript-title">
-              <CardHeader className="student-panel-header">
-                <div className="student-title-row">
-                  <span className="student-tool-icon"><ScanLine size={21} aria-hidden="true" /></span>
-                  <div><h2 id="transcript-title">Mensagem com gestos</h2><p>Acompanhe o texto que você está construindo.</p></div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="student-message-label-row">
-                  <label className="student-field-label" htmlFor="gesture-message">Sua mensagem</label>
-                  <span className="student-manual-label">Adição manual</span>
-                </div>
-                <Textarea
-                  id="gesture-message"
-                  value={recognizedText}
-                  onChange={e => setRecognizedText(e.target.value)}
-                  maxLength={2000}
-                  aria-describedby="gesture-message-help gesture-message-session"
-                  placeholder="Sua mensagem aparecerá aqui…"
-                  className="student-message-input student-gesture-message"
-                />
-                <p id="gesture-message-help" className="student-message-help">Reconheça um gesto e clique em <strong>Adicionar ao texto</strong>, abaixo da câmera. Revise o texto antes de enviar.</p>
-                <div className="student-actions student-phrase-actions">
-                  <Button onClick={() => classroom.send(recognizedText)} disabled={!recognizedText.trim() || classroom.status !== "connected" || !classroom.professor}>Enviar ao professor</Button>
-                  <Button onClick={() => speakText(recognizedText)} disabled={!recognizedText.trim()}><Volume2 size={17} aria-hidden="true" /> Ouvir mensagem</Button>
-                  <Button variant="ghost" onClick={clearText} disabled={!recognizedText && !gestureHistory.length && !currentGesture}><Trash2 size={16} aria-hidden="true" /> Limpar mensagem</Button>
-                </div>
-                <p id="gesture-message-session" className="student-session-note">O texto fica disponível enquanto esta tela estiver aberta.</p>
-              </CardContent>
-            </Card>
+          <section className="student-compose-workspace" role="region" aria-labelledby="transcript-title">
+            <div className="student-compose-heading">
+              <div className="student-compose-symbol" aria-hidden="true"><MessageSquareText size={22} /></div>
+              <div><p className="student-section-label">Sua vez</p><h2 id="transcript-title">Mensagem para a sala</h2></div>
+            </div>
+            <p className="student-compose-intro">Digite livremente ou acrescente os gestos reconhecidos pela câmera. O texto pode ser editado antes do envio.</p>
+            <label className="student-field-label" htmlFor="gesture-message">Escreva sua mensagem</label>
+            <Textarea
+              id="gesture-message"
+              value={recognizedText}
+              onChange={e => setRecognizedText(e.target.value)}
+              maxLength={2000}
+              onKeyDown={handleMessageKeyDown}
+              aria-describedby="gesture-message-help gesture-message-session"
+              placeholder="Comece a escrever aqui…"
+              className="student-message-input student-gesture-message"
+            />
+            <div className="student-compose-meta">
+              <p id="gesture-message-help"><kbd>Enter</kbd> envia <span>·</span> <kbd>Shift + Enter</kbd> cria uma linha</p>
+              <span>{recognizedText.length}/2.000</span>
+            </div>
+            <div className="student-actions student-phrase-actions">
+              <Button onClick={sendMessage} disabled={!recognizedText.trim() || classroom.status !== "connected" || !classroom.professor}>Enviar ao professor</Button>
+              <Button variant="outline" onClick={speakMessage} disabled={!recognizedText.trim()}><Volume2 size={17} aria-hidden="true" /> Ouvir</Button>
+              <Button variant="ghost" onClick={clearDraft} disabled={!recognizedText && !spokenTypedText}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
+            </div>
+            <p id="gesture-message-session" className="student-session-note">O rascunho fica nesta tela até você sair da sala.</p>
 
-            <Card className="student-panel student-compose-panel" role="region" aria-labelledby="compose-title">
-              <CardHeader className="student-panel-header">
-                <div className="student-title-row">
-                  <span className="student-tool-icon"><Keyboard size={21} aria-hidden="true" /></span>
-                  <div><h2 id="compose-title">Mensagem ao professor</h2><p>Escreva, revise e envie para sua sala.</p></div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <label className="student-field-label" htmlFor="student-message">O que você quer dizer?</label>
-                <Textarea
-                  id="student-message"
-                  aria-label="Mensagem para o professor"
-                  aria-describedby="student-keyboard-hint"
-                  maxLength={2000}
-                  value={typedText}
-                  onChange={e => setTypedText(e.target.value)}
-                  onKeyDown={handleTypedTextKeyDown}
-                  placeholder="Escreva sua mensagem aqui…"
-                  className="student-message-input"
-                />
-                <p className="student-keyboard-hint" id="student-keyboard-hint"><kbd>Enter</kbd> para enviar <span>·</span> <kbd>Shift + Enter</kbd> para nova linha</p>
-                <div className="student-actions">
-                  <Button onClick={() => classroom.send(typedText)} disabled={!typedText.trim() || classroom.status !== "connected" || !classroom.professor}>Enviar ao professor</Button>
-                  <Button variant="outline" onClick={speakTypedText} disabled={!typedText.trim()}><Volume2 size={17} aria-hidden="true" /> Ouvir aqui</Button>
-                  <Button variant="ghost" onClick={clearTypedText} disabled={!typedText && !spokenTypedText}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
-                </div>
-                <div className="student-libras-option">
-                  <div className="student-libras-heading">
-                    <strong>Apoio em Libras</strong>
-                    <small>O VLibras fica disponível pelo ícone azul em todas as telas.</small>
-                  </div>
-                  <div className="student-libras-preview">
-                    <p>Abra o ícone azul e selecione a mensagem abaixo para traduzir.</p>
-                    <p className="student-spoken-text">{spokenTypedText || "Digite uma mensagem e escolha Ouvir aqui para exibi-la aqui."}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-
-          </div>
+            <div className="student-libras-option">
+              <div className="student-libras-heading">
+                <strong>Apoio em Libras</strong>
+                <small>Use o ícone do VLibras para traduzir o texto selecionado.</small>
+              </div>
+              <p className="student-spoken-text">{spokenTypedText || recognizedText || "O texto da sua mensagem aparecerá aqui para seleção."}</p>
+            </div>
+          </section>
+          <ClassroomPanel compact embedded />
         </div>
 
-        <aside className="student-guidance" aria-labelledby="student-guidance-title">
-          <div className="student-guidance-heading"><Lightbulb size={20} aria-hidden="true" /><h2 id="student-guidance-title">Para reconhecer melhor</h2></div>
+        <details className="student-guidance">
+          <summary><Lightbulb size={18} aria-hidden="true" /><span>Dicas para o reconhecimento</span><ChevronDown size={17} aria-hidden="true" /></summary>
           <div className="student-guidance-tips">
-            <p><strong>Cuide da iluminação.</strong> Deixe a mão inteira visível no quadro.</p>
-            <p><strong>Faça uma pausa no gesto.</strong> Espere o resultado antes de adicionar ao texto.</p>
-            <p><strong>Personalize no treino.</strong> Capture suas amostras para incluir outros gestos.</p>
+            <p><strong>Boa iluminação.</strong> Deixe a mão inteira visível no quadro.</p>
+            <p><strong>Faça uma pausa.</strong> Espere o resultado antes de adicionar o gesto.</p>
+            <p><strong>Personalize.</strong> Capture amostras em Treinar gestos para incluir outros sinais.</p>
           </div>
           <p className="student-limit-note">O modelo experimental inclui A a Z. H, J, K, X e Z são reconhecidos pela posição da mão, sem validar o movimento completo. Ç ainda não está incluído. Não traduz Libras completa.</p>
-        </aside>
+        </details>
       </main>
+
     </div>
   );
 }

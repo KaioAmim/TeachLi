@@ -1,20 +1,38 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import {
   ArrowLeft,
   ArrowUpRight,
   BookOpen,
-  GraduationCap,
   MessageSquare,
   Home,
+  PhoneCall,
+  MapPin,
+  CircleUserRound,
+  DoorOpen,
+  LogOut,
 } from "lucide-react";
 import { UniversityBrand, TeachLiBrand } from "@/components/Brand";
+import { useClassroomConnection } from "@/contexts/ClassroomContext";
+import { logoutMicrosoftSession } from "@/lib/microsoftAuth";
+
+export function RoomStatus() {
+  const { room, status } = useClassroomConnection();
+  return <span className="room-status" role="status"><i data-connected={status === "connected"} aria-hidden="true" /><MapPin size={15} aria-hidden="true" />{room?.name} · {status === "connected" ? "Conectado" : "Desconectado"}</span>;
+}
 
 export function AppHeader() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const { leave } = useClassroomConnection();
+  const [accountError, setAccountError] = useState("");
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
   const home = location === "/";
-  const student = location.startsWith("/aluno");
-  const professor = location === "/professor";
+  const changeRoom = () => { if (accountMenuRef.current) accountMenuRef.current.open = false; setAccountError(""); leave(); navigate("/salas"); };
+  const logout = async () => {
+    if (accountMenuRef.current) accountMenuRef.current.open = false;
+    try { await logoutMicrosoftSession(); leave(); navigate("/"); }
+    catch { setAccountError("Não foi possível sair da conta. Confira a conexão e tente novamente."); }
+  };
   return (
     <>
       <a className="skip-link" href="#conteudo">
@@ -44,35 +62,29 @@ export function AppHeader() {
                   <Home size={17} aria-hidden="true" />
                   <span>Início</span>
                 </Link>
-                {student && (
-                  <>
-                    <Link
-                      href="/aluno"
-                      aria-current={location === "/aluno" ? "page" : undefined}
-                    >
-                      <MessageSquare size={17} aria-hidden="true" />
-                      Aluno
-                    </Link>
-                    <Link
-                      href="/aluno/treinar"
-                      aria-current={
-                        location === "/aluno/treinar" ? "page" : undefined
-                      }
-                    >
-                      <BookOpen size={17} aria-hidden="true" />
-                      Treinar
-                    </Link>
-                  </>
-                )}
-                {professor && (
-                  <Link href="/professor" aria-current="page">
-                    <GraduationCap size={17} aria-hidden="true" />
-                    Professor
-                  </Link>
-                )}
+                <Link href="/aluno" aria-current={location === "/aluno" ? "page" : undefined}>
+                  <MessageSquare size={17} aria-hidden="true" />
+                  Aluno
+                </Link>
+                <Link href="/aluno/treinar" aria-current={location === "/aluno/treinar" ? "page" : undefined}>
+                  <BookOpen size={17} aria-hidden="true" />
+                  Treinar Gestos
+                </Link>
+                <Link href="/ead" aria-current={location === "/ead" ? "page" : undefined}>
+                  <PhoneCall size={17} aria-hidden="true" />
+                  EAD
+                </Link>
               </>
             )}
           </nav>
+          {!home && <details ref={accountMenuRef} className="account-menu">
+            <summary><CircleUserRound size={17} aria-hidden="true" /><span>Conta</span></summary>
+            <div className="account-menu-panel">
+              <button type="button" onClick={changeRoom}><DoorOpen size={16} aria-hidden="true" /> Trocar sala</button>
+              <button type="button" onClick={() => void logout()}><LogOut size={16} aria-hidden="true" /> Sair da conta</button>
+              {accountError && <p role="alert">{accountError}</p>}
+            </div>
+          </details>}
           <Link
             href="/"
             className="product-brand"
