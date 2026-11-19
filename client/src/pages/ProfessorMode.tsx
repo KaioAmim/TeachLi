@@ -1,4 +1,5 @@
 import { ClassroomPanel } from "@/components/ClassroomPanel";
+import { CallPanel } from "@/components/CallPanel";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
 import { WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef } from "react";
@@ -130,6 +131,7 @@ export default function ProfessorMode() {
       <WorkspaceHeading title="A sua fala, mais acessível." description="Fale, acompanhe a transcrição e compartilhe com a turma." />
 
       <ClassroomPanel />
+      <CallPanel role="professor" />
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
         <div className="professor-layout">
           <div className="professor-main-column">

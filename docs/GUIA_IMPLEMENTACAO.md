@@ -26,7 +26,7 @@ avaliação de alunos surdos e profissionais de Libras.
   das declarações locais e da configuração Vite, mantendo TypeScript estrito.
 - [x] Remover o backend e as integrações herdadas do template anterior (Manus).
 - [x] Manter TypeScript no comando completo de build, antes do Vite.
-- [ ] Regularizar separadamente telas antigas (`SalaAula`, `Classroom`, `TrainGestures`, WebRTC) caso sejam reintegradas.
+- [ ] Regularizar separadamente telas antigas (`TrainGestures`) caso sejam reintegradas.
 
 Os pacotes atuais são `client/` e `server/`; o `package.json` da raiz só expõe o
 atalho `npm run dev:classroom`.
@@ -76,11 +76,13 @@ participação; exigir login sozinho não basta.
 - [ ] Definir turmas, matrículas, encerramento de aula e histórico se o piloto exigir.
 - [ ] Evoluir reconexão e recuperação de estado sem duplicar mensagens.
 
-Estado atual em memória, uma instância; sem histórico persistente. O código
-WebRTC antigo está preservado, fora das rotas e sem integração com o servidor
-atual. Retomar videochamada requer projeto próprio de sinalização e mídia,
-permissões opcionais, avaliação de TURN e banda. WebSocket conectado não comprova
-conexão de mídia nem capacidade de turma.
+Estado atual em memória, uma instância; sem histórico persistente. A chamada de
+vídeo e áudio usa WebRTC ponto a ponto com sinalização pelo servidor de salas
+(mensagem `signal`: `hello`, `offer`, `answer`, `candidate`, `bye`). O professor
+sempre cria a oferta. Pendentes: validar com contas e dispositivos reais, avaliar
+TURN institucional (`VITE_TURN_URL`), banda para uma turma inteira (cada aluno é
+uma conexão do professor) e a tradução automática no VLibras, que não tem API
+documentada. WebSocket conectado não comprova conexão de mídia.
 
 ## 4. Texto do aluno e voz — envio implementado, reprodução avançada futura
 
@@ -184,8 +186,8 @@ segmentos e revisão de legendas, ordem e recuperação da sessão, estados de
 reprodução e encerramento autorizado. Eventos como `caption.partial`,
 `playback.status` e `session.closed` ainda são propostas.
 
-A mídia WebRTC pode complementar esse canal no futuro, sem tornar câmera ou
-microfone obrigatórios para texto. Não há videochamada ativa nesta entrega.
+A chamada WebRTC complementa esse canal sem tornar câmera ou microfone obrigatórios
+para texto; é opcional e começa só quando a pessoa clica em entrar na chamada.
 Preferências locais não são sincronização por conta; transmissão de texto não
 comprova reprodução; seleção no VLibras não comprova controle automático do avatar.
 

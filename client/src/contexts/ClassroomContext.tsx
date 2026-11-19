@@ -5,10 +5,13 @@ import { loadMicrosoftSession } from '@/lib/microsoftAuth';
 
 export interface Room { id: string; name: string }
 export interface RoomMessage { id: string; text: string; author: string; role: 'aluno' | 'professor'; createdAt: number }
+export interface Peer { id: string; role: 'aluno' | 'professor' }
+export type SignalHandler = (from: string, data: Record<string, unknown>) => void;
 type Status = 'idle' | 'connecting' | 'connected' | 'disconnected';
 interface ClassroomState {
   room: Room | null; status: Status; error: string; professor: boolean; students: number;
-  messages: RoomMessage[]; sendStatus: string;
+  messages: RoomMessage[]; sendStatus: string; selfId: string; peers: Peer[];
+  sendSignal: (to: string, data: Record<string, unknown>) => boolean; onSignal: (handler: SignalHandler) => () => void;
   join: (room: Room) => Promise<void>; leave: () => void; send: (text: string) => boolean;
 }
 const Context = createContext<ClassroomState | null>(null);
@@ -22,13 +25,16 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const [students, setStudents] = useState(0);
   const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [sendStatus, setSendStatus] = useState('');
+  const [selfId, setSelfId] = useState('');
+  const [peers, setPeers] = useState<Peer[]>([]);
+  const signalHandlers = useRef(new Set<SignalHandler>());
   const socket = useRef<WebSocket | null>(null);
   const role = useRef<'aluno' | 'professor'>('aluno');
   const pending = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const clearPending = () => { for (const timer of pending.current.values()) clearTimeout(timer); pending.current.clear(); };
   const leave = useCallback(() => {
     socket.current?.close(); socket.current = null; clearPending();
-    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSendStatus(''); setProfessor(false); setStudents(0);
+    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]);
     window.speechSynthesis?.cancel();
   }, []);
   useEffect(() => {
@@ -48,8 +54,9 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
       if (socket.current !== ws) return;
       let data; try { data = JSON.parse(event.data); } catch { return; }
       if (data.type === 'joined') {
-        clearTimeout(timeout); joined = true; setRoom(data.room); setStatus('connected'); resolve();
-      } else if (data.type === 'presence') { setProfessor(data.professor); setStudents(data.students); }
+        clearTimeout(timeout); joined = true; setRoom(data.room); setSelfId(typeof data.selfId === 'string' ? data.selfId : ''); setStatus('connected'); resolve();
+      } else if (data.type === 'presence') { setProfessor(data.professor); setStudents(data.students); setPeers(Array.isArray(data.peers) ? data.peers : []); }
+      else if (data.type === 'signal') { for (const handler of signalHandlers.current) handler(data.from, data.data); }
       else if (data.type === 'student.message' || data.type === 'caption.final') {
         setMessages(previous => [...previous, data].slice(-100));
       } else if (data.type === 'message.ack' || data.type === 'message.rejected') {
@@ -62,7 +69,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
       clearTimeout(timeout);
       if (!joined) reject(new Error(failure || 'Não foi possível entrar na sala.'));
       if (socket.current !== ws) return;
-      clearPending(); setStatus('disconnected'); setProfessor(false); setStudents(0);
+      clearPending(); setStatus('disconnected'); setProfessor(false); setStudents(0); setPeers([]);
       setError(failure || 'Conexão encerrada. Entre novamente na sala para continuar.');
       setSendStatus(''); window.speechSynthesis?.cancel();
     };
@@ -76,7 +83,12 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     pending.current.set(id, setTimeout(() => { pending.current.delete(id); setSendStatus('Sem confirmação de envio. Confira com o destinatário antes de reenviar.'); }, 8000));
     return true;
   }, [status]);
-  return <Context.Provider value={{ room, status, error, professor, students, messages, sendStatus, join, leave, send }}>{children}</Context.Provider>;
+  const sendSignal = useCallback((to: string, data: Record<string, unknown>) => {
+    if (socket.current?.readyState !== WebSocket.OPEN) return false;
+    socket.current.send(JSON.stringify({ type: 'signal', to, data })); return true;
+  }, []);
+  const onSignal = useCallback((handler: SignalHandler) => { signalHandlers.current.add(handler); return () => { signalHandlers.current.delete(handler); }; }, []);
+  return <Context.Provider value={{ room, status, error, professor, students, messages, sendStatus, selfId, peers, sendSignal, onSignal, join, leave, send }}>{children}</Context.Provider>;
 }
 export function useClassroomConnection() {
   const context = useContext(Context);

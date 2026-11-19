@@ -20,6 +20,8 @@ const SECURITY_HEADERS = {
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
 };
 
+const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
+
 export function createClassroomServer({ env = process.env, verifyIdentity = createMicrosoftVerifier(env), now = Date.now, audit = event => console.log(JSON.stringify(event)) } = {}) {
   const catalog = env.TEACHLI_ROOMS ? JSON.parse(env.TEACHLI_ROOMS) : DEFAULT_ROOMS;
   if (!Array.isArray(catalog) || !catalog.length || catalog.length > 100 || catalog.some(r => !/^[a-z0-9-]{1,60}$/.test(r.id) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100) || new Set(catalog.map(r => r.id)).size !== catalog.length) throw new Error('TEACHLI_ROOMS inválido.');
@@ -56,7 +58,8 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const presence = room => {
     const clients = [...room.clients];
     const event = { type: 'presence', professor: clients.some(c => c.session.role === 'professor'), students: clients.filter(c => c.session.role === 'aluno').length };
-    for (const c of clients) send(c.ws, event);
+    // Cada conexão só conhece os IDs do perfil oposto (aluno↔professor); alunos não veem IDs de outros alunos.
+    for (const c of clients) send(c.ws, { ...event, peers: clients.filter(o => o !== c && o.session.role !== c.session.role).map(o => ({ id: o.id, role: o.session.role })) });
   };
   const remove = client => { if (client.room.clients.delete(client)) presence(client.room); };
   const revoke = token => {
@@ -125,17 +128,29 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.token !== token)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
     // A session belongs to exactly one connection/room. An old connection loses membership immediately.
     for (const r of rooms.values()) for (const old of [...r.clients]) if (old.token === token) { remove(old); old.ws.close(1000, 'Sala alterada'); }
-    const client = { ws, token, session, room, seen: new Set(), count: 0, until: now() + 10000 };
+    const client = { id: randomUUID(), ws, token, session, room, seen: new Set(), count: 0, until: now() + 10000, signals: 0, signalUntil: now() + 10000 };
     room.clients.add(client);
     log('room.join', { user: who(session.id), role: session.role, room: room.id });
-    send(ws, { type: 'joined', room: { id: room.id, name: room.name }, role: session.role });
+    send(ws, { type: 'joined', room: { id: room.id, name: room.name }, role: session.role, selfId: client.id });
     presence(room);
     ws.on('message', raw => {
       if (!validSession(token) || !room.clients.has(client)) { remove(client); return reject('Sua sessão expirou. Entre novamente.'); }
+      let signal;
+      try { signal = JSON.parse(raw.toString()); } catch { return; }
+      if (signal?.type === 'signal') {
+        // Sinalização da chamada (SDP/ICE): só entre aluno e professor da mesma sala, com limite próprio.
+        if (now() >= client.signalUntil) { client.signals = 0; client.signalUntil = now() + 10000; }
+        if (++client.signals > 300) return send(ws, { type: 'error', message: 'Sinalização muito rápida. Aguarde alguns segundos.' });
+        const target = [...room.clients].find(c => c.id === signal.to && c !== client && c.session.role !== session.role && validSession(c.token) && c.ws.readyState === 1);
+        const data = signal.data;
+        const ok = target && data && typeof data === 'object' && !Array.isArray(data) && SIGNAL_KINDS.has(data.kind) && JSON.stringify(data).length <= 12000;
+        if (!ok) return send(ws, { type: 'signal.rejected', to: typeof signal.to === 'string' ? signal.to.slice(0, 40) : null });
+        if (data.kind === 'hello' || data.kind === 'offer') log('call.' + data.kind, { user: who(session.id), room: room.id });
+        return send(target.ws, { type: 'signal', from: client.id, data });
+      }
       if (now() >= client.until) { client.count = 0; client.until = now() + 10000; }
       if (++client.count > 60) return send(ws, { type: 'error', message: 'Envios muito rápidos. Aguarde alguns segundos.' });
-      let message;
-      try { message = JSON.parse(raw.toString()); } catch { return; }
+      const message = signal;
       if (!message || !['student.message', 'caption.final'].includes(message.type) ||
           (message.type === 'student.message') !== (session.role === 'aluno') ||
           typeof message.id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(message.id) ||

@@ -1,26 +1,15 @@
 /**
- * STUN público do Google — resolve o endereço público de cada peer, mas não
- * ajuda quando um dos lados está atrás de um NAT simétrico ou firewall
- * restritivo (comum em redes escolares/corporativas). Nesse caso a conexão
- * P2P falha silenciosamente e só um servidor TURN resolveria — não incluído
- * aqui porque exige infraestrutura própria para retransmitir mídia (ver
- * server/README.md na raiz do repo).
+ * Servidores ICE da chamada. O STUN público resolve o endereço de cada lado, mas não
+ * atravessa NAT simétrico nem firewalls restritivos (comuns em redes institucionais).
+ * Para esses casos configure um servidor TURN próprio da instituição:
+ * VITE_TURN_URL (ex.: turns:turn.exemplo.edu.br:443), VITE_TURN_USERNAME e VITE_TURN_CREDENTIAL.
+ * Atenção: valores VITE_* ficam públicos no build; use credenciais TURN temporárias e limitadas.
  */
-export const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+const turnUrl = import.meta.env.VITE_TURN_URL as string | undefined;
+const turnUser = import.meta.env.VITE_TURN_USERNAME as string | undefined;
+const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL as string | undefined;
 
-/** Sobrescreva com VITE_SIGNALING_URL num .env.local apontando para onde o
- * servidor em server/ estiver rodando (ver server/README.md). */
-export const SIGNALING_URL =
-  (import.meta.env.VITE_SIGNALING_URL as string | undefined) ?? "ws://localhost:8787";
-
-function signalingToHttpUrl(url: string): string {
-  if (url.startsWith("wss://")) return `https://${url.slice("wss://".length)}`;
-  if (url.startsWith("ws://")) return `http://${url.slice("ws://".length)}`;
-  return url;
-}
-
-/** Endpoint HTTP que inicia a sessão demo de professor.
- * Em produção, VITE_DEMO_AUTH_URL deve apontar para o mesmo serviço HTTPS/WSS. */
-export const DEMO_AUTH_URL =
-  (import.meta.env.VITE_DEMO_AUTH_URL as string | undefined) ??
-  `${signalingToHttpUrl(SIGNALING_URL)}/auth/demo/login`;
+export const ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.l.google.com:19302" },
+  ...(turnUrl && turnUser && turnCredential ? [{ urls: turnUrl, username: turnUser, credential: turnCredential }] : []),
+];

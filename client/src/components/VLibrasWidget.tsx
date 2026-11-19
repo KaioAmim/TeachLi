@@ -12,6 +12,19 @@ const SCRIPT_ID = "vlibras-plugin-script";
 const APP_URL = "https://vlibras.gov.br/app";
 let widgetInitialized = false;
 
+/** Pede ao widget que traduza um texto. O VLibras não documenta esta chamada como API
+ * estável: devolve false se o widget não estiver carregado ou não aceitar o comando. */
+export function translateWithVLibras(text: string): boolean {
+  try {
+    const player = (window as unknown as { plugin?: { player?: { translate?: (value: string) => void } } }).plugin?.player;
+    if (typeof player?.translate !== "function") return false;
+    player.translate(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Embute o widget oficial do VLibras (avatar 3D que traduz texto da página
  * para Libras). O VLibras não expõe uma API REST de geração de vídeo para
