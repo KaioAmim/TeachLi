@@ -1,6 +1,6 @@
 # Guia de implementação do TeachLi
 
-Atualizado em 23/10/2026 para `feature/entrada-salas-aula`.
+Atualizado em 19/11/2026. Os detalhes técnicos estão na [documentação técnica](DOCUMENTACAO.md); as convenções de branch e commit, no fim deste guia.
 Este roteiro mantém o objetivo final e distingue a entrega atual das próximas
 etapas. “Implementado” significa presente no aplicativo; não equivale a
 aprovação do piloto ou validação com usuários reais.
@@ -86,8 +86,13 @@ documentada. WebSocket conectado não comprova conexão de mídia.
 
 ## 4. Texto do aluno e voz — envio implementado, reprodução avançada futura
 
-- [x] Digitar ou formar rascunho por gestos, editar e confirmar o envio.
-- [x] Enter envia; Shift+Enter insere linha; ouvir localmente é ação separada.
+- [x] Digitar ou compor por gestos, editar e enviar; a composição por gestos segue ao professor
+  automaticamente após uma pausa (desligável), sem botão durante o sinal.
+- [x] Letras estáveis entram sozinhas, sem espaços entre elas, com regra de repetição (soltar o gesto),
+  rejeição de transições, pausa para correção, espaço, apagar e preservação ao reiniciar a câmera.
+- [x] Enter envia texto digitado; Shift+Enter insere linha; ouvir é ação separada e só quando solicitada.
+- [ ] Calibrar com alunos os tempos de pausa (palavra 1,5 s, envio 3,5 s) e a regra de repetição.
+- [ ] Testes específicos de estabilidade, repetição intencional (LL, RR), transições e correções com câmera real.
 - [x] Painel do professor com autoria e botão de ouvir a mensagem.
 - [x] IDs, limite de texto, deduplicação e confirmação de encaminhamento.
 - [ ] Fila de reprodução sem sobreposição, com pausar, repetir e descartar.
@@ -130,6 +135,15 @@ são expectativas de evolução, não capacidades comprovadas da integração at
 ## 7. Reconhecimento por câmera — A–Z experimental, movimento como próxima etapa
 
 - [x] Ampliar o modelo padrão para A–Z com duas bases e preservar o modelo antigo.
+- [x] Modelo base de 178 sinais em movimento (Libras-EQT-UECE); avaliado com informante inédito
+  (71,7–85,0% no 1º palpite, 92,9–97,6% no top-5 em clipes isolados).
+- [x] Expressões faciais gramaticais (pergunta, dúvida, surpresa, negação, certeza) a partir de sobrancelhas e
+  movimento da cabeça, opcionais e sem tráfego de imagem ao servidor.
+- [x] Sem desenho de traços sobre as mãos.
+- [ ] Confirmar origem e licença do Libras-EQT-UECE antes de redistribuir o modelo.
+- [ ] Calibrar as expressões com sinalizantes (ex.: dataset UCI de expressões faciais gramaticais).
+- [ ] Classe "nenhum sinal" e avaliação em fala contínua para o modelo dinâmico base.
+- [ ] Ampliar vocabulário com MINDS-Libras e V-LIBRASIL (exigem extração de landmarks).
 - [x] Preservar modelos pessoais, editor de texto e confirmação antes do envio.
 - [x] Versionar artefatos, origem, licenças, scripts e resultados dos experimentos.
 - [ ] Corrigir a captura temporal para preservar trajetória, tempo e posição relativa.
@@ -144,15 +158,11 @@ são expectativas de evolução, não capacidades comprovadas da integração at
 - [ ] Medir letras repetidas, rejeição de desconhecidos e confiança na câmera.
 
 Fotos isoladas podem descrever poses; movimentos exigem sequências ordenadas.
-Coleta e treinamento são etapas distintas. Não há modelo temporal base distribuído;
-H/J/K/X/Z no modelo atual são experimentais por pose e Ç ainda não está incluído.
-A captura dinâmica centraliza a mão em cada quadro, removendo deslocamento global:
-corrigir isso deve preceder a coleta. Métricas internas não representam acerto
-independente na câmera. Detalhes em [TREINAMENTO_ALFABETO.md](TREINAMENTO_ALFABETO.md)
-e, para o próximo trabalho, na descrição do PR.
-
-O script do experimento A–Z tem instruções de reprodução. Os scripts históricos
-anteriores ainda têm caminhos específicos e precisam de adaptação se reutilizados.
+Coleta e treinamento são etapas distintas. H/J/K/X/Z no modelo de letras são experimentais por pose e
+Ç ainda não está incluído. A captura dinâmica do usuário centraliza a mão em cada quadro, removendo
+deslocamento global (nos testes com o dataset, acrescentar trajetória piorou o acerto com pessoas novas,
+então isso precisa de nova análise antes da coleta). Métricas internas não representam acerto independente
+na câmera. Detalhes e reprodução na [documentação técnica](DOCUMENTACAO.md#5-reconhecimento-e-treinamento).
 
 ## 8. Histórico e dados — futuro
 
@@ -198,9 +208,56 @@ mantêm a direção do produto sem declarar concluídos os recursos futuros.
 
 ## Checklist para cada PR
 
-- [ ] Branch, commits, título e labels seguem [BRANCHES.md](BRANCHES.md).
+- [ ] Branch, commits, título e labels seguem as [convenções abaixo](#convenções-de-branch-label-e-commit).
 - [ ] Testes descritos com resultados e limitações, distinguindo simulação de uso real.
 - [ ] Imports, entradas de compilação e usos indiretos conferidos.
 - [ ] Documentação condiz com a entrega e preserva o resultado final planejado.
 - [ ] Próximos passos do reconhecimento temporal registrados no PR.
 - [ ] Revisão e verificações concluídas antes de integrar à `main`.
+
+## Convenções de branch, label e commit
+
+### Escolher o tipo de trabalho
+
+| Label principal | Branch | Tipos de commit | Exemplo |
+| --- | --- | --- | --- |
+| `feature` | `feature/descricao` | `feat` | `feature/legendas-compartilhadas` |
+| `bug` | `bug/descricao` | `fix` | `bug/repeticao-audio` |
+| `documentation` | `documentation/descricao` | `docs` | `documentation/guia-instalacao` |
+| `enhancement` | `enhancement/descricao` | `feat`, `perf`, `refactor` | `enhancement/estabilidade-gestos` |
+| `maintenance` | `maintenance/descricao` | `chore`, `refactor`, `build`, `ci`, `test` | `maintenance/atualizar-dependencias` |
+| `UI/UX` | `ui-ux/descricao` | `style`, `feat`, `fix` | `ui-ux/contraste-botoes` |
+
+Use `feature` para funcionalidade nova, `bug` para comportamento incorreto, `documentation` para guias,
+`enhancement` para melhorias existentes, `maintenance` para infraestrutura e `UI/UX` para interface e interação.
+Preserve a grafia `UI/UX` na label; a branch usa `ui-ux/`. A descrição da branch é curta, em minúsculas, sem acentos
+ou espaços, com hífens; evite `nova-versao` ou `teste`. Não há `develop` nem branch por versão: cada mudança parte da
+`main` atual e volta por pull request.
+
+### Commits e título do PR
+
+Formato `tipo(escopo-opcional): descrição`, por exemplo `feat(sala): compartilhar legendas do professor`,
+`fix(audio): evitar reprodução duplicada`, `docs: atualizar instruções de instalação`. O título do PR usa o mesmo
+formato; a label principal corresponde ao prefixo da branch, e labels secundárias permitem os tipos adicionais da
+tabela (uma branch `maintenance/atualizar-guias` com `maintenance,documentation` aceita `chore` e `docs`). Informe só
+labels de classificação desta tabela. Tags Git identificam versões e não substituem labels; a política de releases
+será definida à parte.
+
+### Fluxo completo
+
+> **Não trabalhe diretamente na `main`.** Crie uma branch, abra um Pull Request e faça o merge só depois de revisar
+> as alterações e verificar os testes.
+
+```bash
+git switch main
+git pull --ff-only origin main
+git switch -c documentation/guia-instalacao
+git add README.md docs/arquivo.md
+git commit -m "docs: atualizar instruções de instalação"
+git fetch origin
+git push -u origin documentation/guia-instalacao
+```
+
+No GitHub, abra o PR para `main`, aplique as labels, preencha o modelo e revise alterações e verificações; resolva
+conflitos e repita as verificações afetadas antes de integrar. Nunca use force push na `main`. Os antigos scripts de
+convenções e templates `.github/` não estão presentes nesta cópia: revise título, labels, diff e testes manualmente.

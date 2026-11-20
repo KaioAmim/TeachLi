@@ -113,4 +113,4 @@ turma continua sendo validação manual.
 
 ## Segurança e privacidade
 
-Cabeçalhos de segurança, limites de abuso e o registro de auditoria (sem token, e-mail ou nome) estão descritos em [Segurança e LGPD](../docs/SEGURANCA_E_LGPD.md).
+Cabeçalhos de segurança, limites de abuso e o registro de auditoria (sem token, e-mail ou nome) estão descritos em [Segurança e LGPD](../docs/DOCUMENTACAO.md#7-segurança-e-lgpd).

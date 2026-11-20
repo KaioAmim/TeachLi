@@ -4,26 +4,26 @@ Protótipo de apoio à comunicação em sala de aula, com texto para voz e
 reconhecimento experimental de gestos pela webcam. O objetivo é ampliar as formas
 de participação de alunos surdos.
 
-**O modelo experimental inclui as 26 letras de A a Z; ele não traduz Libras completa.**
+**O modelo experimental inclui as 26 letras de A a Z e 178 sinais em movimento; ele não traduz Libras completa.**
 H, J, K, X e Z são classificados pela pose, sem validar o movimento completo.
-Ç ainda não está incluído. Modelos pessoais mantêm prioridade sobre o modelo base.
-Veja os resultados e limites do treino com as duas bases em
-[Treinamento do alfabeto](docs/TREINAMENTO_ALFABETO.md).
+Ç ainda não está incluído. Modelos pessoais mantêm prioridade sobre os modelos base.
+Resultados e limites do treino estão na [documentação técnica](docs/DOCUMENTACAO.md#5-reconhecimento-e-treinamento).
 O reconhecimento depende dos dados de treino e precisa de avaliação com usuários.
 
 ## O que está disponível
 
 | Recurso | Funcionamento atual |
 | --- | --- |
-| Modo Aluno | Enviar texto confirmado ao professor da mesma sala; voz local opcional |
+| Modo Aluno | Digitar ou sinalizar: os gestos formam a mensagem, que segue ao professor da mesma sala após uma pausa; voz local só quando solicitada |
 | Salas | Laboratórios A/B/C e salas 01/02; seleção após login, presença e troca de sala |
-| Reconhecimento por pose | MediaPipe + TensorFlow.js, A–Z experimental ou modelo pessoal |
-| Sinais dinâmicos | Treino local experimental; captura precisa preservar trajetória antes da próxima coleta |
+| Reconhecimento por pose | MediaPipe + TensorFlow.js, A–Z experimental ou modelo pessoal; letras entram sozinhas na mensagem, sem traços sobre as mãos |
+| Sinais dinâmicos | Modelo base de 178 sinais (dataset Libras-EQT-UECE, licença a confirmar) e treino local experimental |
+| Expressões faciais | Pergunta, dúvida, surpresa, negação e certeza (sobrancelhas e movimento da cabeça), opcionais |
 | VLibras | Widget disponível em todas as telas para traduzir textos selecionados na página |
 | Modo Professor | Receber mensagens dos alunos e compartilhar frases finais da transcrição na sala |
 
 Segurança, privacidade (LGPD) e os pontos que dependem da instituição estão em
-[Segurança e LGPD](docs/SEGURANCA_E_LGPD.md).
+[Segurança e LGPD](docs/DOCUMENTACAO.md#7-segurança-e-lgpd).
 
 A comunicação por texto usa o servidor independente e reaproveita o login Microsoft
 já existente. Consulte o [guia de salas e autenticação](server/README.md).
@@ -137,7 +137,7 @@ Para publicar, hospede o frontend com fallback das rotas para `index.html` e
 confira os caminhos dos modelos; o Vite atual usa a base `/`.
 
 Na raiz, confira a branch, o título de commit proposto e o diff manualmente
-conforme [as convenções](docs/BRANCHES.md). Os scripts de verificação de
+conforme [as convenções](docs/GUIA_IMPLEMENTACAO.md#convenções-de-branch-label-e-commit). Os scripts de verificação de
 convenções citados em versões anteriores da documentação não estão presentes
 nesta cópia do projeto.
 
@@ -148,14 +148,14 @@ redes ou precisão dos modelos. As verificações manuais por recurso devem ser 
 
 | Documento | Conteúdo |
 | --- | --- |
-| [Documentação técnica](docs/DOCUMENTACAO.md) | Arquitetura, rotas, armazenamento, modelo de gestos e limites |
-| [Branches, labels e commits](docs/BRANCHES.md) | Os seis tipos, exemplos e revisão manual |
-| [Plano de implementação](docs/GUIA_IMPLEMENTACAO.md) | Estado atual, prioridades, aula híbrida/EAD e critérios de aceite |
+| [Documentação técnica](docs/DOCUMENTACAO.md) | Arquitetura, rotas, reconhecimento e treinamento, segurança/LGPD, identidade visual e verificações |
+| [Plano de implementação](docs/GUIA_IMPLEMENTACAO.md) | Estado atual, prioridades, aula híbrida/EAD, critérios de aceite e convenções de branch/commit |
+| [Guia do servidor](server/README.md) | Protocolo das salas, limites e testes |
 
 ## Organização do trabalho
 
 Novas branches usam `feature/`, `bug/`, `documentation/`, `enhancement/`,
-`maintenance/` ou `ui-ux/`, conforme o [padrão completo](docs/BRANCHES.md).
+`maintenance/` ou `ui-ux/`, conforme o [padrão completo](docs/GUIA_IMPLEMENTACAO.md#convenções-de-branch-label-e-commit).
 Cada alteração volta à `main` por PR com escopo, testes e documentação revisados.
 Os templates `.github/` citados em versões antigas não estão presentes nesta cópia.
 

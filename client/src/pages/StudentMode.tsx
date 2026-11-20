@@ -49,7 +49,7 @@ const DYNAMIC_CONFIDENCE_THRESHOLD = 0.75;
 const CONFIDENCE_THRESHOLD = 0.75;
 /**
  * Margem mínima entre a 1ª e a 2ª classe mais prováveis. Sem uma classe
- * "nenhum sinal" treinada com exemplos negativos (ver MODELO.md), confiança
+ * "nenhum sinal" treinada com exemplos negativos (ver docs/DOCUMENTACAO.md, seção 5), confiança
  * sozinha não separa "o modelo decidiu" de "duas classes empatadas" — pares
  * que o modelo já confunde de verdade (C/O, M/N/W) passariam do limiar de
  * confiança mesmo quase empatados. É uma heurística, não substitui dado novo.

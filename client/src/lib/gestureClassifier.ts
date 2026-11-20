@@ -8,7 +8,7 @@ const DATASET_STORAGE_KEY = "libras-gesture-training-dataset";
 /**
  * Modelo experimental A–Z: transferência do modelo de 15 letras, ajustada com
  * landmarks legados e LibraSign. Origem, licenças e avaliação estão no NOTICE
- * junto do artefato e em docs/TREINAMENTO_ALFABETO.md.
+ * junto do artefato e em docs/DOCUMENTACAO.md (seção 5.3).
  */
 const PRETRAINED_MODEL_URL = "/models/gesture-classifier-26/model.json";
 const PRETRAINED_LABELS_URL = "/models/gesture-classifier-26/labels.json";

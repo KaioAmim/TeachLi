@@ -6,7 +6,7 @@ Entrada: 40 quadros × 126 valores (duas mãos, mesma normalização de `client/
 **Licença e origem do dataset não foram verificadas** — confirme os termos de uso com o autor antes de
 publicar ou redistribuir este modelo.
 
-Reprodução: `training/` (convert_uece.py → train_dynamic.py --final --no-traj --wide → export_weights.py → export_tfjs.mjs).
+Reprodução e resultados: docs/DOCUMENTACAO.md, seção 5.4.
 
 Avaliação com informante inédito (leave-one-signer-out), top-1 / top-5:
 informante 5: 71,7% / 92,9% · informante 1: 85,0% / 97,6% · informante 3: 77,9% / 93,3%.
