@@ -185,23 +185,59 @@ export async function trainDynamicClassifier(
 const PRETRAINED_MODEL_URL = "/models/gesture-classifier-dynamic/model.json";
 const PRETRAINED_LABELS_URL = "/models/gesture-classifier-dynamic/labels.json";
 
+export type DynamicSource = "user" | "pretrained";
+
+export interface DynamicPrediction {
+  label: string;
+  confidence: number;
+  margin: number;
+  /** Qual modelo produziu esta predição. */
+  source: DynamicSource;
+}
+
 export interface LoadedDynamicClassifier {
-  /** "user" = treinado pelo usuário; "pretrained" = modelo base do dataset Libras-EQT-UECE. */
-  source: "user" | "pretrained";
+  /** Modelos carregados; "user" = treinado pelo usuário, "pretrained" = base Libras-EQT-UECE. */
+  sources: DynamicSource[];
   labels: string[];
-  predict: (frames: Float32Array[]) => { label: string; confidence: number; margin: number };
+  predict: (frames: Float32Array[]) => DynamicPrediction;
   dispose: () => void;
 }
 
+/** O modelo base tem 178 classes e nenhuma classe "nenhum sinal": limiares mais rígidos. */
+const ACCEPT_THRESHOLDS: Record<DynamicSource, { confidence: number; margin: number }> = {
+  user: { confidence: 0.75, margin: 0.15 },
+  pretrained: { confidence: 0.85, margin: 0.3 },
+};
+
+export function isDynamicConfident(prediction: DynamicPrediction): boolean {
+  const limits = ACCEPT_THRESHOLDS[prediction.source];
+  return prediction.confidence > limits.confidence && prediction.margin > limits.margin;
+}
+
 /**
- * Carrega o classificador dinâmico: o modelo treinado pelo usuário tem
- * prioridade; sem ele, usa o modelo base pré-treinado (se estiver publicado).
+ * Carrega o classificador dinâmico com os dois modelos juntos: o treinado pelo
+ * usuário e o base pré-treinado. Um modelo pessoal não desliga os sinais do
+ * base — a cada consulta vale a predição aceita de maior confiança.
  */
 export async function loadDynamicClassifier(): Promise<LoadedDynamicClassifier | null> {
-  const user = await loadUserModel();
-  if (user) return buildClassifier("user", user.labels, user.model);
-  const base = await loadPretrainedModel();
-  return base ? buildClassifier("pretrained", base.labels, base.model) : null;
+  const [user, base] = await Promise.all([loadUserModel(), loadPretrainedModel()]);
+  const parts: LoadedDynamicClassifier[] = [];
+  if (user) parts.push(buildClassifier("user", user.labels, user.model));
+  if (base) parts.push(buildClassifier("pretrained", base.labels, base.model));
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0];
+
+  return {
+    sources: parts.flatMap(part => part.sources),
+    labels: [...new Set(parts.flatMap(part => part.labels))],
+    predict: frames => {
+      const predictions = parts.map(part => part.predict(frames));
+      const accepted = predictions.filter(isDynamicConfident);
+      const pool = accepted.length > 0 ? accepted : predictions;
+      return pool.reduce((best, current) => (current.confidence > best.confidence ? current : best));
+    },
+    dispose: () => parts.forEach(part => part.dispose()),
+  };
 }
 
 async function loadUserModel(): Promise<{ labels: string[]; model: tf.LayersModel } | null> {
@@ -229,12 +265,11 @@ async function loadPretrainedModel(): Promise<{ labels: string[]; model: tf.Laye
 }
 
 function buildClassifier(
-  source: "user" | "pretrained",
+  source: DynamicSource,
   labels: string[],
   model: tf.LayersModel,
 ): LoadedDynamicClassifier {
-
-  const predict = (frames: Float32Array[]) => {
+  const predict = (frames: Float32Array[]): DynamicPrediction => {
     const resampled = resampleSequence(frames, SEQUENCE_LENGTH);
     return tf.tidy(() => {
       const input = tf.tensor3d([sequenceToArray(resampled)]);
@@ -253,11 +288,11 @@ function buildClassifier(
       // Mesma lógica de margem do classificador estático (ver
       // gestureClassifier.ts): sem ela, dois sinais dinâmicos parecidos
       // passariam no limiar de confiança mesmo quase empatados.
-      return { label: labels[bestIndex], confidence: data[bestIndex], margin: data[bestIndex] - secondBest };
+      return { label: labels[bestIndex], confidence: data[bestIndex], margin: data[bestIndex] - secondBest, source };
     });
   };
 
-  return { source, labels, predict, dispose: () => model.dispose() };
+  return { sources: [source], labels, predict, dispose: () => model.dispose() };
 }
 
 export async function hasDynamicClassifier(): Promise<boolean> {

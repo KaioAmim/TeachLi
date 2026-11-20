@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
 import { useGestureClassifier } from "@/hooks/useGestureClassifier";
 import { useDynamicGestureClassifier } from "@/hooks/useDynamicGestureClassifier";
+import { isDynamicConfident } from "@/lib/dynamicGestureClassifier";
 import { useFaceLandmarker } from "@/hooks/useFaceLandmarker";
 import {
   EXPRESSION_LABELS,
@@ -43,7 +44,6 @@ const DYNAMIC_BUFFER_SIZE = 60;
 const DYNAMIC_PREDICT_EVERY = 5;
 /** Chamadas seguidas com o mesmo rótulo antes de registrar um sinal dinâmico. */
 const DYNAMIC_STABLE_CALLS = 3;
-const DYNAMIC_CONFIDENCE_THRESHOLD = 0.75;
 
 /** Confiança mínima para o classificador estático considerar o sinal decidido. */
 const CONFIDENCE_THRESHOLD = 0.75;
@@ -55,9 +55,6 @@ const CONFIDENCE_THRESHOLD = 0.75;
  * confiança mesmo quase empatados. É uma heurística, não substitui dado novo.
  */
 const MARGIN_THRESHOLD = 0.15;
-const DYNAMIC_MARGIN_THRESHOLD = 0.15;
-const PRETRAINED_CONFIDENCE_THRESHOLD = 0.85;
-const PRETRAINED_MARGIN_THRESHOLD = 0.3;
 
 /** Quadros sem gesto confiável para considerar que o aluno "soltou" a letra —
  * só depois disso a mesma letra pode ser confirmada de novo (ex.: LL, RR). */
@@ -123,7 +120,7 @@ export default function StudentMode() {
   const {
     hasModel: hasDynamicModel,
     labels: dynamicLabels,
-    source: dynamicSource,
+    sources: dynamicSources,
     isLoading: isDynamicClassifierLoading,
     predict: predictDynamicGesture,
   } = useDynamicGestureClassifier();
@@ -135,8 +132,6 @@ export default function StudentMode() {
     detectFace,
   } = useFaceLandmarker(faceEnabled);
 
-  const dynamicSourceRef = useRef<"user" | "pretrained" | null>(null);
-  dynamicSourceRef.current = dynamicSource;
   const faceEnabledRef = useRef(true);
   faceEnabledRef.current = faceEnabled;
   const faceFrameRef = useRef(0);
@@ -290,12 +285,9 @@ export default function StudentMode() {
                 dstable.count = 1;
               }
 
-              // O modelo base tem 178 sinais e nenhuma classe "nenhum sinal":
-              // limiares mais rígidos evitam palavras espúrias no meio da fala.
-              const strict = dynamicSourceRef.current === "pretrained";
-              const dynIsConfident =
-                dynPrediction.confidence > (strict ? PRETRAINED_CONFIDENCE_THRESHOLD : DYNAMIC_CONFIDENCE_THRESHOLD) &&
-                dynPrediction.margin > (strict ? PRETRAINED_MARGIN_THRESHOLD : DYNAMIC_MARGIN_THRESHOLD);
+              // Limiares por modelo (o base, com 178 sinais e sem classe "nenhum
+              // sinal", é mais rígido) ficam em isDynamicConfident.
+              const dynIsConfident = isDynamicConfident(dynPrediction);
 
               if (dynIsConfident) {
                 setCurrentGesture(dynPrediction.label);
@@ -718,7 +710,7 @@ export default function StudentMode() {
                     : "Nenhum classificador estático disponível."}</p>
                   {hasModel && <div className="student-gesture-list" aria-label="Letras disponíveis">{modelLabels.map(label => <span key={label}>{label}</span>)}</div>}
                   <p>{isDynamicClassifierLoading ? "Preparando reconhecimento de movimentos…"
-                    : hasDynamicModel ? `${dynamicSource === "pretrained" ? "Modelo base (dataset Libras-EQT-UECE)" : "Seu modelo"}: ${dynamicLabels.length} sinais em movimento.`
+                    : hasDynamicModel ? `${dynamicSources.length === 2 ? "Seu modelo + modelo base (dataset Libras-EQT-UECE)" : dynamicSources[0] === "pretrained" ? "Modelo base (dataset Libras-EQT-UECE)" : "Seu modelo"}: ${dynamicLabels.length} sinais em movimento.`
                     : "Para reconhecer movimentos, grave clipes em Treinar gestos."}</p>
                   {hasDynamicModel && <div className="student-gesture-list" aria-label="Gestos dinâmicos disponíveis">{dynamicLabels.map(label => <span key={label}>{label}</span>)}</div>}
                   <button type="button" className="student-text-link" onClick={() => setLocation("/aluno/treinar")}>Personalizar meus gestos</button>
