@@ -241,14 +241,73 @@ export async function trainDynamicClassifier(
   return { labels, finalAccuracy };
 }
 
+/** Modelo base treinado offline (training/), servido de public/. */
+const PRETRAINED_MODEL_URL = "/models/gesture-classifier-dynamic/model.json";
+const PRETRAINED_LABELS_URL = "/models/gesture-classifier-dynamic/labels.json";
+
+export type DynamicSource = "user" | "pretrained";
+
+export interface DynamicPrediction {
+  label: string;
+  confidence: number;
+  margin: number;
+  /** Qual modelo produziu esta predição. */
+  source: DynamicSource;
+}
+
 export interface LoadedDynamicClassifier {
+  /** Modelos carregados; "user" = treinado pelo usuário, "pretrained" = base Libras-EQT-UECE. */
+  sources: DynamicSource[];
   labels: string[];
-  predict: (frames: Float32Array[]) => { label: string; confidence: number; margin: number };
+  predict: (frames: Float32Array[]) => DynamicPrediction;
   dispose: () => void;
 }
 
-/** Carrega o classificador dinâmico treinado pelo usuário (não há modelo base pré-treinado ainda). */
+/** O modelo base tem 178 classes e nenhuma classe "nenhum sinal": limiares mais rígidos. */
+const ACCEPT_THRESHOLDS: Record<DynamicSource, { confidence: number; margin: number }> = {
+  user: { confidence: 0.75, margin: 0.15 },
+  pretrained: { confidence: 0.85, margin: 0.3 },
+};
+
+export function isDynamicConfident(prediction: DynamicPrediction): boolean {
+  const limits = ACCEPT_THRESHOLDS[prediction.source];
+  return prediction.confidence > limits.confidence && prediction.margin > limits.margin;
+}
+
+/**
+ * Carrega o classificador dinâmico com os dois modelos juntos: o treinado pelo
+ * usuário e o base pré-treinado. Um modelo pessoal não desliga os sinais do
+ * base — a cada consulta vale a predição aceita de maior confiança.
+ */
 export async function loadDynamicClassifier(): Promise<LoadedDynamicClassifier | null> {
+  const [user, base] = await Promise.all([loadUserModel(), loadPretrainedModel()]);
+  const parts: LoadedDynamicClassifier[] = [];
+  if (user) parts.push(buildClassifier("user", user.labels, user.model, user.usesLegacyFeatures));
+  if (base) parts.push(buildClassifier("pretrained", base.labels, base.model, true));
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0];
+
+  return {
+    sources: parts.flatMap(part => part.sources),
+    labels: [...new Set(parts.flatMap(part => part.labels))],
+    predict: frames => {
+      const predictions = parts.map(part => part.predict(frames));
+      const accepted = predictions.filter(isDynamicConfident);
+      const pool = accepted.length > 0 ? accepted : predictions;
+      return pool.reduce((best, current) => (current.confidence > best.confidence ? current : best));
+    },
+    dispose: () => parts.forEach(part => part.dispose()),
+  };
+}
+
+interface LoadedModel {
+  labels: string[];
+  model: tf.LayersModel;
+  /** Modelo treinado com 126 valores por quadro (sem a posição do pulso). */
+  usesLegacyFeatures: boolean;
+}
+
+async function loadUserModel(): Promise<LoadedModel | null> {
   let usesLegacyFeatures = false;
   let labelsRaw = localStorage.getItem(LABELS_STORAGE_KEY);
   if (!labelsRaw) {
@@ -257,25 +316,37 @@ export async function loadDynamicClassifier(): Promise<LoadedDynamicClassifier |
   }
   if (!labelsRaw) return null;
 
-  let labels: string[];
   try {
-    labels = JSON.parse(labelsRaw);
+    const labels = JSON.parse(labelsRaw);
+    if (!Array.isArray(labels) || labels.length === 0) return null;
+    const model = await tf.loadLayersModel(usesLegacyFeatures ? LEGACY_MODEL_STORAGE_KEY : MODEL_STORAGE_KEY);
+    usesLegacyFeatures = usesLegacyFeatures || model.inputs[0].shape?.[2] === 126;
+    return { labels, model, usesLegacyFeatures };
   } catch {
     return null;
   }
-  if (!Array.isArray(labels) || labels.length === 0) return null;
+}
 
-  let model: tf.LayersModel;
+async function loadPretrainedModel(): Promise<LoadedModel | null> {
   try {
-    model = await tf.loadLayersModel(usesLegacyFeatures ? LEGACY_MODEL_STORAGE_KEY : MODEL_STORAGE_KEY);
+    const response = await fetch(PRETRAINED_LABELS_URL);
+    if (!response.ok) return null;
+    const labels = await response.json();
+    if (!Array.isArray(labels) || labels.length === 0) return null;
+    // O modelo base foi treinado com 126 valores por quadro (as duas mãos, sem a posição do pulso).
+    return { labels, model: await tf.loadLayersModel(PRETRAINED_MODEL_URL), usesLegacyFeatures: true };
   } catch {
     return null;
   }
-  const loadedModel = model;
-  const expectedFeatureSize = loadedModel.inputs[0].shape?.[2];
-  usesLegacyFeatures = usesLegacyFeatures || expectedFeatureSize === 126;
+}
 
-  const predict = (frames: Float32Array[]) => {
+function buildClassifier(
+  source: DynamicSource,
+  labels: string[],
+  model: tf.LayersModel,
+  usesLegacyFeatures: boolean,
+): LoadedDynamicClassifier {
+  const predict = (frames: Float32Array[]): DynamicPrediction => {
     const resampled = resampleSequence(frames, SEQUENCE_LENGTH);
     return tf.tidy(() => {
       const compatible = usesLegacyFeatures
@@ -302,11 +373,11 @@ export async function loadDynamicClassifier(): Promise<LoadedDynamicClassifier |
       // Mesma lógica de margem do classificador estático (ver
       // gestureClassifier.ts): sem ela, dois sinais dinâmicos parecidos
       // passariam no limiar de confiança mesmo quase empatados.
-      return { label: labels[bestIndex], confidence: data[bestIndex], margin: data[bestIndex] - secondBest };
+      return { label: labels[bestIndex], confidence: data[bestIndex], margin: data[bestIndex] - secondBest, source };
     });
   };
 
-  return { labels, predict, dispose: () => model.dispose() };
+  return { sources: [source], labels, predict, dispose: () => model.dispose() };
 }
 
 export async function hasDynamicClassifier(): Promise<boolean> {

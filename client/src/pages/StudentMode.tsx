@@ -4,14 +4,25 @@ import { RoomStatus, WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Video, VideoOff, Volume2, Waves, BookOpen, Plus, Trash2, ScanLine, ChevronDown, Lightbulb, MessageSquareText } from "lucide-react";
+import { Video, VideoOff, Volume2, Waves, BookOpen, Plus, Trash2, ScanLine, ChevronDown, Lightbulb, MessageSquareText, Pause, Play, Space, Delete, Check } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
 import { useGestureClassifier } from "@/hooks/useGestureClassifier";
 import { useDynamicGestureClassifier } from "@/hooks/useDynamicGestureClassifier";
+import { isDynamicConfident } from "@/lib/dynamicGestureClassifier";
+import { useFaceLandmarker } from "@/hooks/useFaceLandmarker";
+import {
+  EXPRESSION_LABELS,
+  EXPRESSION_MARKS,
+  HeadMotionDetector,
+  applyExpressionToText,
+  readExpression,
+  type FacialExpression,
+} from "@/lib/facialExpression";
 import { twoHandLandmarksToFeatures } from "@/lib/handFeatures";
 import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
+import type { FaceObservation } from "@/lib/facialExpression";
 import { translateWithVLibras } from "@/components/VLibrasWidget";
 import { getGlossPhraseSuggestion, loadVLibrasBD, type LibrasCorpusEntry } from "@/lib/librasDatasetImporter";
 
@@ -34,19 +45,37 @@ const DYNAMIC_BUFFER_SIZE = 60;
 const DYNAMIC_PREDICT_EVERY = 5;
 /** Chamadas seguidas com o mesmo rótulo antes de registrar um sinal dinâmico. */
 const DYNAMIC_STABLE_CALLS = 3;
-const DYNAMIC_CONFIDENCE_THRESHOLD = 0.75;
 
 /** Confiança mínima para o classificador estático considerar o sinal decidido. */
 const CONFIDENCE_THRESHOLD = 0.75;
 /**
  * Margem mínima entre a 1ª e a 2ª classe mais prováveis. Sem uma classe
- * "nenhum sinal" treinada com exemplos negativos (ver MODELO.md), confiança
+ * "nenhum sinal" treinada com exemplos negativos (ver docs/DOCUMENTACAO.md, seção 5), confiança
  * sozinha não separa "o modelo decidiu" de "duas classes empatadas" — pares
  * que o modelo já confunde de verdade (C/O, M/N/W) passariam do limiar de
  * confiança mesmo quase empatados. É uma heurística, não substitui dado novo.
  */
 const MARGIN_THRESHOLD = 0.15;
-const DYNAMIC_MARGIN_THRESHOLD = 0.15;
+
+/** Quadros sem gesto confiável para considerar que o aluno "soltou" a letra —
+ * só depois disso a mesma letra pode ser confirmada de novo (ex.: LL, RR). */
+const RELEASE_FRAMES = 8;
+/** Pausa sem gestos antes de separar palavras (acrescenta um espaço). */
+const WORD_GAP_MS = 1500;
+/** Pausa sem gestos antes de enviar a mensagem ao professor automaticamente. */
+const AUTO_SEND_MS = 3500;
+const MAX_MESSAGE_LENGTH = 2000;
+
+/** O rosto é analisado a cada N quadros (mais leve que as mãos). */
+const FACE_EVERY = 2;
+/** Análises seguidas com a mesma expressão antes de confirmá-la (~0,5 s). */
+const EXPRESSION_STABLE_CALLS = 8;
+/** Análises sem expressão para considerar que o aluno "soltou" a expressão. */
+const EXPRESSION_RELEASE_CALLS = 3;
+/** Intervalo mínimo entre duas expressões acrescentadas à mensagem. */
+const EXPRESSION_COOLDOWN_MS = 2000;
+/** A expressão só vale se houve gesto de mão recente — rosto solto não vira texto. */
+const EXPRESSION_CONTEXT_MS = 4000;
 
 export default function StudentMode() {
   const classroom = useClassroomConnection();
@@ -60,6 +89,12 @@ export default function StudentMode() {
   const [gestureHistory, setGestureHistory] = useState<RecognitionResult[]>([]);
   const [handDetected, setHandDetected] = useState(false);
   const [spokenTypedText, setSpokenTypedText] = useState("");
+  const [confirmProgress, setConfirmProgress] = useState(0);
+  const [lastAdded, setLastAdded] = useState("");
+  const [paused, setPaused] = useState(false);
+  const [autoSend, setAutoSend] = useState(true);
+  const [faceEnabled, setFaceEnabled] = useState(true);
+  const [currentExpression, setCurrentExpression] = useState<FacialExpression | null>(null);
   const [vlibrasCorpus, setVlibrasCorpus] = useState<LibrasCorpusEntry[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -74,7 +109,6 @@ export default function StudentMode() {
       translateWithVLibras(message.text);
     }
   }, [classroom.messages]);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | null>(null);
 
   const { handLandmarker, isLoading: isHandLandmarkerLoading, error: handLandmarkerError, detectHands } = useHandLandmarker();
@@ -88,11 +122,39 @@ export default function StudentMode() {
   const {
     hasModel: hasDynamicModel,
     labels: dynamicLabels,
+    sources: dynamicSources,
     isLoading: isDynamicClassifierLoading,
     predict: predictDynamicGesture,
   } = useDynamicGestureClassifier();
 
+  const {
+    isReady: isFaceReady,
+    isLoading: isFaceLoading,
+    error: faceError,
+    detectFace,
+  } = useFaceLandmarker(faceEnabled);
+
+  const faceEnabledRef = useRef(true);
+  faceEnabledRef.current = faceEnabled;
+  const faceFrameRef = useRef(0);
+  const expressionStableRef = useRef<{ label: FacialExpression | ""; count: number }>({ label: "", count: 0 });
+  const expressionReleaseRef = useRef(0);
+  const lastExpressionRef = useRef<FacialExpression | "">("");
+  const lastExpressionAtRef = useRef(0);
+  const shownExpressionRef = useRef<FacialExpression | null>(null);
+  const headMotionRef = useRef(new HeadMotionDetector());
+
   const stableRef = useRef<{ label: string; count: number }>({ label: "", count: 0 });
+  const unconfidentFramesRef = useRef(0);
+  const pausedRef = useRef(false);
+  const draftRef = useRef("");
+  const gestureDraftRef = useRef(false);
+  const lastActivityRef = useRef(0);
+  const lastAddedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const classroomRef = useRef(classroom);
+  classroomRef.current = classroom;
+  pausedRef.current = paused;
+  draftRef.current = recognizedText;
   const lastUiUpdateRef = useRef(0);
   const lastCommittedRef = useRef("");
 
@@ -164,11 +226,19 @@ export default function StudentMode() {
           if (!isConfident) {
             stable.label = "";
             stable.count = 0;
+            // Transição incerta: nenhuma letra é acrescentada. Após alguns
+            // quadros assim, a letra anterior é considerada "solta".
+            unconfidentFramesRef.current += 1;
+            if (unconfidentFramesRef.current >= RELEASE_FRAMES) lastCommittedRef.current = "";
           } else if (prediction.label === stable.label) {
             stable.count += 1;
           } else {
             stable.label = prediction.label;
             stable.count = 1;
+          }
+          if (isConfident) {
+            unconfidentFramesRef.current = 0;
+            lastActivityRef.current = performance.now();
           }
 
           const now = performance.now();
@@ -178,9 +248,15 @@ export default function StudentMode() {
               setCurrentGesture(prediction.label);
               setCurrentConfidence(Math.round(prediction.confidence * 100));
               setCurrentGestureKind("static");
+              setConfirmProgress(
+                prediction.label === lastCommittedRef.current
+                  ? 100
+                  : Math.min(100, Math.round((stable.count / STABLE_FRAMES) * 100)),
+              );
             } else {
               setCurrentGesture("");
               setCurrentConfidence(0);
+              setConfirmProgress(0);
             }
           }
 
@@ -194,6 +270,8 @@ export default function StudentMode() {
               ...prev.slice(-9),
               { gesture: prediction.label, confidence: prediction.confidence, kind: "static" },
             ]);
+            setConfirmProgress(100);
+            appendGesture(prediction.label, "static");
           }
         }
 
@@ -218,9 +296,9 @@ export default function StudentMode() {
                 dstable.count = 1;
               }
 
-              const dynIsConfident =
-                dynPrediction.confidence > DYNAMIC_CONFIDENCE_THRESHOLD &&
-                dynPrediction.margin > DYNAMIC_MARGIN_THRESHOLD;
+              // Limiares por modelo (o base, com 178 sinais e sem classe "nenhum
+              // sinal", é mais rígido) ficam em isDynamicConfident.
+              const dynIsConfident = isDynamicConfident(dynPrediction);
 
               if (dynIsConfident) {
                 setCurrentGesture(dynPrediction.label);
@@ -240,6 +318,8 @@ export default function StudentMode() {
                 // novo na próxima janela, já que ele ainda estaria presente
                 // nos quadros mais recentes do buffer.
                 dynamicBufferRef.current = [];
+                lastActivityRef.current = now;
+                appendGesture(dynPrediction.label, "dynamic");
                 setGestureHistory(prev => [
                   ...prev.slice(-9),
                   { gesture: dynPrediction.label, confidence: dynPrediction.confidence, kind: "dynamic" },
@@ -252,11 +332,25 @@ export default function StudentMode() {
         setHandDetected(false);
         stableRef.current = { label: "", count: 0 };
         lastCommittedRef.current = "";
+        unconfidentFramesRef.current = 0;
         dynamicStableRef.current = { label: "", count: 0 };
+        // Sem mão no quadro não há gesto atual: evita adicionar uma detecção antiga.
+        setCurrentGesture("");
+        setCurrentConfidence(0);
+        setConfirmProgress(0);
       }
 
-      if (canvasRef.current && detectionResult) {
-        drawLandmarks(canvasRef.current, detectionResult);
+      if (faceEnabledRef.current) {
+        faceFrameRef.current += 1;
+        if (faceFrameRef.current % FACE_EVERY === 0) {
+          let observation: FaceObservation | null = null;
+          try {
+            observation = detectFace(video, timestamp);
+          } catch (err) {
+            console.error("Falha ao analisar o rosto neste quadro:", err);
+          }
+          handleFace(observation);
+        }
       }
 
       animationFrameRef.current = requestAnimationFrame(processFrame);
@@ -269,49 +363,89 @@ export default function StudentMode() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isCapturing, handLandmarker, detectHands, predictGesture, predictDynamicGesture, hasDynamicModel]);
+  }, [isCapturing, handLandmarker, detectHands, detectFace, predictGesture, predictDynamicGesture, hasDynamicModel]);
 
-  const drawLandmarks = (canvas: HTMLCanvasElement, detectionResult: HandDetectionResult) => {
-    const ctx = canvas.getContext('2d');
-    if (!ctx || !videoRef.current) return;
-
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    detectionResult.landmarks.forEach((landmarks: any, handIndex: number) => {
-      const color = handIndex === 0 ? '#FF6B6B' : '#4ECDC4';
-      
-      landmarks.forEach((landmark: any) => {
-        const x = landmark.x * canvas.width;
-        const y = landmark.y * canvas.height;
-        
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(x, y, 4, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-
-      const connections = [
-        [0, 1], [1, 2], [2, 3], [3, 4],
-        [0, 5], [5, 6], [6, 7], [7, 8],
-        [0, 9], [9, 10], [10, 11], [11, 12],
-        [0, 13], [13, 14], [14, 15], [15, 16],
-        [0, 17], [17, 18], [18, 19], [19, 20],
-      ];
-
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      connections.forEach(([start, end]) => {
-        const startLandmark = landmarks[start];
-        const endLandmark = landmarks[end];
-        ctx.beginPath();
-        ctx.moveTo(startLandmark.x * canvas.width, startLandmark.y * canvas.height);
-        ctx.lineTo(endLandmark.x * canvas.width, endLandmark.y * canvas.height);
-        ctx.stroke();
-      });
+  /** Letras se juntam em palavras (sem espaços); sinais/palavras inteiras são separados por espaço. */
+  const appendGesture = (rawLabel: string, kind: "static" | "dynamic") => {
+    if (pausedRef.current) return;
+    const text = rawLabel.replace(/\[(ESQ|DIR)\]\s*/g, "").trim();
+    if (!text) return;
+    const isLetter = kind === "static" && Array.from(text).length === 1;
+    setRecognizedText(prev => {
+      const next = isLetter
+        ? `${prev}${text}`
+        : `${prev}${prev && !/\s$/.test(prev) ? " " : ""}${text} `;
+      return next.slice(0, MAX_MESSAGE_LENGTH);
     });
+    gestureDraftRef.current = true;
+    lastActivityRef.current = performance.now();
+    setLastAdded(text);
+    if (lastAddedTimerRef.current) clearTimeout(lastAddedTimerRef.current);
+    lastAddedTimerRef.current = setTimeout(() => setLastAdded(""), 1500);
+  };
+
+  const showExpression = (expression: FacialExpression | null) => {
+    if (shownExpressionRef.current === expression) return;
+    shownExpressionRef.current = expression;
+    setCurrentExpression(expression);
+  };
+
+  /** Acrescenta a expressão (pontuação ou marca) ao rascunho, junto da palavra sinalizada. */
+  const commitExpression = (expression: FacialExpression) => {
+    const now = performance.now();
+    if (pausedRef.current || !draftRef.current.trim()) return;
+    if (now - lastActivityRef.current > EXPRESSION_CONTEXT_MS) return;
+    if (now - lastExpressionAtRef.current < EXPRESSION_COOLDOWN_MS) return;
+    if (lastExpressionRef.current === expression) return;
+
+    lastExpressionRef.current = expression;
+    lastExpressionAtRef.current = now;
+    lastActivityRef.current = now;
+    gestureDraftRef.current = true;
+    setRecognizedText(prev => applyExpressionToText(prev, expression).slice(0, MAX_MESSAGE_LENGTH));
+    setLastAdded(EXPRESSION_MARKS[expression]);
+    if (lastAddedTimerRef.current) clearTimeout(lastAddedTimerRef.current);
+    lastAddedTimerRef.current = setTimeout(() => setLastAdded(""), 1500);
+  };
+
+  const handleFace = (observation: FaceObservation | null) => {
+    if (!observation) {
+      expressionStableRef.current = { label: "", count: 0 };
+      headMotionRef.current.reset();
+      showExpression(null);
+      return;
+    }
+
+    // Aceno (sim → certeza) e giro (não → negação) vêm do movimento da cabeça.
+    const motion = observation.matrix ? headMotionRef.current.push(observation.matrix) : null;
+    if (motion) {
+      const moved: FacialExpression = motion === "nod" ? "certeza" : "negacao";
+      showExpression(moved);
+      commitExpression(moved);
+      return;
+    }
+
+    const { expression } = readExpression(observation.blendshapes);
+    const stable = expressionStableRef.current;
+    if (!expression) {
+      stable.label = "";
+      stable.count = 0;
+      expressionReleaseRef.current += 1;
+      if (expressionReleaseRef.current >= EXPRESSION_RELEASE_CALLS) {
+        lastExpressionRef.current = "";
+        showExpression(null);
+      }
+      return;
+    }
+
+    expressionReleaseRef.current = 0;
+    if (stable.label === expression) stable.count += 1;
+    else {
+      stable.label = expression;
+      stable.count = 1;
+    }
+    showExpression(expression);
+    if (stable.count === EXPRESSION_STABLE_CALLS) commitExpression(expression);
   };
 
   const startCapture = async () => {
@@ -333,6 +467,7 @@ export default function StudentMode() {
       dynamicBufferRef.current = [];
       dynamicFrameCounterRef.current = 0;
       dynamicStableRef.current = { label: "", count: 0 };
+      lastActivityRef.current = performance.now();
 
       setIsCapturing(true);
       toast.success('Câmera iniciada. Posicione sua mão no quadro.');
@@ -353,8 +488,19 @@ export default function StudentMode() {
       videoRef.current.srcObject = null;
     }
     
+    stableRef.current = { label: "", count: 0 };
+    lastCommittedRef.current = "";
+    dynamicStableRef.current = { label: "", count: 0 };
+    expressionStableRef.current = { label: "", count: 0 };
+    lastExpressionRef.current = "";
+    headMotionRef.current.reset();
+    showExpression(null);
+    setHandDetected(false);
+    setCurrentGesture("");
+    setCurrentConfidence(0);
+    setConfirmProgress(0);
     setIsCapturing(false);
-    toast.info('Câmera desligada');
+    toast.info('Câmera desligada. A mensagem foi mantida.');
   };
 
   const speakText = (text: string) => {
@@ -379,15 +525,23 @@ export default function StudentMode() {
   const clearDraft = () => {
     setRecognizedText("");
     setSpokenTypedText("");
+    gestureDraftRef.current = false;
   };
 
   const addGestureToText = () => {
-    if (currentGesture) {
-      const gestureText = currentGesture.replace(/\[(ESQ|DIR)\]\s*/g, '').trim();
-      setRecognizedText(prev => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}${gestureText} `);
-      speakText(gestureText);
-      toast.success(`Adicionado: ${gestureText}`);
-    }
+    if (!currentGesture) return;
+    if (currentGestureKind === "static") lastCommittedRef.current = currentGesture;
+    appendGesture(currentGesture, currentGestureKind ?? "static");
+  };
+
+  const addSpace = () => {
+    setRecognizedText(prev => (prev && !/\s$/.test(prev) ? `${prev} ` : prev));
+    lastActivityRef.current = performance.now();
+  };
+
+  const removeLastChar = () => {
+    setRecognizedText(prev => Array.from(prev).slice(0, -1).join(""));
+    lastActivityRef.current = performance.now();
   };
 
   const useGlossSuggestion = () => {
@@ -405,8 +559,40 @@ export default function StudentMode() {
   };
 
   const sendMessage = () => {
-    if (classroom.send(recognizedText)) clearDraft();
+    if (classroom.send(recognizedText.trim())) clearDraft();
   };
+
+  const autoSendActive = autoSend && isCapturing && !paused;
+
+  // Envio automático: separa palavras após uma pausa curta e envia a mensagem
+  // ao professor após uma pausa maior, sem exigir nenhum clique durante o sinal.
+  useEffect(() => {
+    if (!autoSendActive) return;
+    const timer = setInterval(() => {
+      if (!gestureDraftRef.current) return;
+      if (document.activeElement?.id === "gesture-message") {
+        lastActivityRef.current = performance.now(); // aluno editando o texto
+        return;
+      }
+      const text = draftRef.current;
+      if (!text.trim()) return;
+      const idle = performance.now() - lastActivityRef.current;
+      if (idle > AUTO_SEND_MS) {
+        const room = classroomRef.current;
+        if (room.status === "connected" && room.professor && room.send(text.trim())) {
+          setRecognizedText("");
+          setSpokenTypedText("");
+          gestureDraftRef.current = false;
+          draftRef.current = "";
+          toast.success("Mensagem enviada ao professor");
+        }
+      } else if (idle > WORD_GAP_MS && !/\s$/.test(text)) {
+        setRecognizedText(`${text} `);
+        draftRef.current = `${text} `;
+      }
+    }, 300);
+    return () => clearInterval(timer);
+  }, [autoSendActive]);
 
   const handleMessageKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && recognizedText.trim() && classroom.status === 'connected' && classroom.professor) {
@@ -433,14 +619,13 @@ export default function StudentMode() {
               <div>
                 <p className="student-section-label">Pela câmera</p>
                 <h2 id="camera-title">Reconhecimento de gestos</h2>
-                <p>Enquadre sua mão para adicionar um gesto à mensagem.</p>
+                <p>Enquadre sua mão: os gestos reconhecidos entram sozinhos na mensagem.</p>
               </div>
               <span className="student-experiment">Experimental</span>
             </div>
 
             <div className="video-container student-camera-stage" data-active={isCapturing}>
               <video ref={videoRef} autoPlay playsInline muted className="video-mirror block w-full h-auto" />
-              <canvas ref={canvasRef} className="video-mirror absolute inset-0 w-full h-full" />
               {!isCapturing && (
                 <div className="student-camera-empty">
                   <span className="student-viewfinder" aria-hidden="true"><VideoOff size={30} strokeWidth={1.5} /></span>
@@ -488,9 +673,37 @@ export default function StudentMode() {
                     <p className="student-empty-copy">{isCapturing ? "Mantenha a mão visível e faça um gesto pausadamente." : "O gesto identificado aparecerá aqui."}</p>
                   )}
                 </div>
-                <Button variant="outline" onClick={addGestureToText} disabled={!currentGesture || currentConfidence <= 75}>
+                <Button variant="outline" onClick={addGestureToText} disabled={!currentGesture || paused}>
                   <Plus size={17} aria-hidden="true" /> Adicionar ao texto
                 </Button>
+              </div>
+              <div className="student-face-row">
+                <label className="student-auto-send">
+                  <input type="checkbox" checked={faceEnabled} onChange={e => setFaceEnabled(e.target.checked)} />
+                  <span>Reconhecer expressões faciais</span>
+                </label>
+                {faceEnabled && (
+                  <span className="student-face-chip" data-active={!!currentExpression} role="status">
+                    {faceError ? "Expressões indisponíveis"
+                      : isFaceLoading || !isFaceReady ? "Preparando expressões…"
+                      : currentExpression ? `Expressão: ${EXPRESSION_LABELS[currentExpression]}`
+                      : "Expressão neutra"}
+                  </span>
+                )}
+              </div>
+              <div className="student-auto-compose" role="status" aria-live="polite">
+                {paused ? (
+                  <span>Composição pausada — os gestos não entram na mensagem.</span>
+                ) : lastAdded ? (
+                  <span className="student-auto-added"><Check size={15} aria-hidden="true" /> Adicionado à mensagem: <strong>{lastAdded}</strong></span>
+                ) : currentGesture && confirmProgress > 0 && confirmProgress < 100 ? (
+                  <span>Confirmando… mantenha o gesto</span>
+                ) : (
+                  <span>Os gestos estáveis entram sozinhos na mensagem. Solte o gesto para repetir a mesma letra.</span>
+                )}
+                <div className="student-confidence-track" role="meter" aria-label="Confirmação do gesto" aria-valuemin={0} aria-valuemax={100} aria-valuenow={confirmProgress}>
+                  <span style={{ width: `${paused ? 0 : confirmProgress}%` }} />
+                </div>
               </div>
             </div>
 
@@ -498,7 +711,7 @@ export default function StudentMode() {
               <details className="student-model-details student-recent-gestures">
                 <summary><span>Últimos gestos detectados</span><ChevronDown size={17} aria-hidden="true" /></summary>
                 <div className="student-model-body">
-                  <p>Use “Adicionar ao texto” para incluir um gesto na mensagem.</p>
+                  <p>Gestos estáveis são incluídos automaticamente na mensagem.</p>
                   <div className="student-gesture-list">{gestureHistory.map((gesture, idx) => <span key={idx} data-dynamic={gesture.kind === "dynamic"}>{gesture.gesture}</span>)}</div>
                 </div>
               </details>
@@ -526,7 +739,7 @@ export default function StudentMode() {
                     : "Nenhum classificador estático disponível."}</p>
                   {hasModel && <div className="student-gesture-list" aria-label="Letras disponíveis">{modelLabels.map(label => <span key={label}>{label}</span>)}</div>}
                   <p>{isDynamicClassifierLoading ? "Preparando reconhecimento de movimentos…"
-                    : hasDynamicModel ? `Movimentos disponíveis: ${dynamicLabels.length} sinais.`
+                    : hasDynamicModel ? `${dynamicSources.length === 2 ? "Seu modelo + modelo base (dataset Libras-EQT-UECE)" : dynamicSources[0] === "pretrained" ? "Modelo base (dataset Libras-EQT-UECE)" : "Seu modelo"}: ${dynamicLabels.length} sinais em movimento.`
                     : "Para reconhecer movimentos, grave clipes em Treinar gestos."}</p>
                   {hasDynamicModel && <div className="student-gesture-list" aria-label="Gestos dinâmicos disponíveis">{dynamicLabels.map(label => <span key={label}>{label}</span>)}</div>}
                   <button type="button" className="student-text-link" onClick={() => setLocation("/aluno/treinar")}>Personalizar meus gestos</button>
@@ -543,7 +756,7 @@ export default function StudentMode() {
               <div className="student-compose-symbol" aria-hidden="true"><MessageSquareText size={22} /></div>
               <div><p className="student-section-label">Sua vez</p><h2 id="transcript-title">Mensagem para a sala</h2></div>
             </div>
-            <p className="student-compose-intro">Digite livremente ou acrescente os gestos reconhecidos pela câmera. O texto pode ser editado antes do envio.</p>
+            <p className="student-compose-intro">Digite livremente ou deixe a câmera montar a mensagem: letras consecutivas formam palavras e, após uma pausa, o texto segue para o professor. O texto pode ser editado a qualquer momento.</p>
             <label className="student-field-label" htmlFor="gesture-message">Escreva sua mensagem</label>
             <Textarea
               id="gesture-message"
@@ -560,10 +773,21 @@ export default function StudentMode() {
               <span>{recognizedText.length}/2.000</span>
             </div>
             <div className="student-actions student-phrase-actions">
-              <Button onClick={sendMessage} disabled={!recognizedText.trim() || classroom.status !== "connected" || !classroom.professor}>Enviar ao professor</Button>
+              {!autoSendActive && (
+                <Button onClick={sendMessage} disabled={!recognizedText.trim() || classroom.status !== "connected" || !classroom.professor}>Enviar ao professor</Button>
+              )}
+              <Button variant="outline" onClick={() => setPaused(value => !value)} aria-pressed={paused}>
+                {paused ? <Play size={17} aria-hidden="true" /> : <Pause size={17} aria-hidden="true" />} {paused ? "Retomar composição" : "Pausar composição"}
+              </Button>
+              <Button variant="outline" onClick={addSpace} disabled={!recognizedText || /\s$/.test(recognizedText)}><Space size={17} aria-hidden="true" /> Espaço</Button>
+              <Button variant="outline" onClick={removeLastChar} disabled={!recognizedText}><Delete size={17} aria-hidden="true" /> Apagar última</Button>
               <Button variant="outline" onClick={speakMessage} disabled={!recognizedText.trim()}><Volume2 size={17} aria-hidden="true" /> Ouvir</Button>
               <Button variant="ghost" onClick={clearDraft} disabled={!recognizedText && !spokenTypedText}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
             </div>
+            <label className="student-auto-send">
+              <input type="checkbox" checked={autoSend} onChange={e => setAutoSend(e.target.checked)} />
+              <span>Envio automático ao professor após uma pausa nos gestos</span>
+            </label>
             <p id="gesture-message-session" className="student-session-note">O rascunho fica nesta tela até você sair da sala.</p>
 
             <div className="student-libras-option">
@@ -581,7 +805,8 @@ export default function StudentMode() {
           <summary><Lightbulb size={18} aria-hidden="true" /><span>Dicas para o reconhecimento</span><ChevronDown size={17} aria-hidden="true" /></summary>
           <div className="student-guidance-tips">
             <p><strong>Boa iluminação.</strong> Deixe a mão inteira visível no quadro.</p>
-            <p><strong>Faça uma pausa.</strong> Espere o resultado antes de adicionar o gesto.</p>
+            <p><strong>Faça uma pausa.</strong> Mantenha cada gesto por um instante; para repetir uma letra, solte-a e refaça.</p>
+            <p><strong>Rosto visível.</strong> Sobrancelhas erguidas indicam pergunta (?), franzidas indicam dúvida, e acenar ou balançar a cabeça marca certeza ou negação.</p>
             <p><strong>Personalize.</strong> Capture amostras em Treinar gestos para incluir outros sinais.</p>
           </div>
           <p className="student-limit-note">O modelo experimental inclui A a Z. H, J, K, X e Z são reconhecidos pela posição da mão, sem validar o movimento completo. Ç ainda não está incluído. Não traduz Libras completa.</p>

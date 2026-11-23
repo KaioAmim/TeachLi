@@ -44,5 +44,5 @@ pode já ter visto exemplos dessa base. Não há identificação dos participant
 no CSV; não foi realizada uma avaliação independente com pessoas novas ou
 câmera. A precisão das previsões aceitas nas letras antigas foi de 97,80%,
 contra 99,04% do modelo legado. As métricas não garantem desempenho em uso real.
-Veja `docs/TREINAMENTO_ALFABETO.md` e
+Veja `docs/DOCUMENTACAO.md (seção 5.3)` e
 `docs/experiments/alphabet-26-transfer-report.json` no repositório.

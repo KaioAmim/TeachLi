@@ -40,7 +40,7 @@
   }
 
   /* Espelha a pré-visualização (e o overlay junto) para dar a sensação de
-     espelho. O classificador é invariante à mão usada — ver docs/MODELO.md. */
+     espelho. O classificador é invariante à mão usada — ver docs/DOCUMENTACAO.md. */
   .video-mirror {
     @apply -scale-x-100;
   }

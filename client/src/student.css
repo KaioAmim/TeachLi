@@ -131,3 +131,18 @@
 .student-workspace .student-actions button:disabled { opacity: 1; border-color: #d9e0e8; color: #5d6978; background: #e9edf2; }
 .student-workspace .student-phrase-actions button:first-child:disabled { color: #596574; background: #dfe5ec; }
 .student-workspace .student-recognition-result > button:disabled { opacity: 1; color: #5d6978; background: #e9edf2; }
+
+.student-auto-compose {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground, #5b6470);
+}
+.student-auto-added { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; }
+.student-auto-send { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.75rem; font-size: 0.875rem; }
+
+.student-face-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-top: 0.75rem; }
+.student-face-row .student-auto-send { margin-top: 0; }
+.student-face-chip { padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.8rem; border: 1px solid currentColor; opacity: 0.65; }
+.student-face-chip[data-active="true"] { opacity: 1; font-weight: 600; }
