@@ -18,6 +18,13 @@ import { landmarksToFeatures, twoHandLandmarksToFeatures } from "@/lib/handFeatu
 import { resampleSequence, sequenceToArray } from "@/lib/sequenceUtils";
 import { importPretrainedAlphabetDataset } from "@/lib/pretrainedDatasetImporter";
 import {
+  importVLibrasilVideos,
+  loadVLibrasBD,
+  parseDatasetCsv,
+  saveVLibrasBD,
+  type DatasetImportProgress,
+} from "@/lib/librasDatasetImporter";
+import {
   deleteClassifier,
   getSampleCountsByLabel,
   loadDataset,
@@ -48,9 +55,7 @@ export default function TrainMode() {
   // --- dataset estático (1 quadro por amostra) ---
   const [samples, setSamples] = useState<TrainingSample[]>(() => loadDataset());
   // --- dataset dinâmico (clipe reamostrado por amostra) ---
-  const [dynamicSamples, setDynamicSamples] = useState<DynamicTrainingSample[]>(() =>
-    loadDynamicDataset()
-  );
+  const [dynamicSamples, setDynamicSamples] = useState<DynamicTrainingSample[]>([]);
 
   const [label, setLabel] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
@@ -63,6 +68,14 @@ export default function TrainMode() {
   const [isImporting, setIsImporting] = useState(false);
   const [isRecordingClip, setIsRecordingClip] = useState(false);
   const [clipFrameCount, setClipFrameCount] = useState(0);
+  const [isImportingVLibrasil, setIsImportingVLibrasil] = useState(false);
+  const [vibrasilProgress, setVibrasilProgress] = useState<DatasetImportProgress | null>(null);
+  const [vibrasilAnnotations, setVibrasilAnnotations] = useState<Array<Record<string, string>>>([]);
+  const [isImportingVLibrasBD, setIsImportingVLibrasBD] = useState(false);
+  const [vlibrasBDCount, setVlibrasBDCount] = useState(0);
+  const vibrasilFilesRef = useRef<HTMLInputElement>(null);
+  const vibrasilCsvRef = useRef<HTMLInputElement>(null);
+  const vlibrasBDCsvRef = useRef<HTMLInputElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<number | null>(null);
@@ -72,6 +85,11 @@ export default function TrainMode() {
 
   const { isLoading: isLandmarkerLoading, error: landmarkerError, handLandmarker, detectHands } =
     useHandLandmarker();
+
+  useEffect(() => {
+    loadVLibrasBD().then(entries => setVlibrasBDCount(entries.length)).catch(() => undefined);
+    loadDynamicDataset().then(setDynamicSamples).catch(() => toast.error("Não foi possível abrir os clipes salvos neste navegador."));
+  }, []);
 
   const counts = getSampleCountsByLabel(samples);
   const labels = Object.keys(counts).sort();
@@ -122,9 +140,9 @@ export default function TrainMode() {
     saveDataset(next);
   };
 
-  const persistDynamic = (next: DynamicTrainingSample[]) => {
+  const persistDynamic = async (next: DynamicTrainingSample[]) => {
     setDynamicSamples(next);
-    saveDynamicDataset(next);
+    await saveDynamicDataset(next);
   };
 
   const startCapture = async () => {
@@ -197,7 +215,8 @@ export default function TrainMode() {
     }
 
     const resampled = resampleSequence(frames, SEQUENCE_LENGTH);
-    persistDynamic([...dynamicSamples, { label: trimmed, frames: sequenceToArray(resampled) }]);
+    persistDynamic([...dynamicSamples, { label: trimmed, frames: sequenceToArray(resampled) }])
+      .catch(() => toast.error("Não foi possível salvar o clipe neste navegador."));
     toast.success(`Clipe de "${trimmed}" gravado (${frames.length} quadros originais)`);
   };
 
@@ -211,6 +230,45 @@ export default function TrainMode() {
       toast.error(err instanceof Error ? err.message : "Falha ao importar as amostras");
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const importVLibrasil = async () => {
+    const files = Array.from(vibrasilFilesRef.current?.files ?? []);
+    if (!files.length) {
+      toast.error("Selecione a pasta ou os vídeos do V-Librasil primeiro.");
+      return;
+    }
+    setIsImportingVLibrasil(true);
+    setVibrasilProgress(null);
+    try {
+      const imported = await importVLibrasilVideos(files, vibrasilAnnotations, detectHands, setVibrasilProgress);
+      if (!imported.length) {
+        toast.error("Nenhum vídeo pôde ser convertido. Confira as legendas, os codecs e se há mãos visíveis.");
+        return;
+      }
+      await persistDynamic([...dynamicSamples, ...imported]);
+      toast.success(`${imported.length} vídeos do V-Librasil convertidos em clipes temporais.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao importar vídeos do V-Librasil.");
+    } finally {
+      setIsImportingVLibrasil(false);
+      setVibrasilProgress(null);
+    }
+  };
+
+  const importVLibrasBDCorpus = async (file?: File) => {
+    if (!file) return;
+    setIsImportingVLibrasBD(true);
+    try {
+      const count = await saveVLibrasBD(await file.text());
+      setVlibrasBDCount(count);
+      toast.success(`${count.toLocaleString("pt-BR")} pares português/glossa disponíveis neste navegador.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao importar o CSV do VLibrasBD.");
+    } finally {
+      setIsImportingVLibrasBD(false);
+      if (vlibrasBDCsvRef.current) vlibrasBDCsvRef.current.value = "";
     }
   };
 
@@ -255,7 +313,7 @@ export default function TrainMode() {
   };
 
   const resetDynamic = async () => {
-    persistDynamic([]);
+    await persistDynamic([]);
     await deleteDynamicClassifier();
     toast.info("Clipes e modelo dinâmico removidos");
   };
@@ -463,6 +521,67 @@ export default function TrainMode() {
                     <Button variant="destructive" onClick={resetDynamic} disabled={isTrainingDynamic}>
                       <Trash2 className="w-4 h-4 mr-2" />
                       Limpar
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3 rounded-md border border-border p-3">
+                    <p className="text-sm font-medium">Importar sinais gravados do V-Librasil</p>
+                    <p className="text-xs text-muted-foreground">
+                      Selecione os vídeos baixados localmente. Se os nomes dos arquivos não contiverem o sinal,
+                      carregue também o CSV de anotações com as colunas video_name e class. Os vídeos são
+                      processados neste navegador e não são enviados.
+                    </p>
+                    <input
+                      ref={vibrasilFilesRef}
+                      type="file"
+                      accept="video/*,.mp4,.webm,.mov,.m4v"
+                      multiple
+                      {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+                      className="block w-full text-sm"
+                      aria-label="Pasta de vídeos do V-Librasil"
+                    />
+                    <input
+                      ref={vibrasilCsvRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="block w-full text-sm"
+                      aria-label="CSV de anotações do V-Librasil"
+                      onChange={async event => {
+                        const file = event.currentTarget.files?.[0];
+                        if (!file) return;
+                        const rows = parseDatasetCsv(await file.text());
+                        setVibrasilAnnotations(rows);
+                        toast.success(`${rows.length} anotações carregadas.`);
+                      }}
+                    />
+                    <Button variant="outline" onClick={importVLibrasil} disabled={isImportingVLibrasil || !handLandmarker}>
+                      <Download className="w-4 h-4 mr-2" />
+                      {isImportingVLibrasil ? "Extraindo movimentos…" : "Importar vídeos para o treino"}
+                    </Button>
+                    {vibrasilProgress && (
+                      <p className="text-xs text-muted-foreground">
+                        Vídeo {vibrasilProgress.current}/{vibrasilProgress.total}: {vibrasilProgress.label}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 rounded-md border border-border p-3">
+                    <p className="text-sm font-medium">Referência de frases VLibrasBD</p>
+                    <p className="text-xs text-muted-foreground">
+                      Carregue o CSV português/glossa para habilitar sugestões de frases a partir dos sinais reconhecidos.
+                      Esta base textual não contém vídeos nem treina movimentos.
+                    </p>
+                    <input
+                      ref={vlibrasBDCsvRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      aria-label="Arquivo CSV do VLibrasBD"
+                      onChange={event => importVLibrasBDCorpus(event.currentTarget.files?.[0])}
+                    />
+                    <Button variant="outline" onClick={() => vlibrasBDCsvRef.current?.click()} disabled={isImportingVLibrasBD}>
+                      <Download className="w-4 h-4 mr-2" />
+                      {isImportingVLibrasBD ? "Importando…" : vlibrasBDCount ? `Atualizar VLibrasBD (${vlibrasBDCount.toLocaleString("pt-BR")} pares)` : "Importar VLibrasBD CSV"}
                     </Button>
                   </div>
 

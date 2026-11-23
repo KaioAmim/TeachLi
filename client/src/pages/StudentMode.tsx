@@ -1,7 +1,7 @@
 import { ClassroomPanel } from "@/components/ClassroomPanel";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
 import { RoomStatus, WorkspaceHeading } from "@/components/AppShell";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Video, VideoOff, Volume2, Waves, BookOpen, Plus, Trash2, ScanLine, ChevronDown, Lightbulb, MessageSquareText } from "lucide-react";
@@ -13,6 +13,7 @@ import { useDynamicGestureClassifier } from "@/hooks/useDynamicGestureClassifier
 import { twoHandLandmarksToFeatures } from "@/lib/handFeatures";
 import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
 import { translateWithVLibras } from "@/components/VLibrasWidget";
+import { getGlossPhraseSuggestion, loadVLibrasBD, type LibrasCorpusEntry } from "@/lib/librasDatasetImporter";
 
 interface RecognitionResult {
   gesture: string;
@@ -59,6 +60,7 @@ export default function StudentMode() {
   const [gestureHistory, setGestureHistory] = useState<RecognitionResult[]>([]);
   const [handDetected, setHandDetected] = useState(false);
   const [spokenTypedText, setSpokenTypedText] = useState("");
+  const [vlibrasCorpus, setVlibrasCorpus] = useState<LibrasCorpusEntry[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const translatedIds = useRef(new Set<string>());
@@ -101,6 +103,15 @@ export default function StudentMode() {
   const dynamicFrameCounterRef = useRef(0);
   const dynamicStableRef = useRef<{ label: string; count: number }>({ label: "", count: 0 });
   const lastDynamicCommittedAtRef = useRef(0);
+
+  useEffect(() => {
+    loadVLibrasBD().then(setVlibrasCorpus).catch(() => undefined);
+  }, []);
+
+  const glossSuggestion = useMemo(() => getGlossPhraseSuggestion(
+    vlibrasCorpus,
+    gestureHistory.filter(item => item.kind === "dynamic").map(item => item.gesture),
+  ), [vlibrasCorpus, gestureHistory]);
 
   useEffect(() => {
     return () => {
@@ -379,6 +390,12 @@ export default function StudentMode() {
     }
   };
 
+  const useGlossSuggestion = () => {
+    if (!glossSuggestion) return;
+    setRecognizedText(prev => `${prev}${prev && !prev.endsWith(" ") ? " " : ""}${glossSuggestion.portuguese} `);
+    toast.success("Sugestão do VLibrasBD adicionada ao texto; revise antes de enviar.");
+  };
+
   const speakMessage = () => {
     if (!recognizedText.trim()) return;
     // Mantido num elemento visível (abaixo) para que o VLibras, que traduz o
@@ -485,6 +502,18 @@ export default function StudentMode() {
                   <div className="student-gesture-list">{gestureHistory.map((gesture, idx) => <span key={idx} data-dynamic={gesture.kind === "dynamic"}>{gesture.gesture}</span>)}</div>
                 </div>
               </details>
+            )}
+
+            {glossSuggestion && (
+              <div className="student-recognition" role="status">
+                <div className="student-recognition-label">
+                  <Lightbulb size={17} aria-hidden="true" />
+                  <h3>Sugestão de frase (VLibrasBD)</h3>
+                </div>
+                <p className="student-empty-copy">{glossSuggestion.portuguese}</p>
+                <p className="text-xs text-muted-foreground">Correspondência aproximada com a glossa: {glossSuggestion.gloss}</p>
+                <Button variant="outline" onClick={useGlossSuggestion}>Usar sugestão</Button>
+              </div>
             )}
 
             <div className="student-available-gestures">

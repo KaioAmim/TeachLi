@@ -8,12 +8,15 @@ export interface RawLandmark {
 export const FEATURE_SIZE = 63;
 
 /**
- * Duas mãos concatenadas em slots fixos [ESQUERDA(63), DIREITA(63)].
+ * Duas mãos concatenadas em slots fixos [ESQUERDA(66), DIREITA(66)].
+ * Cada slot guarda 63 coordenadas de pose e 3 da posição do pulso no quadro.
  * Usado pelos sinais dinâmicos, onde a coordenação entre as duas mãos
  * pode fazer parte do sinal — o classificador estático de um quadro só
  * usa FEATURE_SIZE (uma mão) e continua funcionando como antes.
  */
-export const TWO_HAND_FEATURE_SIZE = FEATURE_SIZE * 2;
+/** 63 coordenadas normalizadas por mão + posição do pulso no quadro. */
+export const HAND_SEQUENCE_FEATURE_SIZE = FEATURE_SIZE + 3;
+export const TWO_HAND_FEATURE_SIZE = HAND_SEQUENCE_FEATURE_SIZE * 2;
 
 const WRIST = 0;
 const MIDDLE_FINGER_MCP = 9;
@@ -68,8 +71,14 @@ export function twoHandLandmarksToFeatures(frame: HandsFrame): Float32Array {
   const out = new Float32Array(TWO_HAND_FEATURE_SIZE);
   frame.landmarks.forEach((lms, i) => {
     const handed = frame.handedness[i];
-    const offset = handed === "Left" ? 0 : FEATURE_SIZE;
+    const offset = handed === "Left" ? 0 : HAND_SEQUENCE_FEATURE_SIZE;
     out.set(landmarksToFeatures(lms), offset);
+    // A normalização local da mão preserva a pose, mas remove deslocamentos
+    // pelo espaço. Guardamos também o pulso em coordenadas do quadro para
+    // que o modelo temporal possa aprender trajetórias e pontos de articulação.
+    out[offset + FEATURE_SIZE] = lms[0].x * 2 - 1;
+    out[offset + FEATURE_SIZE + 1] = lms[0].y * 2 - 1;
+    out[offset + FEATURE_SIZE + 2] = lms[0].z;
   });
   return out;
 }

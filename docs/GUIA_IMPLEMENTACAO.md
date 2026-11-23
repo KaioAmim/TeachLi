@@ -132,8 +132,10 @@ são expectativas de evolução, não capacidades comprovadas da integração at
 - [x] Ampliar o modelo padrão para A–Z com duas bases e preservar o modelo antigo.
 - [x] Preservar modelos pessoais, editor de texto e confirmação antes do envio.
 - [x] Versionar artefatos, origem, licenças, scripts e resultados dos experimentos.
-- [ ] Corrigir a captura temporal para preservar trajetória, tempo e posição relativa.
-- [ ] Versionar o novo formato, sem reinterpretar ou apagar clipes/modelos antigos.
+- [x] Preservar a posição global do pulso junto aos landmarks de cada mão na captura temporal.
+- [x] Versionar clipes e modelo temporal v2; manter o formato antigo sem reinterpretá-lo.
+- [x] Importar vídeos locais V-Librasil para treino experimental de sinais isolados.
+- [x] Importar o CSV VLibrasBD como referência de glossa e sugestão aproximada de frase.
 - [ ] Coletar clipes completos de movimentos, incluindo Ç e distinção de C.
 - [ ] Conferir rótulos com pessoa fluente e incluir pausas/transições como negativos.
 - [ ] Separar gravações e participantes antes de gerar variações de treino.
@@ -146,10 +148,10 @@ são expectativas de evolução, não capacidades comprovadas da integração at
 Fotos isoladas podem descrever poses; movimentos exigem sequências ordenadas.
 Coleta e treinamento são etapas distintas. Não há modelo temporal base distribuído;
 H/J/K/X/Z no modelo atual são experimentais por pose e Ç ainda não está incluído.
-A captura dinâmica centraliza a mão em cada quadro, removendo deslocamento global:
-corrigir isso deve preceder a coleta. Métricas internas não representam acerto
-independente na câmera. Detalhes em [TREINAMENTO_ALFABETO.md](TREINAMENTO_ALFABETO.md)
-e, para o próximo trabalho, na descrição do PR.
+A captura temporal v2 preserva também o pulso no quadro, mas ainda não considera
+expressões faciais ou a postura do tronco. Métricas internas não representam acerto
+independente na câmera. Detalhes em [DOCUMENTACAO.md](DOCUMENTACAO.md) e
+[TREINAMENTO_ALFABETO.md](TREINAMENTO_ALFABETO.md).
 
 O script do experimento A–Z tem instruções de reprodução. Os scripts históricos
 anteriores ainda têm caminhos específicos e precisam de adaptação se reutilizados.

@@ -18,7 +18,8 @@ O reconhecimento depende dos dados de treino e precisa de avaliação com usuár
 | Modo Aluno | Enviar texto confirmado ao professor da mesma sala; voz local opcional |
 | Salas | Laboratórios A/B/C e salas 01/02; seleção após login, presença e troca de sala |
 | Reconhecimento por pose | MediaPipe + TensorFlow.js, A–Z experimental ou modelo pessoal |
-| Sinais dinâmicos | Treino local experimental; captura precisa preservar trajetória antes da próxima coleta |
+| Sinais dinâmicos | Treino local experimental com clipes próprios ou importados do V-Librasil; trajetória do pulso preservada |
+| VLibrasBD | Corpus CSV opcional para sugestões experimentais de frases português/glossa |
 | VLibras | Widget disponível em todas as telas para traduzir textos selecionados na página |
 | Modo Professor | Receber mensagens dos alunos e compartilhar frases finais da transcrição na sala |
 
