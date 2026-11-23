@@ -42,7 +42,7 @@ alunos da mesma sala.
 | --- | --- | --- |
 | `client/` | React 18, TypeScript, Vite 5, Tailwind 3, Wouter, MediaPipe e TensorFlow.js | `index.html` → `src/main.tsx` → `App.tsx`; saída `client/dist/` |
 | `server/` | Node.js, `ws` e `jose`; autenticação e encaminhamento de texto | `index.mjs` → `classrooms.mjs` e `microsoft.mjs` |
-| `training/` | Scripts offline (Python/Node) que geram os modelos base | Não faz parte do build do site |
+| `training/` | Scripts offline (Python/Node) que geram o modelo base dinâmico; os do alfabeto ficam em `client/public/models/gesture-classifier-26/source/` | Não faz parte do build do site |
 
 O reconhecimento e o treino acontecem no navegador. O servidor recebe o texto
 confirmado e as frases finais e encaminha só ao perfil oposto na mesma sala. A mídia
@@ -59,7 +59,7 @@ apenas a sinalização (SDP e ICE) e não grava nem transmite câmera ou áudio.
 | `/professor` | Mensagens recebidas e transcrição compartilhada |
 
 As telas de comunicação exigem login do perfil e sala selecionada; atualizar a
-página exige escolher a sala de novo. `TrainGestures.tsx` não é rota atual. A
+página exige escolher a sala de novo. A
 chamada aparece em `/aluno` e `/professor`; o aluno precisa ligar a câmera para entrar nela.
 
 **Fronteira de compilação.** `client/tsconfig.json` verifica `src/main.tsx`, todos os
@@ -111,8 +111,9 @@ Node com WSS; cadastre a origem na Microsoft e no servidor. `localhost` em outro
 dispositivo aponta para o próprio dispositivo. `predev` e `prebuild` copiam o WASM do
 MediaPipe para `public/`. Os modelos de mão e de rosto e o VLibras ainda carregam recursos
 externos, e o reconhecimento de fala depende do navegador: o sistema não é inteiramente
-offline. A base Vite é `/`. O Vite copia `public/` ao build, inclusive datasets e modelos:
-revise esses arquivos antes de publicar.
+offline. A base Vite é `/`. O Vite copia `public/` ao build, inclusive os modelos e `datasets/libras-landmarks.json` (só vetores numéricos já normalizados;
+as fotos originais do alfabeto foram removidas do repositório): revise esses arquivos antes de publicar. O WASM do MediaPipe em
+`public/mediapipe/` é gerado por `predev`/`prebuild` e não é versionado.
 
 ## 4. Salas e armazenamento
 

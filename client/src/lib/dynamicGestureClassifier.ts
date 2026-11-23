@@ -142,8 +142,8 @@ function makeRng(seed: number): () => number {
 
 /**
  * Perturba um clipe inteiro: pequena rotação no plano da imagem, jitter de
- * escala e ruído — no mesmo espírito do augmentation offline em
- * scripts/dataset/train.py, mas aplicando a MESMA rotação/escala a todos os
+ * escala e ruído — no mesmo espírito do augmentation offline de
+ * training/train_dynamic.py, mas aplicando a MESMA rotação/escala a todos os
  * quadros do clipe. Perturbar cada quadro de forma independente destruiria
  * a trajetória (o "formato" do movimento), que é justamente o que este
  * classificador precisa aprender.

@@ -6,7 +6,7 @@ import type { TrainingSample } from "./gestureClassifier";
  * https://github.com/biankatpas/Brazilian-Sign-Language-Alphabet-Dataset
  *
  * As fotos NÃO são baixadas pelo navegador. A extração de landmarks foi feita
- * uma única vez, offline (ver scripts/dataset/), e o que é servido aqui é só o
+ * uma única vez, offline (histórico do Git: scripts/dataset/, removido por não ser usado em execução), e o que é servido aqui é só o
  * resultado: vetores de 63 floats já normalizados pelo mesmo
  * landmarksToFeatures() usado na webcam. Isso troca ~39 MB de JPEG e vários
  * minutos de processamento no cliente por ~1 MB e um único fetch.
