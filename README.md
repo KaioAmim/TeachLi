@@ -17,8 +17,9 @@ O reconhecimento depende dos dados de treino e precisa de avaliação com usuár
 | Modo Aluno | Digitar ou sinalizar: os gestos formam a mensagem, que segue ao professor da mesma sala após uma pausa; voz local só quando solicitada |
 | Salas | Laboratórios A/B/C e salas 01/02; seleção após login, presença e troca de sala |
 | Reconhecimento por pose | MediaPipe + TensorFlow.js, A–Z experimental ou modelo pessoal; letras entram sozinhas na mensagem, sem traços sobre as mãos |
-| Sinais dinâmicos | Modelo base de 178 sinais (dataset Libras-EQT-UECE, licença a confirmar) e treino local experimental |
+| Sinais dinâmicos | Modelo base de 178 sinais (dataset Libras-EQT-UECE, licença a confirmar) junto com treino local com clipes próprios ou importados do V-Librasil; trajetória do pulso preservada nos modelos pessoais |
 | Expressões faciais | Pergunta, dúvida, surpresa, negação e certeza (sobrancelhas e movimento da cabeça), opcionais |
+| VLibrasBD | Corpus CSV opcional para sugestões experimentais de frases português/glossa |
 | VLibras | Widget disponível em todas as telas para traduzir textos selecionados na página |
 | Modo Professor | Receber mensagens dos alunos e compartilhar frases finais da transcrição na sala |
 

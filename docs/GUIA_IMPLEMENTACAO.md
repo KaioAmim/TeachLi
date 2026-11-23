@@ -146,8 +146,10 @@ são expectativas de evolução, não capacidades comprovadas da integração at
 - [ ] Ampliar vocabulário com MINDS-Libras e V-LIBRASIL (exigem extração de landmarks).
 - [x] Preservar modelos pessoais, editor de texto e confirmação antes do envio.
 - [x] Versionar artefatos, origem, licenças, scripts e resultados dos experimentos.
-- [ ] Corrigir a captura temporal para preservar trajetória, tempo e posição relativa.
-- [ ] Versionar o novo formato, sem reinterpretar ou apagar clipes/modelos antigos.
+- [x] Preservar a posição global do pulso junto aos landmarks de cada mão na captura temporal.
+- [x] Versionar clipes e modelo temporal v2; manter o formato antigo sem reinterpretá-lo.
+- [x] Importar vídeos locais V-Librasil para treino experimental de sinais isolados.
+- [x] Importar o CSV VLibrasBD como referência de glossa e sugestão aproximada de frase.
 - [ ] Coletar clipes completos de movimentos, incluindo Ç e distinção de C.
 - [ ] Conferir rótulos com pessoa fluente e incluir pausas/transições como negativos.
 - [ ] Separar gravações e participantes antes de gerar variações de treino.
@@ -159,10 +161,11 @@ são expectativas de evolução, não capacidades comprovadas da integração at
 
 Fotos isoladas podem descrever poses; movimentos exigem sequências ordenadas.
 Coleta e treinamento são etapas distintas. H/J/K/X/Z no modelo de letras são experimentais por pose e
-Ç ainda não está incluído. A captura dinâmica do usuário centraliza a mão em cada quadro, removendo
-deslocamento global (nos testes com o dataset, acrescentar trajetória piorou o acerto com pessoas novas,
-então isso precisa de nova análise antes da coleta). Métricas internas não representam acerto independente
-na câmera. Detalhes e reprodução na [documentação técnica](DOCUMENTACAO.md#5-reconhecimento-e-treinamento).
+Ç ainda não está incluído. A captura temporal v2 preserva também o pulso no quadro, mas ainda não considera a postura do
+tronco (as expressões faciais entram só como marcação, não no classificador de sinais). Nos testes com o dataset UECE,
+acrescentar a trajetória piorou o acerto com pessoas novas, então isso precisa de nova análise. Métricas internas não
+representam acerto independente na câmera. Detalhes e reprodução na
+[documentação técnica](DOCUMENTACAO.md#5-reconhecimento-e-treinamento).
 
 ## 8. Histórico e dados — futuro
 

@@ -1,10 +1,17 @@
 import * as tf from "@tensorflow/tfjs";
-import { TWO_HAND_FEATURE_SIZE } from "./handFeatures";
+import { FEATURE_SIZE, HAND_SEQUENCE_FEATURE_SIZE, TWO_HAND_FEATURE_SIZE } from "./handFeatures";
 import { resampleSequence, sequenceToArray } from "./sequenceUtils";
 
-const MODEL_STORAGE_KEY = "indexeddb://libras-dynamic-classifier";
-const LABELS_STORAGE_KEY = "libras-dynamic-classifier-labels";
-const DATASET_STORAGE_KEY = "libras-dynamic-training-dataset";
+// v2 adiciona a posição global do pulso a cada mão. Os clipes v1 são migrados
+// mantendo zeros nessa posição; o modelo v1 segue carregável com os landmarks antigos.
+const MODEL_STORAGE_KEY = "indexeddb://libras-dynamic-classifier-v2";
+const LABELS_STORAGE_KEY = "libras-dynamic-classifier-labels-v2";
+const LEGACY_MODEL_STORAGE_KEY = "indexeddb://libras-dynamic-classifier";
+const LEGACY_LABELS_STORAGE_KEY = "libras-dynamic-classifier-labels";
+const TRAINING_DB = "teachli-libras-training";
+const TRAINING_STORE = "datasets";
+const TRAINING_KEY = "dynamic-v2";
+const LEGACY_TRAINING_KEY = "libras-dynamic-training-dataset";
 
 /** Todo clipe é reamostrado para este número de quadros antes de treinar/prever. */
 export const SEQUENCE_LENGTH = 40;
@@ -58,17 +65,64 @@ function buildModel(numClasses: number): tf.Sequential {
   return model;
 }
 
-export function loadDataset(): DynamicTrainingSample[] {
-  try {
-    const raw = localStorage.getItem(DATASET_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as DynamicTrainingSample[]) : [];
-  } catch {
-    return [];
-  }
+function openTrainingDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(TRAINING_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(TRAINING_STORE);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }
 
-export function saveDataset(samples: DynamicTrainingSample[]): void {
-  localStorage.setItem(DATASET_STORAGE_KEY, JSON.stringify(samples));
+export async function loadDataset(): Promise<DynamicTrainingSample[]> {
+  const db = await openTrainingDb();
+  let samples = await new Promise<DynamicTrainingSample[]>((resolve, reject) => {
+    const request = db.transaction(TRAINING_STORE).objectStore(TRAINING_STORE).get(TRAINING_KEY);
+    request.onsuccess = () => resolve((request.result as DynamicTrainingSample[] | undefined) ?? []);
+    request.onerror = () => reject(request.error);
+  });
+  if (!samples.length) {
+    try {
+      const legacyRaw = localStorage.getItem(LEGACY_TRAINING_KEY);
+      const legacy = legacyRaw ? JSON.parse(legacyRaw) as DynamicTrainingSample[] : [];
+      samples = legacy.map(sample => ({
+        label: sample.label,
+        frames: sample.frames.map(frame => {
+          if (frame.length === TWO_HAND_FEATURE_SIZE) return frame;
+          const upgraded = new Array<number>(TWO_HAND_FEATURE_SIZE).fill(0);
+          for (let i = 0; i < FEATURE_SIZE; i++) {
+            upgraded[i] = frame[i] ?? 0;
+            upgraded[HAND_SEQUENCE_FEATURE_SIZE + i] = frame[FEATURE_SIZE + i] ?? 0;
+          }
+          return upgraded;
+        }),
+      }));
+      if (samples.length) {
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(TRAINING_STORE, "readwrite");
+          tx.objectStore(TRAINING_STORE).put(samples, TRAINING_KEY);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        localStorage.removeItem(LEGACY_TRAINING_KEY);
+      }
+    } catch {
+      samples = [];
+    }
+  }
+  db.close();
+  return samples;
+}
+
+export async function saveDataset(samples: DynamicTrainingSample[]): Promise<void> {
+  const db = await openTrainingDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(TRAINING_STORE, "readwrite");
+    tx.objectStore(TRAINING_STORE).put(samples, TRAINING_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
 }
 
 export function getSampleCountsByLabel(samples: DynamicTrainingSample[]): Record<string, number> {
@@ -102,7 +156,7 @@ function augmentSample(frames: number[][], rng: () => number): number[][] {
   return frames.map(frame => {
     const out = new Array<number>(frame.length);
     for (let h = 0; h < 2; h++) {
-      const base = h * 63;
+      const base = h * HAND_SEQUENCE_FEATURE_SIZE;
       for (let lm = 0; lm < 21; lm++) {
         const xi = base + lm * 3;
         const x = frame[xi];
@@ -112,6 +166,12 @@ function augmentSample(frames: number[][], rng: () => number): number[][] {
         out[xi + 1] = (x * sin + y * cos) * scale + (rng() - 0.5) * 0.02;
         out[xi + 2] = z * scale + (rng() - 0.5) * 0.02;
       }
+      const position = base + FEATURE_SIZE;
+      const px = frame[position];
+      const py = frame[position + 1];
+      out[position] = (px * cos - py * sin) * scale + (rng() - 0.5) * 0.02;
+      out[position + 1] = (px * sin + py * cos) * scale + (rng() - 0.5) * 0.02;
+      out[position + 2] = frame[position + 2] * scale + (rng() - 0.5) * 0.02;
     }
     return out;
   });
@@ -222,8 +282,8 @@ export function isDynamicConfident(prediction: DynamicPrediction): boolean {
 export async function loadDynamicClassifier(): Promise<LoadedDynamicClassifier | null> {
   const [user, base] = await Promise.all([loadUserModel(), loadPretrainedModel()]);
   const parts: LoadedDynamicClassifier[] = [];
-  if (user) parts.push(buildClassifier("user", user.labels, user.model));
-  if (base) parts.push(buildClassifier("pretrained", base.labels, base.model));
+  if (user) parts.push(buildClassifier("user", user.labels, user.model, user.usesLegacyFeatures));
+  if (base) parts.push(buildClassifier("pretrained", base.labels, base.model, true));
   if (parts.length === 0) return null;
   if (parts.length === 1) return parts[0];
 
@@ -240,25 +300,41 @@ export async function loadDynamicClassifier(): Promise<LoadedDynamicClassifier |
   };
 }
 
-async function loadUserModel(): Promise<{ labels: string[]; model: tf.LayersModel } | null> {
-  const labelsRaw = localStorage.getItem(LABELS_STORAGE_KEY);
+interface LoadedModel {
+  labels: string[];
+  model: tf.LayersModel;
+  /** Modelo treinado com 126 valores por quadro (sem a posição do pulso). */
+  usesLegacyFeatures: boolean;
+}
+
+async function loadUserModel(): Promise<LoadedModel | null> {
+  let usesLegacyFeatures = false;
+  let labelsRaw = localStorage.getItem(LABELS_STORAGE_KEY);
+  if (!labelsRaw) {
+    labelsRaw = localStorage.getItem(LEGACY_LABELS_STORAGE_KEY);
+    usesLegacyFeatures = Boolean(labelsRaw);
+  }
   if (!labelsRaw) return null;
+
   try {
     const labels = JSON.parse(labelsRaw);
     if (!Array.isArray(labels) || labels.length === 0) return null;
-    return { labels, model: await tf.loadLayersModel(MODEL_STORAGE_KEY) };
+    const model = await tf.loadLayersModel(usesLegacyFeatures ? LEGACY_MODEL_STORAGE_KEY : MODEL_STORAGE_KEY);
+    usesLegacyFeatures = usesLegacyFeatures || model.inputs[0].shape?.[2] === 126;
+    return { labels, model, usesLegacyFeatures };
   } catch {
     return null;
   }
 }
 
-async function loadPretrainedModel(): Promise<{ labels: string[]; model: tf.LayersModel } | null> {
+async function loadPretrainedModel(): Promise<LoadedModel | null> {
   try {
     const response = await fetch(PRETRAINED_LABELS_URL);
     if (!response.ok) return null;
     const labels = await response.json();
     if (!Array.isArray(labels) || labels.length === 0) return null;
-    return { labels, model: await tf.loadLayersModel(PRETRAINED_MODEL_URL) };
+    // O modelo base foi treinado com 126 valores por quadro (as duas mãos, sem a posição do pulso).
+    return { labels, model: await tf.loadLayersModel(PRETRAINED_MODEL_URL), usesLegacyFeatures: true };
   } catch {
     return null;
   }
@@ -268,11 +344,20 @@ function buildClassifier(
   source: DynamicSource,
   labels: string[],
   model: tf.LayersModel,
+  usesLegacyFeatures: boolean,
 ): LoadedDynamicClassifier {
   const predict = (frames: Float32Array[]): DynamicPrediction => {
     const resampled = resampleSequence(frames, SEQUENCE_LENGTH);
     return tf.tidy(() => {
-      const input = tf.tensor3d([sequenceToArray(resampled)]);
+      const compatible = usesLegacyFeatures
+        ? resampled.map(frame => {
+            const oldFrame = new Float32Array(126);
+            oldFrame.set(frame.subarray(0, 63), 0);
+            oldFrame.set(frame.subarray(66, 129), 63);
+            return oldFrame;
+          })
+        : resampled;
+      const input = tf.tensor3d([sequenceToArray(compatible)]);
       const output = model.predict(input) as tf.Tensor;
       const data = output.dataSync();
       let bestIndex = 0;
@@ -296,14 +381,21 @@ function buildClassifier(
 }
 
 export async function hasDynamicClassifier(): Promise<boolean> {
-  return localStorage.getItem(LABELS_STORAGE_KEY) !== null;
+  return localStorage.getItem(LABELS_STORAGE_KEY) !== null ||
+    localStorage.getItem(LEGACY_LABELS_STORAGE_KEY) !== null;
 }
 
 export async function deleteDynamicClassifier(): Promise<void> {
   localStorage.removeItem(LABELS_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_LABELS_STORAGE_KEY);
   try {
     await tf.io.removeModel(MODEL_STORAGE_KEY);
   } catch {
     // modelo ja nao existia
+  }
+  try {
+    await tf.io.removeModel(LEGACY_MODEL_STORAGE_KEY);
+  } catch {
+    // modelo antigo ja nao existia
   }
 }

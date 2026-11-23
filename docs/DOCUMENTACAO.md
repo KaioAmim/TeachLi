@@ -272,9 +272,10 @@ paridade com o Keras foi conferida em 8 clipes. `tfjs-node` não instala com Nod
 
 ### 5.5 Próximas etapas e limites
 
-- O treino dinâmico do usuário (`dynamicGestureClassifier.ts`) centraliza a mão em cada quadro e perde o
-  deslocamento global, e gera variações antes da divisão de validação; ambos precisam ser corrigidos
-  antes de uma campanha de coleta de movimentos. Versionar o formato sem reinterpretar dados antigos.
+- O treino dinâmico do usuário já preserva a posição do pulso (formato v2, seção 5.6), mas ainda gera variações antes
+  da divisão de validação; separar gravações antes de gerar variações precisa ser corrigido antes de uma campanha de
+  coleta. Nos testes com o dataset UECE, acrescentar a trajetória piorou o acerto com informantes novos (seção 5.4);
+  isso precisa de nova análise com o formato v2.
 - Coletar clipes (não fotos) de movimentos, incluindo Ç; conferir rótulos com pessoa fluente; incluir pausas,
   transições e exemplos negativos; avaliar por participante e por gravação, com pessoas não usadas no treino.
 - Datasets candidatos para ampliar o vocabulário: [MINDS-Libras](https://zenodo.org/records/2667329)
@@ -285,6 +286,25 @@ paridade com o Keras foi conferida em 8 clipes. `tfjs-node` não instala com Nod
   [ST-LibrasNet](https://codeberg.org/Jovinull/STLibrasNet).
 - Confiança, margem e estabilidade filtram predições; não garantem correção nem substituem uma classe
   negativa treinada. O aplicativo não traduz Libras completa nem frases sinalizadas.
+
+### 5.6 Formato temporal v2, V-Librasil e VLibrasBD
+
+O classificador temporal do treino pessoal usa sequências de 40 quadros e Conv1D local. Cada mão combina 63 valores de
+pose normalizada com a posição do pulso no quadro (66 por mão, 132 por quadro), preservando parte da trajetória espacial.
+O formato v2 e seus clipes ficam no IndexedDB; clipes pessoais antigos são migrados e modelos v1 (126 valores) seguem
+compatíveis. O modelo base (seção 5.4) foi treinado com 126 valores, então é consultado com os mesmos quadros sem a posição
+do pulso; ele roda junto com o modelo pessoal.
+
+Na tela de treino, vídeos locais do [V-Librasil](https://libras.cin.ufpe.br/) podem ser convertidos pelo MediaPipe em clipes
+temporais e adicionados ao treino. É possível fornecer um CSV de anotações com `video_name` e `class` quando os nomes dos
+vídeos não identificam o sinal. O [VLibrasBD](https://data.mendeley.com/datasets/ryj88ckjww/2) é importado como corpus
+textual português/glossa (licença CC BY-SA 4.0) e fornece uma sugestão aproximada de frase após sinais dinâmicos
+reconhecidos; ele não contém vídeos nem treina o classificador visual. A sugestão pode estar errada e precisa ser revisada.
+Os arquivos selecionados e os resultados ficam no navegador, sem upload pelo TeachLi.
+
+O V-Librasil fornece sinais isolados e não frases contínuas, e o VLibrasBD traz pares de frases, não alinhamentos de vídeo
+por palavra. Portanto, essa integração experimental não traduz frases sinalizadas com fluência. Ainda é preciso separar
+gravações por sinalizador antes da validação e avaliar os rótulos e resultados com pessoas fluentes em Libras.
 
 ## 6. Texto, voz e VLibras
 
