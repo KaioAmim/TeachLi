@@ -165,10 +165,25 @@ Isso é avaliação de regressão, não estimativa independente de acerto em web
 Métricas, versões e limitações estão em [TREINAMENTO_ALFABETO.md](TREINAMENTO_ALFABETO.md).
 
 O classificador temporal usa sequências de 40 quadros e treino local Conv1D.
-Ainda não existe um modelo temporal base distribuído. A normalização atual
-centraliza cada mão em cada quadro e perde deslocamento global; também é preciso
-separar gravações antes de gerar variações para validação. Esses pontos devem ser
-corrigidos antes de uma campanha de coleta de movimentos.
+Cada mão combina 63 valores de pose normalizada com a posição do pulso no quadro,
+preservando parte da trajetória espacial. O formato temporal v2 e seus clipes são
+armazenados no IndexedDB; clipes pessoais antigos são migrados e modelos v1 seguem
+compatíveis. Ainda não há um modelo temporal base distribuído.
+
+Na tela de treino, vídeos locais do [V-Librasil](https://libras.cin.ufpe.br/)
+podem ser convertidos pelo MediaPipe em clipes temporais e adicionados ao treino.
+É possível fornecer um CSV de anotações com `video_name` e `class` quando os nomes
+dos vídeos não identificam o sinal. O [VLibrasBD](https://data.mendeley.com/datasets/ryj88ckjww/2)
+é importado como corpus textual português/glossa (licença CC BY-SA 4.0) e fornece uma sugestão aproximada
+de frase após sinais dinâmicos reconhecidos; ele não contém vídeos nem treina o
+classificador visual. A sugestão pode estar errada e precisa ser revisada.
+Os arquivos selecionados e os resultados ficam no navegador, sem upload pelo TeachLi.
+
+O V-Librasil fornece sinais isolados e não frases contínuas. O corpus VLibrasBD
+traz pares de frases, não alinhamentos de vídeo por palavra. Portanto, essa
+integração experimental não traduz frases sinalizadas com fluência. Ainda é preciso
+separar gravações por sinalizador antes da validação e avaliar os rótulos e resultados
+com pessoas fluentes em Libras.
 
 Fotos/amostras isoladas descrevem poses; movimentos precisam de clipes ordenados.
 A próxima etapa deve preservar trajetória e tempo, conferir os rótulos com pessoa
