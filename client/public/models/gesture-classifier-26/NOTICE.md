@@ -23,8 +23,9 @@ a estes arquivos, não declara uma licença global para o aplicativo TeachLi.
 
 ## Reprodução
 
-No checkout TeachLi, os scripts correspondem a `scripts/dataset/` e devem ser
-executados desse diretório lógico (eles localizam a raiz do projeto). A cópia
+Os scripts ficam em `source/`, junto do modelo (a pasta `scripts/dataset/` das
+versões anteriores foi removida do repositório; está no histórico do Git). Eles
+localizam a raiz do projeto a partir de `client/public/models/gesture-classifier-26/`. A cópia
 em `source/` permite consultar o código exato junto do modelo. Use Python 3.12
 e as dependências de `source/requirements.txt` em um ambiente isolado.
 
@@ -33,8 +34,8 @@ Dados de entrada: ZIP público LibraSign, landmarks em
 `client/public/models/gesture-classifier/`.
 
 ```sh
-OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 python scripts/dataset/experiment_alphabet.py --zip /caminho/librasign.zip --output /tmp/teachli-alphabet-26 --base-model client/public/models/gesture-classifier --initialize-from-base --learning-rate .00015 --legacy-weight 2 --focus-weight 2 --rotation-3d --additions FGHJKPQTXYZ
-node scripts/dataset/verify_tfjs.mjs /tmp/teachli-alphabet-26
+OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 python client/public/models/gesture-classifier-26/source/experiment_alphabet.py --zip /caminho/librasign.zip --output /tmp/teachli-alphabet-26 --base-model client/public/models/gesture-classifier --initialize-from-base --learning-rate .00015 --legacy-weight 2 --focus-weight 2 --rotation-3d --additions FGHJKPQTXYZ
+node client/public/models/gesture-classifier-26/source/verify_tfjs.mjs /tmp/teachli-alphabet-26
 ```
 
 ## Limites da avaliação

@@ -26,7 +26,7 @@ avaliação de alunos surdos e profissionais de Libras.
   das declarações locais e da configuração Vite, mantendo TypeScript estrito.
 - [x] Remover o backend e as integrações herdadas do template anterior (Manus).
 - [x] Manter TypeScript no comando completo de build, antes do Vite.
-- [ ] Regularizar separadamente telas antigas (`TrainGestures`) caso sejam reintegradas.
+- [x] Telas antigas sem rota (`TrainGestures`, `NotFound`) e componentes de UI sem uso foram removidos (histórico do Git).
 
 Os pacotes atuais são `client/` e `server/`; o `package.json` da raiz só expõe o
 atalho `npm run dev:classroom`.

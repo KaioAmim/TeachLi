@@ -1,5 +1,5 @@
 /** Verify exported probabilities using the same TF.js dependency as the app.
- * node scripts/dataset/verify_tfjs.mjs /path/to/experiment
+ * node client/public/models/gesture-classifier-26/source/verify_tfjs.mjs /path/to/experiment
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
