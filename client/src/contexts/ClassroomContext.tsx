@@ -10,12 +10,13 @@ export type SignalHandler = (from: string, data: Record<string, unknown>) => voi
 type Status = 'idle' | 'connecting' | 'connected' | 'disconnected';
 interface ClassroomState {
   room: Room | null; status: Status; error: string; professor: boolean; students: number;
-  messages: RoomMessage[]; lessonCaptions: RoomMessage[]; lessonEndedAt: number | null; sendStatus: string; selfId: string; peers: Peer[];
+  messages: RoomMessage[]; sentMessages: RoomMessage[]; lessonCaptions: RoomMessage[]; lessonEndedAt: number | null; sendStatus: string; selfId: string; peers: Peer[];
   autoSpeak: boolean; setAutoSpeak: (enabled: boolean) => void;
   sendSignal: (to: string, data: Record<string, unknown>) => boolean; onSignal: (handler: SignalHandler) => () => void;
   join: (room: Room) => Promise<void>; leave: () => void; send: (text: string) => boolean; endLesson: () => boolean;
 }
 const MAX_LESSON_CAPTIONS = 500;
+const MAX_SENT_MESSAGES = 200;
 const MAX_LESSON_CAPTION_CHARS = 40000;
 function keepLessonCaption(previous: RoomMessage[], message: RoomMessage) {
   const next = [...previous, message];
@@ -35,6 +36,8 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const [professor, setProfessor] = useState(false);
   const [students, setStudents] = useState(0);
   const [messages, setMessages] = useState<RoomMessage[]>([]);
+  // Falas que o próprio professor enviou: o servidor não as devolve ao remetente.
+  const [sentMessages, setSentMessages] = useState<RoomMessage[]>([]);
   const [lessonCaptions, setLessonCaptions] = useState<RoomMessage[]>([]);
   const [lessonEndedAt, setLessonEndedAt] = useState<number | null>(null);
   const [sendStatus, setSendStatus] = useState('');
@@ -49,7 +52,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const clearPending = () => { for (const timer of pending.current.values()) clearTimeout(timer); pending.current.clear(); };
   const leave = useCallback(() => {
     socket.current?.close(); socket.current = null; clearPending();
-    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setLessonCaptions([]); setLessonEndedAt(null); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false);
+    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSentMessages([]); setLessonCaptions([]); setLessonEndedAt(null); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false);
     window.speechSynthesis?.cancel();
   }, []);
   useEffect(() => {
@@ -132,6 +135,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     const id = crypto.randomUUID();
     socket.current.send(JSON.stringify({ type: role.current === 'aluno' ? 'student.message' : 'caption.final', id, text }));
     setSendStatus('Enviando…');
+    if (role.current === 'professor') setSentMessages(previous => [...previous, { id, text: text.trim(), author: 'Professor', role: 'professor' as const, createdAt: Date.now() }].slice(-MAX_SENT_MESSAGES));
     pending.current.set(id, setTimeout(() => { pending.current.delete(id); setSendStatus('Sem confirmação de envio. Confira com o destinatário antes de reenviar.'); }, 8000));
     return true;
   }, [status, lessonEndedAt]);
@@ -145,7 +149,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     socket.current.send(JSON.stringify({ type: 'signal', to, data })); return true;
   }, []);
   const onSignal = useCallback((handler: SignalHandler) => { signalHandlers.current.add(handler); return () => { signalHandlers.current.delete(handler); }; }, []);
-  return <Context.Provider value={{ room, status, error, professor, students, messages, lessonCaptions, lessonEndedAt, sendStatus, selfId, peers, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send, endLesson }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ room, status, error, professor, students, messages, sentMessages, lessonCaptions, lessonEndedAt, sendStatus, selfId, peers, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send, endLesson }}>{children}</Context.Provider>;
 }
 export function useClassroomConnection() {
   const context = useContext(Context);

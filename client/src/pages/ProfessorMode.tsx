@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Mic, MicOff, Languages, Trash2, ArrowUpRight, Check } from "lucide-react";
 import { toast } from "sonner";
 import { FinishLessonControl } from "@/components/LessonControls";
+import { LessonRecorder } from "@/components/LessonRecorder";
 
 /** Silêncio, em ms, que encerra um trecho de fala e dispara o envio do texto acumulado (1000–1500 ms). */
 const SILENCE_MS = 1200;
@@ -241,6 +242,8 @@ export default function ProfessorMode() {
 
           <ClassroomPanel compact embedded showAutoSpeak />
         </section>
+
+        <LessonRecorder />
 
         <section className="professor-history-section" role="region" aria-labelledby="history-title">
           <div className="professor-history-heading">
