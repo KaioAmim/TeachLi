@@ -45,9 +45,24 @@ async function createLandmarker(): Promise<HandLandmarker> {
   }
 }
 
+/** Uma detecção em imagem vazia compila os shaders antes do primeiro quadro real da câmera. */
+function warmUp(landmarker: HandLandmarker) {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    lastTimestamp = Math.max(lastTimestamp, performance.now());
+    landmarker.detectForVideo(canvas, lastTimestamp);
+  } catch {
+    // aquecimento é só otimização
+  }
+}
+
 function getLandmarker(): Promise<HandLandmarker> {
   if (!landmarkerPromise) {
-    landmarkerPromise = createLandmarker().catch(err => {
+    landmarkerPromise = createLandmarker().then(landmarker => {
+      warmUp(landmarker);
+      return landmarker;
+    }).catch(err => {
       landmarkerPromise = null; // permite nova tentativa numa próxima montagem
       throw err;
     });

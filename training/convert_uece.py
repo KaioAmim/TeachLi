@@ -1,6 +1,6 @@
 """Converte o dataset Libras-EQT-UECE (Hand Landmarks, .npy) em tensores de treino.
 
-Uso: python convert_uece.py <pasta "Libras-EQT-UECE (Hand Landmarks)"> <saida.npz>
+Uso: python convert_uece.py <pasta "Libras-EQT-UECE (Hand Landmarks)"> <saida.npz> [clipes_brutos.npz]
 
 Cada clipe vira SEQUENCE_LENGTH quadros com FEATURES_PER_FRAME valores:
   [0:126]   duas mãos, normalizadas como em client/src/lib/handFeatures.ts
@@ -55,8 +55,9 @@ def resample(frames, n=SEQUENCE_LENGTH):  # mesma interpolação linear de seque
     return frames[lo] * (1 - f) + frames[hi] * f
 
 
-def main(root, out):
+def main(root, out, raw_out=None):
     X, y, who, names, skipped = [], [], [], {}, 0
+    raw, raw_len = [], []
     for cls in sorted(Path(root).iterdir()):
         if not cls.is_dir():
             continue
@@ -69,13 +70,18 @@ def main(root, out):
                     skipped += 1
                     continue
                 X.append(resample(frames)); y.append(idx)
+                raw.append(frames[:, :HAND * 2]); raw_len.append(len(frames))
                 who.append(int(inf.name.split()[-1]))
     order = sorted(names)
     remap = {old: new for new, old in enumerate(order)}
     np.savez_compressed(out, X=np.asarray(X, np.float32), y=np.array([remap[v] for v in y]),
                         informant=np.array(who), labels=np.array([names[i] for i in order]))
+    if raw_out:  # clipes originais (comprimento variável), para simular fala contínua
+        np.savez_compressed(raw_out, frames=np.concatenate(raw), lengths=np.array(raw_len),
+                            y=np.array([remap[v] for v in y]), informant=np.array(who),
+                            labels=np.array([names[i] for i in order]))
     print(f"{len(X)} clipes, {len(order)} sinais, {skipped} ignorados -> {out}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)

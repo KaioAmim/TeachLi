@@ -142,7 +142,10 @@ são expectativas de evolução, não capacidades comprovadas da integração at
 - [x] Sem desenho de traços sobre as mãos.
 - [ ] Confirmar origem e licença do Libras-EQT-UECE antes de redistribuir o modelo.
 - [ ] Calibrar as expressões com sinalizantes (ex.: dataset UCI de expressões faciais gramaticais).
-- [ ] Classe "nenhum sinal" e avaliação em fala contínua para o modelo dinâmico base.
+- [x] Classe "nenhum sinal", janelas de vários tamanhos e buffer limpo nas pausas no modelo dinâmico base; em simulação de
+  fala contínua os falsos sinais caíram de ~75% para ~42% das emissões e os sinais reconhecidos subiram ~13 pontos.
+- [ ] Validar a interpretação com câmera real e sinalizantes diferentes (a simulação usa clipes concatenados) e reduzir os
+  ~45% de sinais ainda perdidos com informantes novos (mais pessoas no treino).
 - [ ] Ampliar vocabulário com MINDS-Libras e V-LIBRASIL (exigem extração de landmarks).
 - [x] Preservar modelos pessoais, editor de texto e confirmação antes do envio.
 - [x] Versionar artefatos, origem, licenças, scripts e resultados dos experimentos.
