@@ -10,7 +10,7 @@ export type SignalHandler = (from: string, data: Record<string, unknown>) => voi
 type Status = 'idle' | 'connecting' | 'connected' | 'disconnected';
 interface ClassroomState {
   room: Room | null; status: Status; error: string; professor: boolean; students: number;
-  messages: RoomMessage[]; sentMessages: RoomMessage[]; lessonCaptions: RoomMessage[]; lessonEndedAt: number | null; sendStatus: string; selfId: string; peers: Peer[];
+  messages: RoomMessage[]; sentMessages: RoomMessage[]; lessonCaptions: RoomMessage[]; lessonEndedAt: number | null; roomSessionToken: string | null; sendStatus: string; selfId: string; peers: Peer[];
   autoSpeak: boolean; setAutoSpeak: (enabled: boolean) => void;
   sendSignal: (to: string, data: Record<string, unknown>) => boolean; onSignal: (handler: SignalHandler) => () => void;
   join: (room: Room) => Promise<void>; leave: () => void; send: (text: string) => boolean; endLesson: () => boolean;
@@ -40,6 +40,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const [sentMessages, setSentMessages] = useState<RoomMessage[]>([]);
   const [lessonCaptions, setLessonCaptions] = useState<RoomMessage[]>([]);
   const [lessonEndedAt, setLessonEndedAt] = useState<number | null>(null);
+  const [roomSessionToken, setRoomSessionToken] = useState<string | null>(null);
   const [sendStatus, setSendStatus] = useState('');
   const [selfId, setSelfId] = useState('');
   const [peers, setPeers] = useState<Peer[]>([]);
@@ -52,7 +53,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const clearPending = () => { for (const timer of pending.current.values()) clearTimeout(timer); pending.current.clear(); };
   const leave = useCallback(() => {
     socket.current?.close(); socket.current = null; clearPending();
-    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSentMessages([]); setLessonCaptions([]); setLessonEndedAt(null); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false);
+    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSentMessages([]); setLessonCaptions([]); setLessonEndedAt(null); setRoomSessionToken(null); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false);
     window.speechSynthesis?.cancel();
   }, []);
   useEffect(() => {
@@ -77,7 +78,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const join = useCallback((selected: Room) => new Promise<void>((resolve, reject) => {
     const session = loadMicrosoftSession('aluno') || loadMicrosoftSession('professor');
     if (!session?.token) { reject(new Error('Escolha a sala novamente para continuar.')); return; }
-    leave(); setStatus('connecting'); role.current = session.role;
+    leave(); setStatus('connecting'); setRoomSessionToken(session.token ?? null); role.current = session.role;
     const url = new URL(CLASSROOM_WS_URL); url.searchParams.set('room', selected.id);
     const ws = new WebSocket(url, ['teachli-session', session.token]); socket.current = ws;
     let joined = false;
@@ -149,7 +150,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     socket.current.send(JSON.stringify({ type: 'signal', to, data })); return true;
   }, []);
   const onSignal = useCallback((handler: SignalHandler) => { signalHandlers.current.add(handler); return () => { signalHandlers.current.delete(handler); }; }, []);
-  return <Context.Provider value={{ room, status, error, professor, students, messages, sentMessages, lessonCaptions, lessonEndedAt, sendStatus, selfId, peers, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send, endLesson }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ room, status, error, professor, students, messages, sentMessages, lessonCaptions, lessonEndedAt, roomSessionToken, sendStatus, selfId, peers, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send, endLesson }}>{children}</Context.Provider>;
 }
 export function useClassroomConnection() {
   const context = useContext(Context);

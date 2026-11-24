@@ -6,6 +6,7 @@
   "main": "index.mjs",
   "scripts": {
     "start": "node index.mjs",
+    "setup:ollama": "node setup-ollama.mjs",
     "test": "node --test"
   },
   "dependencies": {

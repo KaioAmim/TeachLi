@@ -1,18 +1,19 @@
 import { useEffect, useState } from "react";
-import { BookOpenText, Check, CircleStop, FileText } from "lucide-react";
+import { BookOpenText, Check, CircleStop, FileText, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
 import { classroomRequest } from "@/lib/classroomApi";
-import { loadMicrosoftSession } from "@/lib/microsoftAuth";
 
 interface LessonSummary {
   topic: string;
+  topics: string[];
   summary: string;
   keyPoints: string[];
   examples: string[];
+  reviewQuestions: string[];
 }
 
 export function FinishLessonControl() {
@@ -56,7 +57,7 @@ export function FinishLessonControl() {
 }
 
 export function StudentLessonSummary() {
-  const { lessonCaptions, lessonEndedAt, room } = useClassroomConnection();
+  const { lessonEndedAt, room, roomSessionToken } = useClassroomConnection();
   const [showSummary, setShowSummary] = useState(false);
   const [summary, setSummary] = useState<LessonSummary | null>(null);
   const [summaryError, setSummaryError] = useState("");
@@ -70,9 +71,8 @@ export function StudentLessonSummary() {
   }, [room?.id, lessonEndedAt]);
 
   const generateSummary = async () => {
-    const session = loadMicrosoftSession("aluno");
-    if (!session?.token) {
-      setSummaryError("Sua sessão expirou. Entre novamente para gerar o resumo.");
+    if (!roomSessionToken || !room?.id || !lessonEndedAt) {
+      setSummaryError("Reconecte-se à sala finalizada para gerar o resumo.");
       setShowSummary(true);
       return;
     }
@@ -82,9 +82,9 @@ export function StudentLessonSummary() {
     try {
       const result = await classroomRequest(
         "/lessons/summary",
-        session.token,
-        { captions: lessonCaptions.map(caption => caption.text) },
-        35000,
+        roomSessionToken,
+        { roomId: room.id, endedAt: lessonEndedAt },
+        610000,
       );
       setSummary(result as LessonSummary);
     } catch (error) {
@@ -99,19 +99,24 @@ export function StudentLessonSummary() {
       <span className="lesson-summary-icon" aria-hidden="true"><BookOpenText size={20} /></span>
       <div>
         <h2 id="lesson-summary-title">Resumo da aula</h2>
-        <p>{lessonEndedAt ? "A aula foi finalizada. Gere uma síntese do conteúdo a partir das legendas desta sessão." : "O resumo fica disponível quando o professor finalizar a aula."}</p>
+        <p>{lessonEndedAt ? roomSessionToken ? "A aula foi finalizada. Gere uma síntese do conteúdo a partir das legendas desta sessão." : "Sua sessão expirou. Entre novamente para gerar o resumo." : "O resumo fica disponível quando o professor finalizar a aula."}</p>
       </div>
-      <Button type="button" onClick={generateSummary} disabled={!lessonEndedAt || summarizing}>
-        <FileText size={17} aria-hidden="true" /> {summarizing ? "Resumindo…" : summary ? "Gerar novamente" : "Resumir aula"}
+      <Button type="button" onClick={generateSummary} disabled={!lessonEndedAt || !roomSessionToken || summarizing || Boolean(summary)}>
+        {summarizing ? <Sparkles className="lesson-summary-ai-icon" size={17} aria-hidden="true" /> : <FileText size={17} aria-hidden="true" />}
+        {summarizing ? <><span className="lesson-summary-loading-text">Gerando resumo</span><LoadingDots /></> : summary ? "Resumo gerado" : "Resumir aula"}
       </Button>
     </div>
     {showSummary && <div className="lesson-summary-result" aria-live="polite">
-      {summarizing ? <p className="lesson-summary-empty" role="status">Organizando os conceitos e as ideias principais da aula…</p>
+      {summarizing ? <p className="lesson-summary-loading" role="status"><Sparkles className="lesson-summary-ai-icon" size={19} aria-hidden="true" /><span className="lesson-summary-loading-text">Gerando resumo</span><LoadingDots /></p>
         : summaryError ? <p className="lesson-summary-empty" role="status">{summaryError}</p>
           : summary ? <>
-            <p className="lesson-summary-note">Síntese gerada por IA com as legendas desta aula. Confira os pontos com o conteúdo apresentado pelo professor.</p>
+            <p className="lesson-summary-note">Material didático gerado pelo Ollama configurado a partir da transcrição. Confira os tópicos e pontos com o conteúdo apresentado pelo professor.</p>
             {summary.topic && <h3>{summary.topic}</h3>}
             {summary.summary && <p className="lesson-summary-overview">{summary.summary}</p>}
+            {summary.topics.length > 0 && <>
+              <h4>Tópicos identificados</h4>
+              <ul>{summary.topics.map((topic, index) => <li key={`${index}-${topic}`}>{topic}</li>)}</ul>
+            </>}
             {summary.keyPoints.length > 0 && <>
               <h4>Ideias principais</h4>
               <ul>{summary.keyPoints.map((point, index) => <li key={`${index}-${point}`}>{point}</li>)}</ul>
@@ -120,7 +125,15 @@ export function StudentLessonSummary() {
               <h4>Exemplos mencionados</h4>
               <ul>{summary.examples.map((example, index) => <li key={`${index}-${example}`}>{example}</li>)}</ul>
             </>}
+            {summary.reviewQuestions.length > 0 && <>
+              <h4>Para revisar</h4>
+              <ul>{summary.reviewQuestions.map((question, index) => <li key={`${index}-${question}`}>{question}</li>)}</ul>
+            </>}
           </> : null}
     </div>}
   </section>;
+}
+
+function LoadingDots() {
+  return <span className="lesson-summary-loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>;
 }
