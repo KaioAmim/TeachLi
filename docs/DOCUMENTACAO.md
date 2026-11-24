@@ -105,6 +105,8 @@ impede o login; logout encerra só a sessão do TeachLi.
 | `TEACHLI_CORS_ORIGIN` | Origens exatas autorizadas; padrão localhost/127.0.0.1:5173 |
 | `TEACHLI_ROOMS` | Catálogo opcional de salas com IDs estáveis |
 | `PORT` | Porta do servidor; padrão 8787 |
+| `OPENAI_API_KEY` | Segredo do servidor para gerar resumo sob solicitação do aluno |
+| `OPENAI_SUMMARY_MODEL` | Modelo da Responses API; padrão `gpt-6-luna` |
 
 Em publicação, sirva `client/dist/` por HTTPS com fallback para `index.html` e um processo
 Node com WSS; cadastre a origem na Microsoft e no servidor. `localhost` em outro
@@ -360,13 +362,13 @@ de vídeo, fila automática ou sincronização garantida; o texto original conti
 | Verificação | Assinatura RS256, emissor, audiência, tenant, validade e `oid` | `server/microsoft.mjs` |
 | Autorização | Papel por domínio do e-mail, conferido no servidor; aluno só envia `student.message`, professor só `caption.final` | `server/classrooms.mjs` |
 | Sessão | Token opaco (256 bits), em memória, até 1 h, revogado no logout | `server/classrooms.mjs` |
-| Abuso | 30 logins/min por IP, 60 mensagens/10 s por conexão, 20 conexões por IP, 10.000 sessões, corpo ≤ 32 KB, mensagem ≤ 2.000 caracteres | `server/classrooms.mjs` |
+| Abuso | 30 logins/min por IP, 60 mensagens/10 s por conexão, 20 conexões por IP, 10.000 sessões, corpo comum ≤ 32 KB; resumo ≤ 180 KB e 5 gerações/10 min por aluno | `server/classrooms.mjs` |
 | Origem/CORS | Lista exata (`TEACHLI_CORS_ORIGIN`), também no WebSocket | `server/classrooms.mjs` |
 | Cabeçalhos | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, CSP, HSTS, `no-store` | `server/classrooms.mjs` |
 | CSP do site | Injetada no build, limitando scripts, conexões e frames; inclui `storage.googleapis.com` (modelos de mão e rosto) e `vlibras.gov.br` | `client/vite.config.ts` |
 | Auditoria | Eventos JSON sem token, e-mail ou nome (usuário = hash curto) | `server/classrooms.mjs` |
 | Chamada | Sinalização só entre aluno e professor da mesma sala, payload ≤ 12 KB, 300 sinais/10 s; mídia ponto a ponto | `server/classrooms.mjs`, `useRoomCall.ts` |
-| Segredos | Nenhum no frontend; `client/.env.local` fora do Git; só Client ID e Tenant ID públicos | `.gitignore` |
+| Segredos | Chave OpenAI apenas no servidor; `client/.env.local` fora do Git; Client ID e Tenant ID são públicos | `.gitignore` |
 
 HTTPS/WSS, firewall, backups e monitoramento dependem da hospedagem.
 
@@ -376,18 +378,21 @@ HTTPS/WSS, firewall, backups e monitoramento dependem da hospedagem.
 | --- | --- | --- | --- | --- |
 | Nome, e-mail, ID Microsoft (`tid`/`oid`) | `sessionStorage` e memória do servidor | Identificar e autorizar | Até 1 h / logout | Microsoft |
 | Mensagens e legendas | Memória do servidor, só durante o envio | Comunicação em sala | Não persistidas | Participantes da sala |
+| Legendas enviadas para resumir | Memória do navegador; enviadas ao servidor e à OpenAI somente quando o aluno solicita o resumo | Síntese de conteúdo da aula | Não persistidas pelo TeachLi; retenção do fornecedor depende da conta/API **[revisão institucional]** | OpenAI API |
 | Áudio do professor | Reconhecimento de fala do navegador | Legendas | Não gravado pelo TeachLi; o navegador pode usar serviço próprio **[revisão jurídica]** | Fornecedor do navegador |
 | Imagem da câmera, pontos das mãos e do rosto (expressões) | Processados no navegador; amostras de treino em `localStorage`/IndexedDB | Reconhecer gestos e expressões | Até o aluno clicar em **Limpar** ou limpar o navegador | Não enviados ao servidor |
 | Vídeo e áudio da chamada | Em trânsito, ponto a ponto (WebRTC), só após **Entrar na chamada** | Comunicação em aula | Nenhuma além da chamada | Aluno/professor da sala; STUN do Google vê o IP; TURN, se houver **[revisão jurídica]** |
 | Eventos de auditoria | Saída padrão do processo | Segurança | A definir (sugestão: 90 dias) | Operador de infraestrutura |
 
 Os modelos de mão e de rosto são baixados de `storage.googleapis.com`; nenhuma imagem é enviada a esse serviço.
-Não há banco de dados nem upload de arquivos.
+Não há banco de dados nem upload de arquivos. As legendas só são compartilhadas com a OpenAI API após o aluno
+acionar **Resumir aula**; o segredo da API fica no servidor e `store: false` é solicitado.
 
 ### 7.3 Bases legais (proposta) **[revisão jurídica]**
 
 - **Login e autorização:** execução de contrato/procedimentos preliminares ou vínculo docente (art. 7º, V) ou legítimo interesse de segurança (art. 7º, IX).
 - **Mensagens e legendas:** execução do serviço educacional e acessibilidade (art. 7º, V); sem armazenamento, risco baixo.
+- **Resumo de aula com IA:** avaliar e documentar a base legal e o compartilhamento das legendas com o fornecedor da API, incluindo retenção, transferência internacional e contrato antes de habilitar a chave em produção.
 - **Pontos das mãos, do rosto e imagem:** podem configurar característica física; se biométricos, são **sensíveis** (art. 5º, II; art. 11). O treino e o reconhecimento são locais; a chamada transmite a imagem do aluno ao professor. Decidir com o encarregado se há tratamento pela instituição e qual hipótese do art. 11 se aplica (ex.: consentimento específico e destacado). Alternativa menos invasiva: manter 100% local e opcional (já é assim; as expressões podem ser desligadas).
 - **Auditoria:** legítimo interesse de segurança (art. 7º, IX).
 

@@ -32,6 +32,8 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
 | --- | --- |
 | `MICROSOFT_TENANT_ID` | **Obrigatório** (ou `VITE_MICROSOFT_TENANT_ID` em `client/.env*`): GUID do tenant da instituição |
 | `MICROSOFT_CLIENT_ID` | Sobrescreve o Client ID público lido de `client/.env*` |
+| `OPENAI_API_KEY` | Chave privada usada pelo servidor para gerar o resumo de aula; necessária para essa função |
+| `OPENAI_SUMMARY_MODEL` | Modelo da Responses API; padrão `gpt-6-luna` |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
 | `TEACHLI_TRUST_PROXY` | `1` apenas atrás de proxy que sobrescreve `X-Forwarded-For` (limites por IP real) |
 | `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |
@@ -74,11 +76,14 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | --- | --- |
 | `POST /auth/microsoft/session` | Verifica ID token já obtido no login e emite sessão de comunicação |
 | `GET /classrooms` | Lista as cinco salas, com Bearer da sessão TeachLi |
+| `POST /lessons/summary` | Gera uma síntese com IA das legendas da aula finalizada (apenas aluno autenticado) |
 | `POST /auth/logout` | Encerra sessão de comunicação; idempotente |
 | `WS /classroom?room=ID` | Subprotocolos `teachli-session` e token opaco; sem credencial na URL |
 | `joined`, `presence` | Sala confirmada e participantes conectados |
 | `student.message` | Texto confirmado do aluno → professor da mesma sala |
 | `caption.final` | Frase final do professor → alunos da mesma sala |
+| `lesson.end` | Professor encerra o conteúdo da sala |
+| `lesson.ended` | Notifica participantes; novas mensagens e legendas são recusadas |
 | `message.ack`, `message.rejected` | Encaminhamento à conexão ou recusa; não comprova leitura |
 
 Há um professor por sala e uma conexão por sessão. Trocar sala remove a associação
@@ -92,6 +97,14 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
 
 - Estado em memória, uma instância: sem banco, gravação, histórico persistente ou
   sincronização entre servidores. O cliente mostra até 100 mensagens recebidas.
+- Ao finalizar a aula, a sala fica encerrada em memória até todos saírem. As legendas
+  ficam no navegador do aluno durante a sessão (até 500 falas ou 40.000 caracteres) e
+  são apagadas ao sair ou trocar de sala. Quando o aluno pede o resumo, o servidor envia
+  essas legendas à OpenAI Responses API; o serviço devolve assunto central, síntese,
+  ideias principais e exemplos. O conteúdo não é salvo pelo TeachLi; `store: false` é
+  enviado à API. A política de retenção do provedor depende da conta/API e deve ser
+  revisada pela instituição antes de uso com dados de estudantes. Há limite de cinco
+  gerações por aluno a cada dez minutos.
 - Reconexão explícita; atualizar a página exige escolher a sala novamente.
 - Qualquer conta aceita pelo perfil pode escolher qualquer sala cadastrada;
   não há matrícula por turma ou disciplina.
