@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Mic, MicOff, Languages, Trash2, ArrowUpRight } from "lucide-react";
 import { toast } from "sonner";
 import { FinishLessonControl } from "@/components/LessonControls";
+import { LessonRecorder } from "@/components/LessonRecorder";
 
 export default function ProfessorMode() {
   const classroom = useClassroomConnection();
@@ -168,6 +169,8 @@ export default function ProfessorMode() {
 
           <ClassroomPanel compact embedded showAutoSpeak />
         </section>
+
+        <LessonRecorder />
 
         <section className="professor-history-section" role="region" aria-labelledby="history-title">
           <div className="professor-history-heading">
