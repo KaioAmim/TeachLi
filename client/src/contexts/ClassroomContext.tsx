@@ -87,8 +87,20 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
         clearTimeout(timeout); joined = true; setRoom(data.room); setSelfId(typeof data.selfId === 'string' ? data.selfId : ''); setStatus('connected'); resolve();
       } else if (data.type === 'presence') { setProfessor(data.professor); setStudents(data.students); setPeers(Array.isArray(data.peers) ? data.peers : []); }
       else if (data.type === 'signal') { for (const handler of signalHandlers.current) handler(data.from, data.data); }
+      else if (data.type === 'caption.history' && Array.isArray(data.captions)) {
+        const captions = data.captions.filter((caption: unknown): caption is RoomMessage =>
+          !!caption && typeof caption === 'object' &&
+          typeof (caption as RoomMessage).id === 'string' &&
+          typeof (caption as RoomMessage).text === 'string' &&
+          typeof (caption as RoomMessage).author === 'string' &&
+          (caption as RoomMessage).role === 'professor' &&
+          typeof (caption as RoomMessage).createdAt === 'number',
+        );
+        setMessages(captions.slice(-500));
+        setLessonCaptions(captions);
+      }
       else if (data.type === 'student.message' || data.type === 'caption.final') {
-        setMessages(previous => [...previous, data].slice(-100));
+        setMessages(previous => [...previous, data].slice(-500));
         if (data.type === 'caption.final' && data.role === 'professor' && typeof data.text === 'string') {
           setLessonCaptions(previous => keepLessonCaption(previous, data));
         }
@@ -98,7 +110,9 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
         setSendStatus(typeof data.message === 'string' ? data.message : 'A aula foi finalizada.');
       } else if (data.type === 'message.ack' || data.type === 'message.rejected') {
         clearTimeout(pending.current.get(data.id)); pending.current.delete(data.id);
-        setSendStatus(data.type === 'message.ack' ? `Encaminhada a ${data.recipients} conexão(ões) na sala.` : data.message);
+        setSendStatus(data.type === 'message.ack'
+          ? data.archived && data.recipients === 0 ? 'Legenda salva; alunos que entrarem depois poderão vê-la.' : `Encaminhada a ${data.recipients} conexão(ões) na sala.`
+          : data.message);
       } else if (data.type === 'error') { failure = data.message; setError(failure); }
     };
     ws.onerror = () => { failure ||= 'Não foi possível conectar ao servidor. Confira a conexão e tente novamente.'; };
