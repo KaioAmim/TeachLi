@@ -81,9 +81,9 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | `WS /classroom?room=ID` | Subprotocolos `teachli-session` e token opaco; sem credencial na URL |
 | `joined`, `presence` | Sala confirmada e participantes conectados |
 | `student.message` | Texto confirmado do aluno → professor da mesma sala |
-| `caption.final` | Frase final do professor → alunos da mesma sala |
 | `lesson.end` | Professor encerra o conteúdo da sala |
 | `lesson.ended` | Notifica participantes; novas mensagens e legendas são recusadas |
+| `caption.final` | Frase final do professor → alunos da mesma sala e histórico temporário para alunos que entrarem depois |
 | `message.ack`, `message.rejected` | Encaminhamento à conexão ou recusa; não comprova leitura |
 
 Há um professor por sala e uma conexão por sessão. Trocar sala remove a associação
@@ -96,7 +96,10 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
 ## Limites e verificação
 
 - Estado em memória, uma instância: sem banco, gravação, histórico persistente ou
-  sincronização entre servidores. O cliente mostra até 100 mensagens recebidas.
+  sincronização entre servidores. O cliente mantém até 500 mensagens recebidas na sessão.
+- As últimas 500 legendas do professor (até 40.000 caracteres) ficam em memória na sala;
+  alunos que entrarem depois recebem esse histórico. As legendas são apagadas quando
+  todos saem da sala ou quando o servidor reinicia.
 - Ao finalizar a aula, a sala fica encerrada em memória até todos saírem. As legendas
   ficam no navegador do aluno durante a sessão (até 500 falas ou 40.000 caracteres) e
   são apagadas ao sair ou trocar de sala. Quando o aluno pede o resumo, o servidor envia

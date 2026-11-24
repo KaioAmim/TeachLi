@@ -3,10 +3,16 @@ import { useClassroomConnection } from "@/contexts/ClassroomContext";
 import { RoomStatus, WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Languages, Trash2, ArrowUpRight } from "lucide-react";
+import { Mic, MicOff, Languages, Trash2, ArrowUpRight, Check } from "lucide-react";
 import { toast } from "sonner";
 import { FinishLessonControl } from "@/components/LessonControls";
 import { LessonRecorder } from "@/components/LessonRecorder";
+
+/** Silêncio, em ms, que encerra um trecho de fala e dispara o envio do texto acumulado (1000–1500 ms). */
+const SILENCE_MS = 1200;
+
+const normalizeSpeech = (text: string) =>
+  text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 
 export default function ProfessorMode() {
   const classroom = useClassroomConnection();
@@ -16,6 +22,50 @@ export default function ProfessorMode() {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [currentSentence, setCurrentSentence] = useState("");
+  const [sentNotice, setSentNotice] = useState(false);
+
+  // Texto ainda não entregue: trechos finais + o parcial atual. Só é limpo quando o envio é aceito.
+  const pendingFinalRef = useRef("");
+  const interimRef = useRef("");
+  const lastSentRef = useRef("");
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSilenceTimer = () => {
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+  };
+
+  /** Envia o texto acumulado, sem duplicar nem enviar vazio. Em falha mantém o buffer para a próxima tentativa. */
+  const flushPending = () => {
+    clearSilenceTimer();
+    const text = `${pendingFinalRef.current} ${interimRef.current}`.replace(/\s+/g, " ").trim();
+    if (!text) return;
+    const key = normalizeSpeech(text);
+    // O reconhecedor pode finalizar depois um trecho que o timer de silêncio já enviou.
+    if (!key || key === lastSentRef.current) {
+      pendingFinalRef.current = "";
+      interimRef.current = "";
+      return;
+    }
+    if (!sendRef.current(text)) return;
+    lastSentRef.current = key;
+    pendingFinalRef.current = "";
+    interimRef.current = "";
+    setTranscript(prev => `${prev}${text} `);
+    setCurrentSentence(text);
+    setSentNotice(true);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => setSentNotice(false), 2000);
+  };
+  const flushRef = useRef(flushPending);
+  flushRef.current = flushPending;
+
+  const resetBuffer = () => {
+    clearSilenceTimer();
+    pendingFinalRef.current = "";
+    interimRef.current = "";
+    lastSentRef.current = "";
+  };
 
   const recognitionRef = useRef<any>(null);
 
@@ -49,11 +99,15 @@ export default function ProfessorMode() {
       }
 
       if (finalTranscript) {
-        setTranscript(prev => prev + finalTranscript);
-        sendRef.current(finalTranscript.trim());
-        setCurrentSentence(finalTranscript.trim());
+        pendingFinalRef.current = `${pendingFinalRef.current} ${finalTranscript}`.trim();
+        interimRef.current = interimTranscript;
+        flushRef.current();
       } else {
+        interimRef.current = interimTranscript;
         setCurrentSentence(interimTranscript);
+        // Cada novo resultado reinicia o timer: ao parar de falar, o que estiver pendente é enviado.
+        clearSilenceTimer();
+        silenceTimerRef.current = setTimeout(() => flushRef.current(), SILENCE_MS);
       }
     };
 
@@ -73,6 +127,8 @@ export default function ProfessorMode() {
     };
 
     recognition.onend = () => {
+      // O reconhecedor pode parar sozinho: entrega o que ficou pendente antes de reiniciar.
+      flushRef.current();
       if (recordingRef.current) {
         try { recognition.start(); } catch { recordingRef.current = false; setIsRecording(false); }
       }
@@ -81,6 +137,8 @@ export default function ProfessorMode() {
     recognitionRef.current = recognition;
 
     return () => {
+      clearSilenceTimer();
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
       if (recognitionRef.current) {
         recordingRef.current = false;
         recognitionRef.current.onend = null;
@@ -92,14 +150,27 @@ export default function ProfessorMode() {
   }, []);
 
   useEffect(() => {
-    if (classroom.status !== "connected") { recordingRef.current = false; recognitionRef.current?.stop(); setIsRecording(false); }
+    if (classroom.status !== "connected") {
+      recordingRef.current = false;
+      recognitionRef.current?.stop(); // onend entrega o pendente se a conexão ainda aceitar
+      setIsRecording(false);
+    }
   }, [classroom.status]);
+
+  // Trocar de sala descarta o buffer: texto de uma sala não pode vazar para outra.
+  const roomId = classroom.room?.id;
+  useEffect(() => {
+    resetBuffer();
+    setCurrentSentence("");
+    return () => resetBuffer();
+  }, [roomId]);
 
   useEffect(() => {
     if (classroom.lessonEndedAt && recordingRef.current) {
       recordingRef.current = false;
       recognitionRef.current?.stop();
       setIsRecording(false);
+      resetBuffer(); // aula encerrada: nada mais pode ser enviado
       setCurrentSentence("");
     }
   }, [classroom.lessonEndedAt]);
@@ -108,6 +179,7 @@ export default function ProfessorMode() {
     if (classroom.lessonEndedAt) return;
     if (recognitionRef.current) {
       setTranscript("");
+      resetBuffer();
       recordingRef.current = true;
       try {
         recognitionRef.current.start();
@@ -124,6 +196,7 @@ export default function ProfessorMode() {
   const stopRecording = () => {
     if (recognitionRef.current) {
       recordingRef.current = false;
+      flushPending(); // envia o que estiver pendente antes de parar
       recognitionRef.current.stop();
       setIsRecording(false);
       toast.info('Gravação parada');
@@ -147,7 +220,7 @@ export default function ProfessorMode() {
           <div className="professor-broadcast-main">
             <div className="professor-speaking-heading">
               <div><p className="professor-section-label">Transcrição da aula</p><h2 id="speech-title">Fala do professor</h2></div>
-              <span className="professor-recording-status" data-recording={isRecording} role="status"><i aria-hidden="true" />{isRecording ? "Ouvindo" : "Microfone desligado"}</span>
+              <span className="professor-recording-status" data-recording={isRecording} role="status"><i aria-hidden="true" />{sentNotice ? <><Check size={14} aria-hidden="true" /> Enviado</> : isRecording ? "Ouvindo" : "Microfone desligado"}</span>
             </div>
             <div className="professor-live-text" data-empty={!currentSentence} aria-label="Fala atual" aria-live="polite" aria-atomic="true">
               {currentSentence ? <p>{currentSentence}</p> : (
@@ -163,7 +236,7 @@ export default function ProfessorMode() {
                 {isRecording ? <MicOff size={18} aria-hidden="true" /> : <Mic size={18} aria-hidden="true" />}
                 {isRecording ? "Parar microfone" : "Ativar microfone"}
               </Button>
-              <p>{classroom.lessonEndedAt ? "A aula foi finalizada. O conteúdo não pode mais ser enviado." : isRecording ? "As frases reconhecidas estão sendo enviadas para a sala." : "As frases finalizadas serão compartilhadas em tempo real."}</p>
+              <p>{classroom.lessonEndedAt ? "A aula foi finalizada. O conteúdo não pode mais ser enviado." : isRecording ? "Quando você para de falar, o texto é enviado automaticamente à sala." : "As frases finalizadas serão compartilhadas em tempo real."}</p>
             </div>
           </div>
 

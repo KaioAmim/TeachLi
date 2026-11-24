@@ -377,7 +377,7 @@ HTTPS/WSS, firewall, backups e monitoramento dependem da hospedagem.
 | Dado | Onde fica | Finalidade | Retenção | Compartilhamento |
 | --- | --- | --- | --- | --- |
 | Nome, e-mail, ID Microsoft (`tid`/`oid`) | `sessionStorage` e memória do servidor | Identificar e autorizar | Até 1 h / logout | Microsoft |
-| Mensagens e legendas | Memória do servidor, só durante o envio | Comunicação em sala | Não persistidas | Participantes da sala |
+| Mensagens e legendas | Memória do servidor; até 500 legendas recentes ficam temporariamente na sala para alunos que chegam depois | Comunicação em sala | Apagadas quando todos saem da sala ou quando o servidor reinicia | Participantes da sala |
 | Legendas enviadas para resumir | Memória do navegador; enviadas ao servidor e à OpenAI somente quando o aluno solicita o resumo | Síntese de conteúdo da aula | Não persistidas pelo TeachLi; retenção do fornecedor depende da conta/API **[revisão institucional]** | OpenAI API |
 | Áudio do professor | Reconhecimento de fala do navegador | Legendas | Não gravado pelo TeachLi; o navegador pode usar serviço próprio **[revisão jurídica]** | Fornecedor do navegador |
 | Imagem da câmera, pontos das mãos e do rosto (expressões) | Processados no navegador; amostras de treino em `localStorage`/IndexedDB | Reconhecer gestos e expressões | Até o aluno clicar em **Limpar** ou limpar o navegador | Não enviados ao servidor |
