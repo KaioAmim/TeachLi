@@ -79,6 +79,8 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | `joined`, `presence` | Sala confirmada e participantes conectados |
 | `student.message` | Texto confirmado do aluno → professor da mesma sala |
 | `caption.final` | Frase final do professor → alunos da mesma sala |
+| `lesson.end` | Professor encerra o conteúdo da sala |
+| `lesson.ended` | Notifica participantes; novas mensagens e legendas são recusadas |
 | `message.ack`, `message.rejected` | Encaminhamento à conexão ou recusa; não comprova leitura |
 
 Há um professor por sala e uma conexão por sessão. Trocar sala remove a associação
@@ -92,6 +94,10 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
 
 - Estado em memória, uma instância: sem banco, gravação, histórico persistente ou
   sincronização entre servidores. O cliente mostra até 100 mensagens recebidas.
+- Ao finalizar a aula, a sala fica encerrada em memória até todos saírem. A transcrição
+  usada pelo resumo fica apenas no navegador do aluno durante a sessão (até 500 falas
+  ou 40.000 caracteres) e é apagada ao sair ou trocar de sala. O resumo seleciona trechos
+  das legendas disponíveis; não usa IA externa nem acrescenta informações ao conteúdo.
 - Reconexão explícita; atualizar a página exige escolher a sala novamente.
 - Qualquer conta aceita pelo perfil pode escolher qualquer sala cadastrada;
   não há matrícula por turma ou disciplina.

@@ -25,6 +25,7 @@ import type { HandDetectionResult } from "@/lib/librasGestureDatabase";
 import type { FaceObservation } from "@/lib/facialExpression";
 import { translateWithVLibras } from "@/components/VLibrasWidget";
 import { getGlossPhraseSuggestion, loadVLibrasBD, type LibrasCorpusEntry } from "@/lib/librasDatasetImporter";
+import { StudentLessonSummary } from "@/components/LessonControls";
 
 interface RecognitionResult {
   gesture: string;
@@ -562,7 +563,7 @@ export default function StudentMode() {
     if (classroom.send(recognizedText.trim())) clearDraft();
   };
 
-  const autoSendActive = autoSend && isCapturing && !paused;
+  const autoSendActive = autoSend && isCapturing && !paused && !classroom.lessonEndedAt;
 
   // Envio automático: separa palavras após uma pausa curta e envia a mensagem
   // ao professor após uma pausa maior, sem exigir nenhum clique durante o sinal.
@@ -595,7 +596,7 @@ export default function StudentMode() {
   }, [autoSendActive]);
 
   const handleMessageKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey && recognizedText.trim() && classroom.status === 'connected' && classroom.professor) {
+    if (event.key === 'Enter' && !event.shiftKey && recognizedText.trim() && classroom.status === 'connected' && classroom.professor && !classroom.lessonEndedAt) {
       event.preventDefault();
       sendMessage();
     }
@@ -613,6 +614,7 @@ export default function StudentMode() {
       </WorkspaceHeading>
 
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
+        <StudentLessonSummary />
         <div className="student-studio">
           <section className="student-camera-workspace" aria-labelledby="camera-title">
             <div className="student-section-heading">
@@ -761,6 +763,7 @@ export default function StudentMode() {
             <Textarea
               id="gesture-message"
               value={recognizedText}
+              disabled={!!classroom.lessonEndedAt}
               onChange={e => setRecognizedText(e.target.value)}
               maxLength={2000}
               onKeyDown={handleMessageKeyDown}
@@ -774,7 +777,7 @@ export default function StudentMode() {
             </div>
             <div className="student-actions student-phrase-actions">
               {!autoSendActive && (
-                <Button onClick={sendMessage} disabled={!recognizedText.trim() || classroom.status !== "connected" || !classroom.professor}>Enviar ao professor</Button>
+                <Button onClick={sendMessage} disabled={!recognizedText.trim() || classroom.status !== "connected" || !classroom.professor || !!classroom.lessonEndedAt}>Enviar ao professor</Button>
               )}
               <Button variant="outline" onClick={() => setPaused(value => !value)} aria-pressed={paused}>
                 {paused ? <Play size={17} aria-hidden="true" /> : <Pause size={17} aria-hidden="true" />} {paused ? "Retomar composição" : "Pausar composição"}
@@ -785,8 +788,8 @@ export default function StudentMode() {
               <Button variant="ghost" onClick={clearDraft} disabled={!recognizedText && !spokenTypedText}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
             </div>
             <label className="student-auto-send">
-              <input type="checkbox" checked={autoSend} onChange={e => setAutoSend(e.target.checked)} />
-              <span>Envio automático ao professor após uma pausa nos gestos</span>
+              <input type="checkbox" checked={autoSend} onChange={e => setAutoSend(e.target.checked)} disabled={!!classroom.lessonEndedAt} />
+              <span>{classroom.lessonEndedAt ? "A aula foi finalizada; o envio está encerrado." : "Envio automático ao professor após uma pausa nos gestos"}</span>
             </label>
             <p id="gesture-message-session" className="student-session-note">O rascunho fica nesta tela até você sair da sala.</p>
 

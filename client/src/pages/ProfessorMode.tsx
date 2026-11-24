@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, MicOff, Languages, Trash2, ArrowUpRight } from "lucide-react";
 import { toast } from "sonner";
+import { FinishLessonControl } from "@/components/LessonControls";
 
 export default function ProfessorMode() {
   const classroom = useClassroomConnection();
@@ -93,7 +94,17 @@ export default function ProfessorMode() {
     if (classroom.status !== "connected") { recordingRef.current = false; recognitionRef.current?.stop(); setIsRecording(false); }
   }, [classroom.status]);
 
+  useEffect(() => {
+    if (classroom.lessonEndedAt && recordingRef.current) {
+      recordingRef.current = false;
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      setCurrentSentence("");
+    }
+  }, [classroom.lessonEndedAt]);
+
   const startRecording = () => {
+    if (classroom.lessonEndedAt) return;
     if (recognitionRef.current) {
       setTranscript("");
       recordingRef.current = true;
@@ -127,7 +138,7 @@ export default function ProfessorMode() {
   return (
     <div className="workspace-page professor-workspace">
       <WorkspaceHeading title="Sua fala em texto" description="Acompanhe as legendas ao vivo e compartilhe com quem está na sala.">
-        <RoomStatus />
+        <div className="lesson-heading-actions"><RoomStatus /><FinishLessonControl /></div>
       </WorkspaceHeading>
 
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
@@ -147,11 +158,11 @@ export default function ProfessorMode() {
               )}
             </div>
             <div className="professor-recording-toolbar">
-              <Button disabled={classroom.status !== "connected"} variant={isRecording ? "destructive" : "default"} onClick={isRecording ? stopRecording : startRecording}>
+              <Button disabled={classroom.status !== "connected" || !!classroom.lessonEndedAt} variant={isRecording ? "destructive" : "default"} onClick={isRecording ? stopRecording : startRecording}>
                 {isRecording ? <MicOff size={18} aria-hidden="true" /> : <Mic size={18} aria-hidden="true" />}
                 {isRecording ? "Parar microfone" : "Ativar microfone"}
               </Button>
-              <p>{isRecording ? "As frases reconhecidas estão sendo enviadas para a sala." : "As frases finalizadas serão compartilhadas em tempo real."}</p>
+              <p>{classroom.lessonEndedAt ? "A aula foi finalizada. O conteúdo não pode mais ser enviado." : isRecording ? "As frases reconhecidas estão sendo enviadas para a sala." : "As frases finalizadas serão compartilhadas em tempo real."}</p>
             </div>
           </div>
 

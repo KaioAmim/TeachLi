@@ -25,7 +25,7 @@ const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
 export function createClassroomServer({ env = process.env, verifyIdentity = createMicrosoftVerifier(env), now = Date.now, audit = event => console.log(JSON.stringify(event)) } = {}) {
   const catalog = env.TEACHLI_ROOMS ? JSON.parse(env.TEACHLI_ROOMS) : DEFAULT_ROOMS;
   if (!Array.isArray(catalog) || !catalog.length || catalog.length > 100 || catalog.some(r => !/^[a-z0-9-]{1,60}$/.test(r.id) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100) || new Set(catalog.map(r => r.id)).size !== catalog.length) throw new Error('TEACHLI_ROOMS inválido.');
-  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set() }]));
+  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set(), lessonEndedAt: null }]));
   const origins = (env.TEACHLI_CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   const sessions = new Map();
   const attempts = new Map();
@@ -61,7 +61,11 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     // Cada conexão só conhece os IDs do perfil oposto (aluno↔professor); alunos não veem IDs de outros alunos.
     for (const c of clients) send(c.ws, { ...event, peers: clients.filter(o => o !== c && o.session.role !== c.session.role).map(o => ({ id: o.id, role: o.session.role })) });
   };
-  const remove = client => { if (client.room.clients.delete(client)) presence(client.room); };
+  const remove = client => {
+    if (!client.room.clients.delete(client)) return;
+    if (client.room.clients.size === 0) client.room.lessonEndedAt = null;
+    presence(client.room);
+  };
   const revoke = token => {
     sessions.delete(token);
     for (const room of rooms.values()) for (const c of [...room.clients]) if (c.token === token) { remove(c); c.ws.close(1008, 'Sessão encerrada'); }
@@ -133,6 +137,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     log('room.join', { user: who(session.id), role: session.role, room: room.id });
     send(ws, { type: 'joined', room: { id: room.id, name: room.name }, role: session.role, selfId: client.id });
     presence(room);
+    if (room.lessonEndedAt) send(ws, { type: 'lesson.ended', endedAt: room.lessonEndedAt });
     ws.on('message', raw => {
       if (!validSession(token) || !room.clients.has(client)) { remove(client); return reject('Sua sessão expirou. Entre novamente.'); }
       let signal;
@@ -150,6 +155,19 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
       }
       if (now() >= client.until) { client.count = 0; client.until = now() + 10000; }
       if (++client.count > 60) return send(ws, { type: 'error', message: 'Envios muito rápidos. Aguarde alguns segundos.' });
+      if (signal?.type === 'lesson.end') {
+        if (session.role !== 'professor') return send(ws, { type: 'error', message: 'Somente o professor pode finalizar a aula.' });
+        if (!room.lessonEndedAt) {
+          room.lessonEndedAt = now();
+          log('lesson.end', { user: who(session.id), room: room.id });
+        }
+        const event = { type: 'lesson.ended', endedAt: room.lessonEndedAt };
+        for (const participant of room.clients) send(participant.ws, event);
+        return;
+      }
+      if (room.lessonEndedAt && ['student.message', 'caption.final'].includes(signal?.type)) {
+        return send(ws, { type: 'lesson.closed', message: 'A aula foi finalizada. Não é possível enviar novas mensagens nesta aula.' });
+      }
       const message = signal;
       if (!message || !['student.message', 'caption.final'].includes(message.type) ||
           (message.type === 'student.message') !== (session.role === 'aluno') ||
