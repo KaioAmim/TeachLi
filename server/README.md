@@ -78,7 +78,7 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | `WS /classroom?room=ID` | Subprotocolos `teachli-session` e token opaco; sem credencial na URL |
 | `joined`, `presence` | Sala confirmada e participantes conectados |
 | `student.message` | Texto confirmado do aluno → professor da mesma sala |
-| `caption.final` | Frase final do professor → alunos da mesma sala |
+| `caption.final` | Frase final do professor → alunos da mesma sala e histórico temporário para alunos que entrarem depois |
 | `message.ack`, `message.rejected` | Encaminhamento à conexão ou recusa; não comprova leitura |
 
 Há um professor por sala e uma conexão por sessão. Trocar sala remove a associação
@@ -91,7 +91,10 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
 ## Limites e verificação
 
 - Estado em memória, uma instância: sem banco, gravação, histórico persistente ou
-  sincronização entre servidores. O cliente mostra até 100 mensagens recebidas.
+  sincronização entre servidores. O cliente mantém até 500 mensagens recebidas na sessão.
+- As últimas 500 legendas do professor (até 40.000 caracteres) ficam em memória na sala;
+  alunos que entrarem depois recebem esse histórico. As legendas são apagadas quando
+  todos saem da sala ou quando o servidor reinicia.
 - Reconexão explícita; atualizar a página exige escolher a sala novamente.
 - Qualquer conta aceita pelo perfil pode escolher qualquer sala cadastrada;
   não há matrícula por turma ou disciplina.

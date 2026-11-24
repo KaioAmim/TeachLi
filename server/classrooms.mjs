@@ -21,11 +21,13 @@ const SECURITY_HEADERS = {
 };
 
 const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
+const MAX_ROOM_CAPTIONS = 500;
+const MAX_ROOM_CAPTION_CHARS = 40000;
 
 export function createClassroomServer({ env = process.env, verifyIdentity = createMicrosoftVerifier(env), now = Date.now, audit = event => console.log(JSON.stringify(event)) } = {}) {
   const catalog = env.TEACHLI_ROOMS ? JSON.parse(env.TEACHLI_ROOMS) : DEFAULT_ROOMS;
   if (!Array.isArray(catalog) || !catalog.length || catalog.length > 100 || catalog.some(r => !/^[a-z0-9-]{1,60}$/.test(r.id) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100) || new Set(catalog.map(r => r.id)).size !== catalog.length) throw new Error('TEACHLI_ROOMS inválido.');
-  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set() }]));
+  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set(), captions: [], captionChars: 0 }]));
   const origins = (env.TEACHLI_CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   const sessions = new Map();
   const attempts = new Map();
@@ -61,7 +63,14 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     // Cada conexão só conhece os IDs do perfil oposto (aluno↔professor); alunos não veem IDs de outros alunos.
     for (const c of clients) send(c.ws, { ...event, peers: clients.filter(o => o !== c && o.session.role !== c.session.role).map(o => ({ id: o.id, role: o.session.role })) });
   };
-  const remove = client => { if (client.room.clients.delete(client)) presence(client.room); };
+  const remove = client => {
+    if (!client.room.clients.delete(client)) return;
+    if (client.room.clients.size === 0) {
+      client.room.captions = [];
+      client.room.captionChars = 0;
+    }
+    presence(client.room);
+  };
   const revoke = token => {
     sessions.delete(token);
     for (const room of rooms.values()) for (const c of [...room.clients]) if (c.token === token) { remove(c); c.ws.close(1008, 'Sessão encerrada'); }
@@ -133,6 +142,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     log('room.join', { user: who(session.id), role: session.role, room: room.id });
     send(ws, { type: 'joined', room: { id: room.id, name: room.name }, role: session.role, selfId: client.id });
     presence(room);
+    if (session.role === 'aluno') send(ws, { type: 'caption.history', captions: room.captions });
     ws.on('message', raw => {
       if (!validSession(token) || !room.clients.has(client)) { remove(client); return reject('Sua sessão expirou. Entre novamente.'); }
       let signal;
@@ -157,12 +167,19 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
           typeof message.text !== 'string' || !message.text.trim() || message.text.length > 2000) return send(ws, { type: 'error', message: 'Mensagem inválida ou sem permissão (máximo de 2.000 caracteres).' });
       if (client.seen.has(message.id)) return; // never retransmit the same message
       const targets = [...room.clients].filter(c => c !== client && c.session.role !== session.role && validSession(c.token) && c.ws.readyState === 1);
-      if (!targets.length) return send(ws, { type: 'message.rejected', id: message.id, message: session.role === 'aluno' ? 'Aguarde o professor entrar para enviar.' : 'Nenhum aluno conectado para receber a legenda.' });
+      if (!targets.length && session.role === 'aluno') return send(ws, { type: 'message.rejected', id: message.id, message: 'Aguarde o professor entrar para enviar.' });
       client.seen.add(message.id);
       if (client.seen.size > 500) client.seen.delete(client.seen.values().next().value);
       const event = { type: message.type, id: randomUUID(), text: message.text.trim(), author: session.name, role: session.role, roomId: room.id, createdAt: now() };
+      if (message.type === 'caption.final') {
+        room.captions.push(event);
+        room.captionChars += event.text.length;
+        while (room.captions.length > MAX_ROOM_CAPTIONS || room.captionChars > MAX_ROOM_CAPTION_CHARS) {
+          room.captionChars -= room.captions.shift()?.text.length ?? 0;
+        }
+      }
       for (const target of targets) send(target.ws, event);
-      send(ws, { type: 'message.ack', id: message.id, recipients: targets.length });
+      send(ws, { type: 'message.ack', id: message.id, recipients: targets.length, ...(message.type === 'caption.final' ? { archived: true } : {}) });
     });
     ws.on('close', () => remove(client));
     ws.on('error', () => remove(client));
