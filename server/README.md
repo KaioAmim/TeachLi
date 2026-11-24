@@ -11,12 +11,28 @@ troca e saída da conta. Alunos podem aguardar a chegada do professor.
 
 ## Executar
 
-Use Node.js 22 ou posterior. Instale as dependências de `client/` e `server/` com
+Use Node.js 22 ou posterior, Python 3 e Ollama em execução. O script usa apenas a
+biblioteca padrão do Python; não exige `pip install`. Se o executável não for `python3`,
+configure `PYTHON_BIN`. Instale as dependências de `client/` e
+`server/` com
 `npm ci` em cada pasta. Na raiz, execute:
 
 ```bash
 npm run dev:classroom
 ```
+
+Em cada máquina que executará o modelo localmente, prepare o Ollama uma vez:
+
+```bash
+cd server
+npm run setup:ollama
+```
+
+O comando pergunta antes de instalar o Ollama pelo instalador oficial e antes de baixar
+o modelo Qwen 2.5 7B (aproximadamente 4,7 GB). Ele pode ser executado novamente sem
+baixar o que já estiver instalado. Em máquinas que usam um Ollama remoto, configure
+`OLLAMA_BASE_URL` e instale o modelo nessa máquina remota; rode o preparo local apenas
+para verificar a conexão.
 
 O comando inicia os dois serviços e encerra ambos com Ctrl+C. A página usa 5173;
 o servidor, 8787. Encerre instâncias anteriores para evitar conflito de portas.
@@ -32,8 +48,11 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
 | --- | --- |
 | `MICROSOFT_TENANT_ID` | **Obrigatório** (ou `VITE_MICROSOFT_TENANT_ID` em `client/.env*`): GUID do tenant da instituição |
 | `MICROSOFT_CLIENT_ID` | Sobrescreve o Client ID público lido de `client/.env*` |
-| `OPENAI_API_KEY` | Chave privada usada pelo servidor para gerar o resumo de aula; necessária para essa função |
-| `OPENAI_SUMMARY_MODEL` | Modelo da Responses API; padrão `gpt-6-luna` |
+| `OLLAMA_BASE_URL` | Endereço do Ollama; padrão `http://127.0.0.1:11434` |
+| `OLLAMA_MODEL` | Modelo local; padrão `qwen2.5:7b` |
+| `OLLAMA_KEEP_ALIVE` | Tempo para manter o modelo na memória após a geração; padrão `2m` |
+| `OLLAMA_TIMEOUT_SECONDS` | Tempo máximo de geração; padrão `600` |
+| `PYTHON_BIN` | Caminho do Python 3 usado pelo gerador; padrão `python3` |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
 | `TEACHLI_TRUST_PROXY` | `1` apenas atrás de proxy que sobrescreve `X-Forwarded-For` (limites por IP real) |
 | `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |
@@ -76,7 +95,7 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | --- | --- |
 | `POST /auth/microsoft/session` | Verifica ID token já obtido no login e emite sessão de comunicação |
 | `GET /classrooms` | Lista as cinco salas, com Bearer da sessão TeachLi |
-| `POST /lessons/summary` | Gera uma síntese com IA das legendas da aula finalizada (apenas aluno autenticado) |
+| `POST /lessons/summary` | Extrai tópicos da transcrição e gera material didático com Ollama local (apenas aluno autenticado) |
 | `POST /auth/logout` | Encerra sessão de comunicação; idempotente |
 | `WS /classroom?room=ID` | Subprotocolos `teachli-session` e token opaco; sem credencial na URL |
 | `joined`, `presence` | Sala confirmada e participantes conectados |
@@ -101,13 +120,19 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
   alunos que entrarem depois recebem esse histórico. As legendas são apagadas quando
   todos saem da sala ou quando o servidor reinicia.
 - Ao finalizar a aula, a sala fica encerrada em memória até todos saírem. As legendas
-  ficam no navegador do aluno durante a sessão (até 500 falas ou 40.000 caracteres) e
-  são apagadas ao sair ou trocar de sala. Quando o aluno pede o resumo, o servidor envia
-  essas legendas à OpenAI Responses API; o serviço devolve assunto central, síntese,
-  ideias principais e exemplos. O conteúdo não é salvo pelo TeachLi; `store: false` é
-  enviado à API. A política de retenção do provedor depende da conta/API e deve ser
-  revisada pela instituição antes de uso com dados de estudantes. Há limite de cinco
-  gerações por aluno a cada dez minutos.
+  ficam no servidor e no navegador do aluno durante a sessão (até 500 falas ou 40.000
+  caracteres) e são apagadas quando todos saem. O primeiro aluno que pedir a síntese aciona
+  uma geração no Ollama; os demais compartilham o processamento em andamento e o resultado em
+  memória. Há limite global de 100 chamadas de IA por dia no fuso do Pacífico e limite de
+  cinco pedidos por aluno a cada dez minutos. Ao atingir o limite, o TeachLi interrompe novas
+  gerações. O limite global fica em memória
+  e reinicia se o processo do servidor reiniciar. O script Python faz a extração de tópicos
+  sem modelo; depois envia apenas os tópicos e trechos relevantes ao Ollama configurado.
+  O modelo sintetiza os tópicos e devolve resumo didático, pontos principais, exemplos presentes
+  na aula e perguntas de revisão. Falhas antes de concluir não consomem o limite diário.
+- O modelo padrão `qwen2.5:7b` é executado pelo Ollama no ambiente indicado em
+  `OLLAMA_BASE_URL`; não há chave de API nem chamada a um provedor externo no fluxo padrão.
+  Se o Ollama estiver em outra máquina, o conteúdo da transcrição será enviado a essa máquina.
 - Reconexão explícita; atualizar a página exige escolher a sala novamente.
 - Qualquer conta aceita pelo perfil pode escolher qualquer sala cadastrada;
   não há matrícula por turma ou disciplina.

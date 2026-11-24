@@ -24,6 +24,17 @@
 .lesson-summary-heading button { min-height: 40px; gap: 8px; border-radius: 8px; }
 .lesson-summary-result { margin: 16px 0 0 52px; padding: 14px 16px; border-radius: 8px; color: #263b59; background: #f3f6fb; }
 .lesson-summary-note, .lesson-summary-empty { color: #596a83; font-size: 12px; line-height: 1.55; }
+.lesson-summary-loading { display: flex; align-items: center; gap: 9px; min-height: 28px; color: #3927a6; font-size: 13px; font-weight: 600; }
+.lesson-summary-ai-icon { flex: 0 0 auto; color: #5945d6; animation: lesson-summary-sparkle 1.4s ease-in-out infinite; }
+.lesson-summary-loading-text { animation: lesson-summary-text 1.4s ease-in-out infinite; }
+.lesson-summary-loading-dots { display: inline-flex; min-width: 20px; color: #8b7ded; }
+.lesson-summary-loading-dots span { animation: lesson-summary-dot 1.2s ease-in-out infinite; }
+.lesson-summary-loading-dots span:nth-child(2) { animation-delay: .16s; }
+.lesson-summary-loading-dots span:nth-child(3) { animation-delay: .32s; }
+@keyframes lesson-summary-dot { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+@keyframes lesson-summary-text { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes lesson-summary-sparkle { 0%, 100% { opacity: .65; transform: scale(.92); } 50% { opacity: 1; transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .lesson-summary-ai-icon, .lesson-summary-loading-text, .lesson-summary-loading-dots span { animation: none; } }
 .lesson-summary-result h3 { margin: 12px 0 6px; color: #153566; font-size: 16px; }
 .lesson-summary-result h4 { margin: 14px 0 0; color: #153566; font-size: 13px; }
 .lesson-summary-overview { color: #263b59; font-size: 13px; line-height: 1.65; }

@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { createMicrosoftVerifier } from './microsoft.mjs';
-import { LessonSummaryError, summarizeLessonCaptions } from './lessonSummary.mjs';
+import { generateLessonSummary, LessonSummaryError } from './lessonSummary.mjs';
 
 export const DEFAULT_ROOMS = [
   { id: 'laboratorio-a', name: 'Laboratório A' },
@@ -24,15 +24,25 @@ const SECURITY_HEADERS = {
 const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
 const MAX_ROOM_CAPTIONS = 500;
 const MAX_ROOM_CAPTION_CHARS = 40000;
+const MAX_DAILY_SUMMARY_CALLS = 100;
+const PACIFIC_DAY = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+function pacificDate(timestamp) {
+  const parts = Object.fromEntries(PACIFIC_DAY.formatToParts(new Date(timestamp)).map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 
 export function createClassroomServer({ env = process.env, verifyIdentity = createMicrosoftVerifier(env), now = Date.now, audit = event => console.log(JSON.stringify(event)) } = {}) {
   const catalog = env.TEACHLI_ROOMS ? JSON.parse(env.TEACHLI_ROOMS) : DEFAULT_ROOMS;
   if (!Array.isArray(catalog) || !catalog.length || catalog.length > 100 || catalog.some(r => !/^[a-z0-9-]{1,60}$/.test(r.id) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100) || new Set(catalog.map(r => r.id)).size !== catalog.length) throw new Error('TEACHLI_ROOMS inválido.');
-  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set(), lessonEndedAt: null, captions: [], captionChars: 0 }]));
+  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set(), lessonEndedAt: null, captions: [], captionChars: 0, summaryCache: null, summaryPending: null }]));
   const origins = (env.TEACHLI_CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   const sessions = new Map();
   const attempts = new Map();
   const summaryAttempts = new Map();
+  let summaryDailyUsage = { date: pacificDate(now()), calls: 0 };
   const sockets = new Map();
   const MAX_ATTEMPT_ENTRIES = 10000, MAX_SOCKETS_PER_IP = 20;
   // Atrás de proxy reverso o IP real vem de X-Forwarded-For. Só confie nele com TEACHLI_TRUST_PROXY=1
@@ -49,6 +59,17 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const send = (ws, event) => { if (ws.readyState === 1) ws.send(JSON.stringify(event)); };
   const allowed = req => origins.includes(req.headers.origin);
   const validSession = token => { const session = sessions.get(token); return session?.expiresAt > now() ? session : null; };
+  const reserveSummaryCall = () => {
+    const date = pacificDate(now());
+    if (summaryDailyUsage.date !== date) summaryDailyUsage = { date, calls: 0 };
+    if (summaryDailyUsage.calls >= MAX_DAILY_SUMMARY_CALLS) {
+      throw new LessonSummaryError('O TeachLi atingiu o limite diário de 100 chamadas para resumo. Tente novamente após a renovação diária.', 429);
+    }
+    summaryDailyUsage.calls++;
+    return () => {
+      if (summaryDailyUsage.date === date) summaryDailyUsage.calls = Math.max(0, summaryDailyUsage.calls - 1);
+    };
+  };
   const bearer = req => req.headers.authorization?.replace(/^Bearer /, '');
   const json = (req, res, status, body) => {
     res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Origin', ...(allowed(req) ? { 'Access-Control-Allow-Origin': req.headers.origin } : {}) });
@@ -71,6 +92,8 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
       client.room.lessonEndedAt = null;
       client.room.captions = [];
       client.room.captionChars = 0;
+      client.room.summaryCache = null;
+      client.room.summaryPending = null;
     }
     presence(client.room);
   };
@@ -116,15 +139,45 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
       if (path === '/classrooms' && req.method === 'GET') return json(req, res, 200, { rooms: catalog });
       if (path === '/lessons/summary' && req.method === 'POST') {
         if (session.role !== 'aluno') return json(req, res, 403, { error: 'Somente alunos podem gerar o resumo da aula.' });
-        const endedRoom = [...rooms.values()].find(room => room.lessonEndedAt && [...room.clients].some(client => client.token === token && client.session.role === 'aluno'));
-        if (!endedRoom) return json(req, res, 409, { error: 'Entre em uma aula finalizada para gerar o resumo.' });
+        const body = await readJson(req, 4096);
+        const endedRoom = typeof body?.roomId === 'string' ? rooms.get(body.roomId) : null;
+        if (!endedRoom?.lessonEndedAt || body.endedAt !== endedRoom.lessonEndedAt) {
+          return json(req, res, 409, { error: 'Entre em uma aula finalizada para gerar o resumo.' });
+        }
         const summaryLimit = summaryAttempts.get(who(session.id));
         if (summaryLimit?.until > now() && summaryLimit.count >= 5) return json(req, res, 429, { error: 'Você já gerou vários resumos. Aguarde alguns minutos para tentar novamente.' });
         if (summaryAttempts.size >= 10000 && !summaryLimit) return json(req, res, 429, { error: 'Muitas solicitações. Tente novamente em alguns minutos.' });
         if (!summaryLimit || summaryLimit.until <= now()) summaryAttempts.set(who(session.id), { count: 1, until: now() + 600000 });
         else summaryLimit.count++;
-        const body = await readJson(req, 180000);
-        const summary = await summarizeLessonCaptions(body?.captions, { env });
+        const endedAt = endedRoom.lessonEndedAt;
+        let summaryPromise;
+        if (endedRoom.summaryCache?.endedAt === endedAt) {
+          summaryPromise = Promise.resolve(endedRoom.summaryCache.result);
+        } else if (endedRoom.summaryPending?.endedAt === endedAt) {
+          summaryPromise = endedRoom.summaryPending.promise;
+        } else {
+          if (!endedRoom.captions.length) throw new LessonSummaryError('Não há legendas disponíveis para resumir.', 422);
+          const releaseSummaryCall = reserveSummaryCall();
+          const pending = { endedAt, promise: null };
+          pending.promise = generateLessonSummary(endedRoom.captions.map(caption => caption.text), {
+            model: env.OLLAMA_MODEL || 'qwen2.5:7b',
+            ollamaBaseUrl: env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
+            keepAlive: env.OLLAMA_KEEP_ALIVE || '2m',
+            timeoutSeconds: Number(env.OLLAMA_TIMEOUT_SECONDS || 600),
+            pythonBin: env.PYTHON_BIN || 'python3',
+          }).then(result => {
+            if (endedRoom.lessonEndedAt === endedAt) endedRoom.summaryCache = { endedAt, result };
+            return result;
+          }).catch(error => {
+            releaseSummaryCall();
+            throw error;
+          }).finally(() => {
+            if (endedRoom.summaryPending === pending) endedRoom.summaryPending = null;
+          });
+          endedRoom.summaryPending = pending;
+          summaryPromise = pending.promise;
+        }
+        const summary = await summaryPromise;
         return json(req, res, 200, summary);
       }
       return json(req, res, 404, { error: 'Rota não encontrada.' });
@@ -184,6 +237,8 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
         if (session.role !== 'professor') return send(ws, { type: 'error', message: 'Somente o professor pode finalizar a aula.' });
         if (!room.lessonEndedAt) {
           room.lessonEndedAt = now();
+          room.summaryCache = null;
+          room.summaryPending = null;
           log('lesson.end', { user: who(session.id), room: room.id });
         }
         const event = { type: 'lesson.ended', endedAt: room.lessonEndedAt };
