@@ -38,6 +38,19 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(rootDir, "src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Bibliotecas grandes em arquivos próprios: o navegador as guarda em cache entre versões
+        // do app e a tela inicial não precisa baixar TensorFlow.js nem MediaPipe.
+        manualChunks(id) {
+          if (id.includes("@tensorflow")) return "tfjs";
+          if (id.includes("@mediapipe")) return "mediapipe";
+          if (id.includes("node_modules/react") || id.includes("node_modules/wouter")) return "react";
+        },
+      },
+    },
+  },
   server: {
     // Microsoft requires the registered callback origin; never fall back to 5174.
     port: 5173,

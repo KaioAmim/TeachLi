@@ -143,14 +143,19 @@ participantes em logs de teste.
 2. **Letras (pose):** a primeira mão vira 63 valores (21 pontos, pulso na origem, escala
    pulso→base do dedo médio). Um gesto só é confirmado com confiança > 0,75, margem > 0,15
    sobre a 2ª classe e 6 quadros estáveis.
-3. **Sinais em movimento:** buffer de 60 quadros com as duas mãos (126 valores), reamostrado
-   para 40 quadros; consultado a cada 5 quadros. Modelo do usuário: confiança > 0,75 e margem > 0,15;
-   modelo base: confiança > 0,85 e margem > 0,3 (178 classes, sem classe negativa).
+3. **Sinais em movimento:** a detecção das mãos roda a ~30 quadros/s (o rosto, a ~10/s). Buffer de até 120
+   quadros com as duas mãos, **limpo quando a mão fica 6 quadros fora do quadro** (para não misturar sinais vizinhos),
+   consultado a cada 4 quadros. O modelo base testa janelas de 20, 30, 45, 60, 90 e 120 quadros (reamostradas para 40)
+   e fica com a mais confiante que não seja "nenhum sinal": confiança > 0,9, margem > 0,4 e 3 consultas seguidas iguais.
+   O modelo do usuário (sem essa classe) usa janela única de 60 quadros: confiança > 0,85, margem > 0,25 e 4 consultas.
+   Os limiares priorizam precisão: é preferível deixar de emitir um sinal a enviar um errado. Foram endurecidos depois
+   da simulação da seção 5.4, então os números dessa tabela valem para os limiares anteriores (0,8/0,25/2 e 0,75/0,15/3).
+   Uma consulta sem certeza zera a sequência de confirmação.
 4. **Composição automática:** a letra confirmada entra no texto sem espaço; sinais inteiros entram
    separados por espaço. A mesma letra só se repete depois de o gesto ser solto (≥ 8 quadros sem
    gesto confiável). Transições incertas e ausência de mão não acrescentam nada. Uma barra indica
    a confirmação e o aviso "Adicionado à mensagem" confirma a inclusão.
-5. **Pausa e envio:** após 1,5 s sem gestos entra um espaço (separa palavras); após 3,5 s a mensagem
+5. **Pausa e envio:** após 1,5 s sem gestos entra um espaço (separa palavras); após 5 s a mensagem
    segue ao professor e o campo é limpo. Só vale com câmera ligada, composição não pausada,
    professor conectado e campo de texto sem foco. O aluno pode pausar a composição, inserir espaço,
    apagar a última letra, editar livremente ou desligar o envio automático (o botão "Enviar ao
@@ -242,7 +247,8 @@ Treinado com o dataset **Libras-EQT-UECE (Hand Landmarks)**: 178 sinais (palavra
 tem ao vivo). Entrada: 40 quadros × 126 valores, com a mesma normalização do app e as mãos na ordem
 `[lado esquerdo da imagem, direito]` (o dataset guarda a ordem invertida; `convert_uece.py` troca).
 Os datasets ficam fora do repositório; só o modelo (~1,4 MB) é publicado em
-`public/models/gesture-classifier-dynamic/`. O modelo do usuário tem prioridade; sem ele, o base é carregado.
+`public/models/gesture-classifier-dynamic/`. O modelo do usuário e o base funcionam juntos (vale a predição aceita de maior confiança). O modelo base tem uma 179ª
+classe, `__nenhum__` ("nenhum sinal"), que não aparece na interface.
 
 Avaliação com informante inédito (leave-one-signer-out), top-1 / top-5:
 
@@ -252,24 +258,46 @@ Avaliação com informante inédito (leave-one-signer-out), top-1 / top-5:
 | + trajetória do pulso | 58,3% / 86,1% | Piorou: descartada |
 | Rede maior (`--wide`: 3 blocos Conv1D 96/192/256) + aumento (corte/reamostragem, escala, ruído) | 71,7% / 92,9% | **Adotada** |
 
-Com a rede adotada: informante 1 = 85,0% / 97,6%; informante 3 = 77,9% / 93,3%. Medido só em clipes
-isolados e já recortados; ao vivo, com fala contínua e outra câmera, tende a ser menor. Não há classe
-"nenhum sinal". **A origem e a licença do dataset não foram verificadas** (nenhuma fonte encontrada):
+Com a rede adotada: informante 1 = 85,0% / 97,6%; informante 3 = 77,9% / 93,3%. Esses números são de clipes
+isolados e já recortados.
+
+**Classe "nenhum sinal" e fala contínua (v2).** Ao vivo o modelo vê janelas que cortam o sinal ou misturam dois sinais,
+e sem uma classe negativa ele sempre responde com algum sinal. A v2 (`train_dynamic_v2.py`) acrescenta `__nenhum__`,
+treinada com transições entre sinais, trechos parciais e poses paradas, e exemplos positivos com recortes e sobras do sinal
+vizinho. Em clipes isolados o acerto fica quase igual (70,4% / 93,5% contra 72,2% / 95,1% sem a classe) e 98,7% dos trechos
+de transição de teste são reconhecidos como "nenhum".
+
+O teste de fala contínua (`simulate_live.py`) concatena 8 clipes de um informante que não entrou no treino, 30 fluxos
+(240 sinais), e reproduz o laço do app, com ou sem pausas (mão fora do quadro) entre os sinais:
+
+| Cenário | Algoritmo | Sinais reconhecidos | Emissões corretas | Emissões por sinal |
+| --- | --- | ---: | ---: | ---: |
+| Sem pausas | Anterior (janela fixa de 60, sem "nenhum sinal") | 45,0% | 26,5% | 1,70 |
+| Sem pausas | Anterior com o modelo v2 aplicado a várias janelas | 37,5% | 16,8% | 2,23 |
+| Sem pausas | **Atual (várias janelas + "nenhum sinal")** | **58,8%** | **58,0%** | **1,01** |
+| Com pausas | Anterior | 40,0% | 24,2% | 1,65 |
+| Com pausas | **Atual** | **53,7%** | **58,6%** | **0,92** |
+
+(A linha "Anterior com várias janelas" usa o modelo sem a classe negativa: várias janelas sem ela pioram o resultado,
+por isso o modelo do usuário continua com janela única.) Os falsos sinais caíram a menos da metade, mas ainda se perdem
+cerca de 45% dos sinais com um informante novo. É uma simulação com clipes concatenados, não uma medida com câmera real.
+**A origem e a licença do dataset não foram verificadas** (nenhuma fonte encontrada):
 confirmar com o autor antes de redistribuir o modelo (`NOTICE.md` na pasta do modelo).
 
 Reprodução (de dentro do ambiente Python com `tensorflow`, `numpy`, `scikit-learn`):
 
 ```sh
-python training/convert_uece.py "<pasta Hand Landmarks>" uece.npz
-python training/train_dynamic.py uece.npz --test-informant 5 --no-traj --wide      # avaliação
-python training/train_dynamic.py uece.npz --final saida --no-traj --wide --epochs 40
+python training/convert_uece.py "<pasta Hand Landmarks>" uece.npz uece_raw.npz   # uece_raw.npz: clipes de comprimento variável
+python training/train_dynamic_v2.py uece_raw.npz --holdout 5 --out avaliacao          # avaliação (informante 5 fora do treino)
+python training/simulate_live.py uece_raw.npz --model avaliacao --algo novo [--gaps]  # fala contínua
+python training/train_dynamic_v2.py uece_raw.npz --holdout 0 --out saida              # modelo final, todos os informantes
 python training/export_weights.py saida/model.keras saida/weights.json
 # de dentro de client/ (onde o @tensorflow/tfjs está instalado):
 node ../training/export_tfjs.mjs saida/weights.json saida/labels.json public/models/gesture-classifier-dynamic
 ```
 
 O `export_tfjs.mjs` reordena os pesos (o TF.js espera todos os treináveis antes dos não treináveis) e a
-paridade com o Keras foi conferida em 8 clipes. `tfjs-node` não instala com Node 24; por isso o treino usa Python.
+paridade com o Keras foi conferida em 9 clipes (diferença máxima de probabilidade 1,2e-7). `tfjs-node` não instala com Node 24; por isso o treino usa Python.
 
 ### 5.5 Próximas etapas e limites
 

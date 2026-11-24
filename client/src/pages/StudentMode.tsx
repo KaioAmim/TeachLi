@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
 import { useGestureClassifier } from "@/hooks/useGestureClassifier";
 import { useDynamicGestureClassifier } from "@/hooks/useDynamicGestureClassifier";
-import { isDynamicConfident } from "@/lib/dynamicGestureClassifier";
+import { AvailableGestures } from "@/components/AvailableGestures";
+import { isDynamicConfident, requiredStableCalls } from "@/lib/dynamicGestureClassifier";
 import { useFaceLandmarker } from "@/hooks/useFaceLandmarker";
 import {
   EXPRESSION_LABELS,
@@ -38,13 +39,16 @@ const STABLE_FRAMES = 6;
 const UI_THROTTLE_MS = 80;
 
 /** Quantos quadros o buffer de sinais dinâmicos mantém (~2s a 30fps). */
-const DYNAMIC_BUFFER_SIZE = 60;
+/** O modelo base testa janelas de até 120 quadros (~4 s). */
+const DYNAMIC_BUFFER_SIZE = 120;
+/** Mínimo de quadros para consultar o classificador de sinais. */
+const DYNAMIC_MIN_FRAMES = 20;
+/** Quadros seguidos sem mão que encerram o sinal: o buffer recomeça e não mistura sinais vizinhos. */
+const HAND_GAP_FRAMES = 6;
 /** A cada quantos quadros o classificador dinâmico é consultado — ele é mais
  * pesado que o estático (roda sobre uma sequência inteira), então não faz
  * sentido chamá-lo a cada quadro. */
-const DYNAMIC_PREDICT_EVERY = 5;
-/** Chamadas seguidas com o mesmo rótulo antes de registrar um sinal dinâmico. */
-const DYNAMIC_STABLE_CALLS = 3;
+const DYNAMIC_PREDICT_EVERY = 4;
 
 /** Confiança mínima para o classificador estático considerar o sinal decidido. */
 const CONFIDENCE_THRESHOLD = 0.75;
@@ -63,13 +67,16 @@ const RELEASE_FRAMES = 8;
 /** Pausa sem gestos antes de separar palavras (acrescenta um espaço). */
 const WORD_GAP_MS = 1500;
 /** Pausa sem gestos antes de enviar a mensagem ao professor automaticamente. */
-const AUTO_SEND_MS = 3500;
+const AUTO_SEND_MS = 5000; // mais tempo para o aluno revisar/corrigir o texto antes do envio
 const MAX_MESSAGE_LENGTH = 2000;
 
-/** O rosto é analisado a cada N quadros (mais leve que as mãos). */
-const FACE_EVERY = 2;
+/** Intervalo mínimo entre detecções de mãos (~30 quadros/s). Monitores de 60/144 Hz chamariam o
+ * detector 60/144 vezes por segundo sem ganho: a mão se move devagar para a câmera de 30 quadros/s. */
+const MIN_DETECT_INTERVAL_MS = 28;
+/** O rosto é analisado a ~10 vezes por segundo, por tempo (expressões e aceno não precisam de mais). */
+const FACE_INTERVAL_MS = 100;
 /** Análises seguidas com a mesma expressão antes de confirmá-la (~0,5 s). */
-const EXPRESSION_STABLE_CALLS = 8;
+const EXPRESSION_STABLE_CALLS = 5;
 /** Análises sem expressão para considerar que o aluno "soltou" a expressão. */
 const EXPRESSION_RELEASE_CALLS = 3;
 /** Intervalo mínimo entre duas expressões acrescentadas à mensagem. */
@@ -136,7 +143,9 @@ export default function StudentMode() {
 
   const faceEnabledRef = useRef(true);
   faceEnabledRef.current = faceEnabled;
-  const faceFrameRef = useRef(0);
+  const lastFaceAtRef = useRef(0);
+  const lastDetectAtRef = useRef(0);
+  const handAbsentFramesRef = useRef(0);
   const expressionStableRef = useRef<{ label: FacialExpression | ""; count: number }>({ label: "", count: 0 });
   const expressionReleaseRef = useRef(0);
   const lastExpressionRef = useRef<FacialExpression | "">("");
@@ -197,6 +206,11 @@ export default function StudentMode() {
       }
 
       const timestamp = performance.now();
+      if (timestamp - lastDetectAtRef.current < MIN_DETECT_INTERVAL_MS) {
+        animationFrameRef.current = requestAnimationFrame(processFrame);
+        return;
+      }
+      lastDetectAtRef.current = timestamp;
       // Uma exceção aqui abortaria o rAF em definitivo e a tela ficaria parada
       // em "Aguardando gestos..." sem nenhum sinal do que houve.
       let detectionResult: HandDetectionResult | null = null;
@@ -208,6 +222,7 @@ export default function StudentMode() {
 
       if (detectionResult && detectionResult.landmarks.length > 0) {
         setHandDetected(true);
+        handAbsentFramesRef.current = 0;
 
         // --- reconhecimento estático (pose de um único quadro) ---
         const prediction = predictGesture(detectionResult.landmarks[0] as any);
@@ -284,21 +299,23 @@ export default function StudentMode() {
           dynamicFrameCounterRef.current += 1;
           if (
             dynamicFrameCounterRef.current % DYNAMIC_PREDICT_EVERY === 0 &&
-            buffer.length >= DYNAMIC_BUFFER_SIZE / 2
+            buffer.length >= DYNAMIC_MIN_FRAMES
           ) {
             const dynPrediction = predictDynamicGesture(buffer);
             if (dynPrediction) {
+              // Limiares por modelo ficam em isDynamicConfident. Uma consulta sem
+              // certeza zera a sequência: só sinais estáveis entram na mensagem.
+              const dynIsConfident = isDynamicConfident(dynPrediction);
               const dstable = dynamicStableRef.current;
-              if (dynPrediction.label === dstable.label) {
+              if (!dynIsConfident) {
+                dstable.label = "";
+                dstable.count = 0;
+              } else if (dynPrediction.label === dstable.label) {
                 dstable.count += 1;
               } else {
                 dstable.label = dynPrediction.label;
                 dstable.count = 1;
               }
-
-              // Limiares por modelo (o base, com 178 sinais e sem classe "nenhum
-              // sinal", é mais rígido) ficam em isDynamicConfident.
-              const dynIsConfident = isDynamicConfident(dynPrediction);
 
               if (dynIsConfident) {
                 setCurrentGesture(dynPrediction.label);
@@ -309,7 +326,7 @@ export default function StudentMode() {
               const now = performance.now();
               if (
                 dynIsConfident &&
-                dstable.count >= DYNAMIC_STABLE_CALLS &&
+                dstable.count >= requiredStableCalls(dynPrediction.source) &&
                 now - lastDynamicCommittedAtRef.current > 1200
               ) {
                 lastDynamicCommittedAtRef.current = now;
@@ -334,6 +351,10 @@ export default function StudentMode() {
         lastCommittedRef.current = "";
         unconfidentFramesRef.current = 0;
         dynamicStableRef.current = { label: "", count: 0 };
+        handAbsentFramesRef.current += 1;
+        if (handAbsentFramesRef.current >= HAND_GAP_FRAMES && dynamicBufferRef.current.length > 0) {
+          dynamicBufferRef.current = [];
+        }
         // Sem mão no quadro não há gesto atual: evita adicionar uma detecção antiga.
         setCurrentGesture("");
         setCurrentConfidence(0);
@@ -341,8 +362,8 @@ export default function StudentMode() {
       }
 
       if (faceEnabledRef.current) {
-        faceFrameRef.current += 1;
-        if (faceFrameRef.current % FACE_EVERY === 0) {
+        if (timestamp - lastFaceAtRef.current >= FACE_INTERVAL_MS) {
+          lastFaceAtRef.current = timestamp;
           let observation: FaceObservation | null = null;
           try {
             observation = detectFace(video, timestamp);
@@ -454,7 +475,8 @@ export default function StudentMode() {
         video: { 
           width: 640, 
           height: 480,
-          facingMode: 'user'
+          facingMode: 'user',
+          frameRate: { ideal: 30, max: 30 }
         } 
       });
       
@@ -532,6 +554,23 @@ export default function StudentMode() {
     if (!currentGesture) return;
     if (currentGestureKind === "static") lastCommittedRef.current = currentGesture;
     appendGesture(currentGesture, currentGestureKind ?? "static");
+  };
+
+  /** Gesto escolhido na lista: entra na mensagem mesmo com a composição por câmera pausada. */
+  const insertFromList = (label: string, isLetter: boolean) => {
+    const text = label.trim();
+    if (!text) return;
+    setRecognizedText(prev => {
+      const next = isLetter
+        ? `${prev}${text}`
+        : `${prev}${prev && !/\s$/.test(prev) ? " " : ""}${text} `;
+      return next.slice(0, MAX_MESSAGE_LENGTH);
+    });
+    gestureDraftRef.current = true;
+    lastActivityRef.current = performance.now();
+    setLastAdded(text);
+    if (lastAddedTimerRef.current) clearTimeout(lastAddedTimerRef.current);
+    lastAddedTimerRef.current = setTimeout(() => setLastAdded(""), 1500);
   };
 
   const addSpace = () => {
@@ -614,6 +653,8 @@ export default function StudentMode() {
 
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
         <div className="student-studio">
+          {/* Mensagens da sala no topo: o aluno lê o que chegou antes de compor a resposta. */}
+          <ClassroomPanel compact embedded />
           <section className="student-camera-workspace" aria-labelledby="camera-title">
             <div className="student-section-heading">
               <div>
@@ -733,16 +774,18 @@ export default function StudentMode() {
               <details className="student-model-details">
                 <summary><span><BookOpen size={17} aria-hidden="true" /> Gestos disponíveis</span><ChevronDown size={17} aria-hidden="true" /></summary>
                 <div className="student-model-body">
-                  <p>{isClassifierLoading ? "Preparando reconhecimento de letras…"
-                    : modelSource === "user" ? `Usando o seu modelo treinado (${modelLabels.length} gestos).`
-                    : modelSource === "pretrained" ? `Modelo experimental do alfabeto: ${modelLabels.length} letras.`
-                    : "Nenhum classificador estático disponível."}</p>
-                  {hasModel && <div className="student-gesture-list" aria-label="Letras disponíveis">{modelLabels.map(label => <span key={label}>{label}</span>)}</div>}
-                  <p>{isDynamicClassifierLoading ? "Preparando reconhecimento de movimentos…"
-                    : hasDynamicModel ? `${dynamicSources.length === 2 ? "Seu modelo + modelo base (dataset Libras-EQT-UECE)" : dynamicSources[0] === "pretrained" ? "Modelo base (dataset Libras-EQT-UECE)" : "Seu modelo"}: ${dynamicLabels.length} sinais em movimento.`
-                    : "Para reconhecer movimentos, grave clipes em Treinar gestos."}</p>
-                  {hasDynamicModel && <div className="student-gesture-list" aria-label="Gestos dinâmicos disponíveis">{dynamicLabels.map(label => <span key={label}>{label}</span>)}</div>}
-                  <button type="button" className="student-text-link" onClick={() => setLocation("/aluno/treinar")}>Personalizar meus gestos</button>
+                  <AvailableGestures
+                    onSelect={insertFromList}
+                    letters={hasModel ? modelLabels : []}
+                    signs={hasDynamicModel ? dynamicLabels : []}
+                    lettersNote={isClassifierLoading ? "Preparando reconhecimento de letras…"
+                      : modelSource === "user" ? "Usando o seu modelo treinado de letras."
+                      : modelSource === "pretrained" ? "Modelo experimental do alfabeto (A–Z)."
+                      : "Nenhum classificador de letras disponível."}
+                    signsNote={isDynamicClassifierLoading ? "Preparando reconhecimento de movimentos…"
+                      : hasDynamicModel ? `${dynamicSources.length === 2 ? "Seu modelo + modelo base (Libras-EQT-UECE)" : dynamicSources[0] === "pretrained" ? "Modelo base (Libras-EQT-UECE)" : "Seu modelo"}: sinais em movimento.`
+                      : "Para reconhecer movimentos, grave clipes em Treinar gestos."}
+                  />
                 </div>
               </details>
               <button type="button" className="student-text-link student-train-link" onClick={() => setLocation("/aluno/treinar")}>
@@ -798,7 +841,6 @@ export default function StudentMode() {
               <p className="student-spoken-text">{spokenTypedText || recognizedText || "O texto da sua mensagem aparecerá aqui para seleção."}</p>
             </div>
           </section>
-          <ClassroomPanel compact embedded />
         </div>
 
         <details className="student-guidance">

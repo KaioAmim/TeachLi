@@ -91,7 +91,7 @@ documentada. WebSocket conectado não comprova conexão de mídia.
 - [x] Letras estáveis entram sozinhas, sem espaços entre elas, com regra de repetição (soltar o gesto),
   rejeição de transições, pausa para correção, espaço, apagar e preservação ao reiniciar a câmera.
 - [x] Enter envia texto digitado; Shift+Enter insere linha; ouvir é ação separada e só quando solicitada.
-- [ ] Calibrar com alunos os tempos de pausa (palavra 1,5 s, envio 3,5 s) e a regra de repetição.
+- [ ] Calibrar com alunos os tempos de pausa (palavra 1,5 s, envio 5 s) e a regra de repetição.
 - [ ] Testes específicos de estabilidade, repetição intencional (LL, RR), transições e correções com câmera real.
 - [x] Painel do professor com autoria e botão de ouvir a mensagem.
 - [x] IDs, limite de texto, deduplicação e confirmação de encaminhamento.
@@ -142,7 +142,10 @@ são expectativas de evolução, não capacidades comprovadas da integração at
 - [x] Sem desenho de traços sobre as mãos.
 - [ ] Confirmar origem e licença do Libras-EQT-UECE antes de redistribuir o modelo.
 - [ ] Calibrar as expressões com sinalizantes (ex.: dataset UCI de expressões faciais gramaticais).
-- [ ] Classe "nenhum sinal" e avaliação em fala contínua para o modelo dinâmico base.
+- [x] Classe "nenhum sinal", janelas de vários tamanhos e buffer limpo nas pausas no modelo dinâmico base; em simulação de
+  fala contínua os falsos sinais caíram de ~75% para ~42% das emissões e os sinais reconhecidos subiram ~13 pontos.
+- [ ] Validar a interpretação com câmera real e sinalizantes diferentes (a simulação usa clipes concatenados) e reduzir os
+  ~45% de sinais ainda perdidos com informantes novos (mais pessoas no treino).
 - [ ] Ampliar vocabulário com MINDS-Libras e V-LIBRASIL (exigem extração de landmarks).
 - [x] Preservar modelos pessoais, editor de texto e confirmação antes do envio.
 - [x] Versionar artefatos, origem, licenças, scripts e resultados dos experimentos.

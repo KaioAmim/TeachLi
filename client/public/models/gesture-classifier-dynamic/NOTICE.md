@@ -1,6 +1,6 @@
 # Modelo base de sinais em movimento
 
-Treinado com o dataset **Libras-EQT-UECE (Hand Landmarks)**: 178 sinais, 5 informantes, 5.347 clipes.
+Versão 2: inclui a classe `__nenhum__` ("nenhum sinal"). Treinado com o dataset **Libras-EQT-UECE (Hand Landmarks)**: 178 sinais, 5 informantes, 5.347 clipes.
 Entrada: 40 quadros × 126 valores (duas mãos, mesma normalização de `client/src/lib/handFeatures.ts`).
 
 **Licença e origem do dataset não foram verificadas** — confirme os termos de uso com o autor antes de
