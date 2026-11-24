@@ -5,7 +5,15 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
-import { summarizeLesson } from "@/lib/lessonSummary";
+import { classroomRequest } from "@/lib/classroomApi";
+import { loadMicrosoftSession } from "@/lib/microsoftAuth";
+
+interface LessonSummary {
+  topic: string;
+  summary: string;
+  keyPoints: string[];
+  examples: string[];
+}
 
 export function FinishLessonControl() {
   const { status, lessonEndedAt, endLesson } = useClassroomConnection();
@@ -50,26 +58,69 @@ export function FinishLessonControl() {
 export function StudentLessonSummary() {
   const { lessonCaptions, lessonEndedAt, room } = useClassroomConnection();
   const [showSummary, setShowSummary] = useState(false);
-  const summary = summarizeLesson(lessonCaptions);
+  const [summary, setSummary] = useState<LessonSummary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
+  const [summarizing, setSummarizing] = useState(false);
 
-  useEffect(() => setShowSummary(false), [room?.id, lessonEndedAt]);
+  useEffect(() => {
+    setShowSummary(false);
+    setSummary(null);
+    setSummaryError("");
+    setSummarizing(false);
+  }, [room?.id, lessonEndedAt]);
+
+  const generateSummary = async () => {
+    const session = loadMicrosoftSession("aluno");
+    if (!session?.token) {
+      setSummaryError("Sua sessão expirou. Entre novamente para gerar o resumo.");
+      setShowSummary(true);
+      return;
+    }
+    setShowSummary(true);
+    setSummaryError("");
+    setSummarizing(true);
+    try {
+      const result = await classroomRequest(
+        "/lessons/summary",
+        session.token,
+        { captions: lessonCaptions.map(caption => caption.text) },
+        35000,
+      );
+      setSummary(result as LessonSummary);
+    } catch (error) {
+      setSummaryError(error instanceof Error ? error.message : "Não foi possível gerar o resumo. Tente novamente.");
+    } finally {
+      setSummarizing(false);
+    }
+  };
 
   return <section className="lesson-summary" aria-labelledby="lesson-summary-title">
     <div className="lesson-summary-heading">
       <span className="lesson-summary-icon" aria-hidden="true"><BookOpenText size={20} /></span>
       <div>
         <h2 id="lesson-summary-title">Resumo da aula</h2>
-        <p>{lessonEndedAt ? "A aula foi finalizada. Gere um resumo das falas do professor compartilhadas nesta sessão." : "O resumo fica disponível quando o professor finalizar a aula."}</p>
+        <p>{lessonEndedAt ? "A aula foi finalizada. Gere uma síntese do conteúdo a partir das legendas desta sessão." : "O resumo fica disponível quando o professor finalizar a aula."}</p>
       </div>
-      <Button type="button" onClick={() => setShowSummary(true)} disabled={!lessonEndedAt}>
-        <FileText size={17} aria-hidden="true" /> Resumir aula
+      <Button type="button" onClick={generateSummary} disabled={!lessonEndedAt || summarizing}>
+        <FileText size={17} aria-hidden="true" /> {summarizing ? "Resumindo…" : summary ? "Gerar novamente" : "Resumir aula"}
       </Button>
     </div>
     {showSummary && <div className="lesson-summary-result" aria-live="polite">
-      {summary.length > 0 ? <>
-        <p className="lesson-summary-note">Resumo automático com trechos das legendas disponíveis. Ele não acrescenta informações além do que foi dito.</p>
-        <ul>{summary.map((sentence, index) => <li key={`${index}-${sentence}`}>{sentence}</li>)}</ul>
-      </> : <p className="lesson-summary-empty" role="status">Não há legendas disponíveis nesta sessão para resumir. No EAD, o professor precisa ativar a transcrição antes de finalizar a aula.</p>}
+      {summarizing ? <p className="lesson-summary-empty" role="status">Organizando os conceitos e as ideias principais da aula…</p>
+        : summaryError ? <p className="lesson-summary-empty" role="status">{summaryError}</p>
+          : summary ? <>
+            <p className="lesson-summary-note">Síntese gerada por IA com as legendas desta aula. Confira os pontos com o conteúdo apresentado pelo professor.</p>
+            {summary.topic && <h3>{summary.topic}</h3>}
+            {summary.summary && <p className="lesson-summary-overview">{summary.summary}</p>}
+            {summary.keyPoints.length > 0 && <>
+              <h4>Ideias principais</h4>
+              <ul>{summary.keyPoints.map((point, index) => <li key={`${index}-${point}`}>{point}</li>)}</ul>
+            </>}
+            {summary.examples.length > 0 && <>
+              <h4>Exemplos mencionados</h4>
+              <ul>{summary.examples.map((example, index) => <li key={`${index}-${example}`}>{example}</li>)}</ul>
+            </>}
+          </> : null}
     </div>}
   </section>;
 }

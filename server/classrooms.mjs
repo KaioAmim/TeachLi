@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { createMicrosoftVerifier } from './microsoft.mjs';
+import { LessonSummaryError, summarizeLessonCaptions } from './lessonSummary.mjs';
 
 export const DEFAULT_ROOMS = [
   { id: 'laboratorio-a', name: 'Laboratório A' },
@@ -29,6 +30,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const origins = (env.TEACHLI_CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   const sessions = new Map();
   const attempts = new Map();
+  const summaryAttempts = new Map();
   const sockets = new Map();
   const MAX_ATTEMPT_ENTRIES = 10000, MAX_SOCKETS_PER_IP = 20;
   // Atrás de proxy reverso o IP real vem de X-Forwarded-For. Só confie nele com TEACHLI_TRUST_PROXY=1
@@ -50,9 +52,9 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Origin', ...(allowed(req) ? { 'Access-Control-Allow-Origin': req.headers.origin } : {}) });
     res.end(JSON.stringify(body));
   };
-  const readJson = async req => {
+  const readJson = async (req, maxBytes = 32768) => {
     let size = 0; const chunks = [];
-    for await (const chunk of req) { size += chunk.length; if (size > 32768) throw new Error('Requisição muito grande.'); chunks.push(chunk); }
+    for await (const chunk of req) { size += chunk.length; if (size > maxBytes) throw new Error('Requisição muito grande.'); chunks.push(chunk); }
     return JSON.parse(Buffer.concat(chunks).toString());
   };
   const presence = room => {
@@ -106,8 +108,24 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
       const session = validSession(token);
       if (!session) return json(req, res, 401, { error: 'Sua sessão expirou. Entre novamente pela Microsoft.' });
       if (path === '/classrooms' && req.method === 'GET') return json(req, res, 200, { rooms: catalog });
+      if (path === '/lessons/summary' && req.method === 'POST') {
+        if (session.role !== 'aluno') return json(req, res, 403, { error: 'Somente alunos podem gerar o resumo da aula.' });
+        const endedRoom = [...rooms.values()].find(room => room.lessonEndedAt && [...room.clients].some(client => client.token === token && client.session.role === 'aluno'));
+        if (!endedRoom) return json(req, res, 409, { error: 'Entre em uma aula finalizada para gerar o resumo.' });
+        const summaryLimit = summaryAttempts.get(who(session.id));
+        if (summaryLimit?.until > now() && summaryLimit.count >= 5) return json(req, res, 429, { error: 'Você já gerou vários resumos. Aguarde alguns minutos para tentar novamente.' });
+        if (summaryAttempts.size >= 10000 && !summaryLimit) return json(req, res, 429, { error: 'Muitas solicitações. Tente novamente em alguns minutos.' });
+        if (!summaryLimit || summaryLimit.until <= now()) summaryAttempts.set(who(session.id), { count: 1, until: now() + 600000 });
+        else summaryLimit.count++;
+        const body = await readJson(req, 180000);
+        const summary = await summarizeLessonCaptions(body?.captions, { env });
+        return json(req, res, 200, summary);
+      }
       return json(req, res, 404, { error: 'Rota não encontrada.' });
-    } catch { return json(req, res, 400, { error: 'Requisição inválida.' }); }
+    } catch (error) {
+      if (error instanceof LessonSummaryError) return json(req, res, error.status, { error: error.message });
+      return json(req, res, 400, { error: 'Requisição inválida.' });
+    }
   });
   const wss = new WebSocketServer({ server, maxPayload: 16384, handleProtocols: p => p.has('teachli-session') ? 'teachli-session' : false });
   wss.on('connection', (ws, req) => {
@@ -190,6 +208,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const cleanup = setInterval(() => {
     for (const [token, s] of sessions) if (s.expiresAt <= now()) revoke(token);
     for (const [ip, a] of attempts) if (a.until <= now()) attempts.delete(ip);
+    for (const [user, a] of summaryAttempts) if (a.until <= now()) summaryAttempts.delete(user);
     for (const ws of wss.clients) { if (!ws.isAlive) ws.terminate(); else { ws.isAlive = false; ws.ping(); } }
   }, 15000);
   cleanup.unref();

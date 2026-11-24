@@ -6,7 +6,7 @@ export class ClassroomRequestError extends Error {
   constructor(message: string, public status: number) { super(message); this.name = "ClassroomRequestError"; }
 }
 
-export async function classroomRequest(path: string, token?: string, body?: unknown) {
+export async function classroomRequest(path: string, token?: string, body?: unknown, timeoutMs = 15000) {
   let response: Response;
   let result;
   try {
@@ -14,7 +14,7 @@ export async function classroomRequest(path: string, token?: string, body?: unkn
       method: body === undefined ? 'GET' : 'POST',
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     result = await response.json();
   } catch (error) {
