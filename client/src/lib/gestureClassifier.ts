@@ -208,6 +208,14 @@ export async function loadClassifier(): Promise<LoadedClassifier | null> {
     return result;
   };
 
+  // Aquecimento: a primeira predição compila os shaders do WebGL e trava o quadro
+  // em que acontece; fazê-la aqui, antes de a câmera ligar, evita o engasgo.
+  try {
+    predict(new Float32Array(model.inputs[0].shape?.[1] ?? 63));
+  } catch {
+    // aquecimento é só otimização
+  }
+
   return {
     labels,
     source,

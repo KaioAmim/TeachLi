@@ -3,13 +3,15 @@ import { ClassroomProvider, useClassroomConnection } from "@/contexts/ClassroomC
 import RoomSelection from "@/pages/RoomSelection";
 import { AppHeader, AppFooter } from "@/components/AppShell";
 import VLibrasWidget from "@/components/VLibrasWidget";
+import { Suspense, lazy } from "react";
 import { Link, Route, Switch } from "wouter";
 import { Toaster } from "sonner";
 import Home from "@/pages/Home";
-import StudentMode from "@/pages/StudentMode";
-import TrainMode from "@/pages/TrainMode";
-import ProfessorMode from "@/pages/ProfessorMode";
-import EadMode from "@/pages/EadMode";
+// Telas pesadas (câmera, TensorFlow.js, MediaPipe) só são baixadas quando a rota é aberta.
+const StudentMode = lazy(() => import("@/pages/StudentMode"));
+const TrainMode = lazy(() => import("@/pages/TrainMode"));
+const ProfessorMode = lazy(() => import("@/pages/ProfessorMode"));
+const EadMode = lazy(() => import("@/pages/EadMode"));
 import LoginRequired from "@/pages/LoginRequired";
 import MicrosoftCallback from "@/pages/MicrosoftCallback";
 import { loadMicrosoftSession } from "@/lib/microsoftAuth";
@@ -53,6 +55,7 @@ export default function App() {
       <AppHeader />
       <VLibrasWidget />
       <Toaster richColors position="top-center" />
+      <Suspense fallback={<main id="conteudo" className="auth-page" aria-busy="true"><p role="status">Carregando…</p></main>}>
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/entrar" component={MicrosoftCallback} />
@@ -76,6 +79,7 @@ export default function App() {
           </main>
         </Route>
       </Switch>
+      </Suspense>
       <AppFooter />
     </div></ClassroomProvider>
   );

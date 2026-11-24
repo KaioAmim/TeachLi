@@ -34,9 +34,23 @@ async function createLandmarker(): Promise<FaceLandmarker> {
   }
 }
 
+function warmUp(landmarker: FaceLandmarker) {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    lastTimestamp = Math.max(lastTimestamp, performance.now());
+    landmarker.detectForVideo(canvas, lastTimestamp);
+  } catch {
+    // aquecimento é só otimização
+  }
+}
+
 function getLandmarker(): Promise<FaceLandmarker> {
   if (!landmarkerPromise) {
-    landmarkerPromise = createLandmarker().catch(err => {
+    landmarkerPromise = createLandmarker().then(landmarker => {
+      warmUp(landmarker);
+      return landmarker;
+    }).catch(err => {
       landmarkerPromise = null;
       throw err;
     });
@@ -59,20 +73,25 @@ export function useFaceLandmarker(enabled: boolean) {
     if (!enabled) return;
     let cancelled = false;
     setIsLoading(true);
-    getLandmarker()
-      .then(landmarker => {
-        if (cancelled) return;
-        landmarkerRef.current = landmarker;
-        setIsReady(true);
-      })
-      .catch(err => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
+    // Adia a carga do rosto: assim ela não disputa a CPU com o modelo das mãos e os
+    // classificadores, que são o que a tela precisa primeiro.
+    const timer = setTimeout(() => {
+      getLandmarker()
+        .then(landmarker => {
+          if (cancelled) return;
+          landmarkerRef.current = landmarker;
+          setIsReady(true);
+        })
+        .catch(err => {
+          if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoading(false);
+        });
+    }, 1500);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [enabled]);
 

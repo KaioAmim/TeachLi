@@ -263,16 +263,32 @@ export interface LoadedDynamicClassifier {
   dispose: () => void;
 }
 
-/** O modelo base tem 178 classes e nenhuma classe "nenhum sinal": limiares mais rígidos. */
-const ACCEPT_THRESHOLDS: Record<DynamicSource, { confidence: number; margin: number }> = {
-  user: { confidence: 0.75, margin: 0.15 },
-  pretrained: { confidence: 0.85, margin: 0.3 },
+/** Rótulo da classe "nenhum sinal" do modelo base (transições, poses paradas, trechos parciais). */
+export const NONE_LABEL = "__nenhum__";
+
+/** O modelo base rejeita transições pela classe "nenhum sinal"; o do usuário não tem essa classe e é mais conservador. */
+const ACCEPT_THRESHOLDS: Record<DynamicSource, { confidence: number; margin: number; stableCalls: number }> = {
+  // Prioriza precisão: é preferível deixar de emitir um sinal a enviar um errado ao professor.
+  user: { confidence: 0.85, margin: 0.25, stableCalls: 4 },
+  pretrained: { confidence: 0.9, margin: 0.4, stableCalls: 3 },
 };
 
 export function isDynamicConfident(prediction: DynamicPrediction): boolean {
+  if (!prediction.label || prediction.label === NONE_LABEL) return false;
   const limits = ACCEPT_THRESHOLDS[prediction.source];
   return prediction.confidence > limits.confidence && prediction.margin > limits.margin;
 }
+
+/** Consultas seguidas com o mesmo sinal antes de aceitá-lo. */
+export function requiredStableCalls(source: DynamicSource): number {
+  return ACCEPT_THRESHOLDS[source].stableCalls;
+}
+
+/** Tamanhos de janela (em quadros) testados pelo modelo base; o sinal pode durar de ~0,7 s a ~4 s. */
+const MULTI_WINDOWS = [20, 30, 45, 60, 90, 120];
+/** Janela única do modelo do usuário e mínimo de quadros para consultá-lo. */
+const SINGLE_WINDOW = 60;
+const SINGLE_MIN_FRAMES = 30;
 
 /**
  * Carrega o classificador dinâmico com os dois modelos juntos: o treinado pelo
@@ -346,38 +362,79 @@ function buildClassifier(
   model: tf.LayersModel,
   usesLegacyFeatures: boolean,
 ): LoadedDynamicClassifier {
+  const noneIndex = labels.indexOf(NONE_LABEL);
+  const visibleLabels = labels.filter(label => label !== NONE_LABEL);
+  const toCompatible = (frames: Float32Array[]) =>
+    usesLegacyFeatures
+      ? frames.map(frame => {
+          const oldFrame = new Float32Array(126);
+          oldFrame.set(frame.subarray(0, 63), 0);
+          oldFrame.set(frame.subarray(66, 129), 63);
+          return oldFrame;
+        })
+      : frames;
+
+  const rejected = (confidence = 0): DynamicPrediction => ({ label: NONE_LABEL, confidence, margin: 0, source });
+
+  /**
+   * Com classe "nenhum sinal" (modelo base) testa várias janelas terminando no quadro atual,
+   * pois o sinal pode ter durações diferentes, e escolhe a de maior confiança que não seja
+   * "nenhum". Sem ela (modelo do usuário), várias janelas só aumentavam os falsos sinais
+   * em teste, então usa uma janela única, como antes.
+   */
   const predict = (frames: Float32Array[]): DynamicPrediction => {
-    const resampled = resampleSequence(frames, SEQUENCE_LENGTH);
-    return tf.tidy(() => {
-      const compatible = usesLegacyFeatures
-        ? resampled.map(frame => {
-            const oldFrame = new Float32Array(126);
-            oldFrame.set(frame.subarray(0, 63), 0);
-            oldFrame.set(frame.subarray(66, 129), 63);
-            return oldFrame;
-          })
-        : resampled;
-      const input = tf.tensor3d([sequenceToArray(compatible)]);
-      const output = model.predict(input) as tf.Tensor;
-      const data = output.dataSync();
-      let bestIndex = 0;
-      let secondBest = 0;
-      for (let i = 1; i < data.length; i++) {
-        if (data[i] > data[bestIndex]) {
-          secondBest = data[bestIndex];
-          bestIndex = i;
-        } else if (data[i] > secondBest) {
-          secondBest = data[i];
+    let sizes: number[];
+    if (noneIndex >= 0) {
+      sizes = MULTI_WINDOWS.filter(w => w <= frames.length);
+      if (!sizes.includes(frames.length) && frames.length >= MULTI_WINDOWS[0]) sizes.push(frames.length);
+      if (sizes.length === 0) return rejected();
+    } else {
+      if (frames.length < SINGLE_MIN_FRAMES) return rejected();
+      sizes = [Math.min(frames.length, SINGLE_WINDOW)];
+    }
+
+    {
+      const data = tf.tidy(() => {
+        const batch = sizes.map(w =>
+          sequenceToArray(toCompatible(resampleSequence(frames.slice(-w), SEQUENCE_LENGTH)))
+        );
+        return (model.predict(tf.tensor3d(batch)) as tf.Tensor).dataSync();
+      });
+      const classes = labels.length;
+
+      let best: DynamicPrediction | null = null;
+      for (let w = 0; w < sizes.length; w++) {
+        const row = w * classes;
+        let bestIndex = 0;
+        let secondBest = 0;
+        for (let i = 1; i < classes; i++) {
+          if (data[row + i] > data[row + bestIndex]) {
+            secondBest = data[row + bestIndex];
+            bestIndex = i;
+          } else if (data[row + i] > secondBest) {
+            secondBest = data[row + i];
+          }
+        }
+        if (bestIndex === noneIndex) continue;
+        const confidence = data[row + bestIndex];
+        // Margem entre a 1ª e a 2ª classe (ver gestureClassifier.ts): sem ela, dois sinais
+        // parecidos passariam no limiar de confiança mesmo quase empatados.
+        if (!best || confidence > best.confidence) {
+          best = { label: labels[bestIndex], confidence, margin: confidence - secondBest, source };
         }
       }
-      // Mesma lógica de margem do classificador estático (ver
-      // gestureClassifier.ts): sem ela, dois sinais dinâmicos parecidos
-      // passariam no limiar de confiança mesmo quase empatados.
-      return { label: labels[bestIndex], confidence: data[bestIndex], margin: data[bestIndex] - secondBest, source };
-    });
+      return best ?? rejected();
+    }
   };
 
-  return { sources: [source], labels, predict, dispose: () => model.dispose() };
+  // Aquecimento: ver gestureClassifier.ts (shaders do WebGL compilados antes da câmera ligar).
+  try {
+    predict(Array.from({ length: SINGLE_WINDOW }, () => new Float32Array(TWO_HAND_FEATURE_SIZE)));
+  } catch {
+    // aquecimento é só otimização
+  }
+
+  return { sources: [source], labels: visibleLabels, predict, dispose: () => model.dispose() };
 }
 
 export async function hasDynamicClassifier(): Promise<boolean> {

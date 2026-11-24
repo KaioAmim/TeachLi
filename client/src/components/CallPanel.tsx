@@ -18,7 +18,7 @@ function RemoteVideo({ stream, label, muted }: { stream: MediaStream; label: str
  * o professor envia câmera e microfone e pode ouvir em voz alta as mensagens dos alunos.
  */
 export function CallPanel({ role, studentStream }: { role: "aluno" | "professor"; studentStream?: MediaStream | null }) {
-  const { messages, status, professor, students } = useClassroomConnection();
+  const { messages, status, professor, students, lessonEndedAt } = useClassroomConnection();
   const [ownStream, setOwnStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -50,6 +50,11 @@ export function CallPanel({ role, studentStream }: { role: "aluno" | "professor"
   const leave = () => { call.leave(); stopOwn(); };
 
   useEffect(() => { if (status !== "connected") stopOwn(); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (role !== "professor" || !lessonEndedAt) return;
+    call.leave();
+    stopOwn();
+  }, [lessonEndedAt, role]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { ownStream?.getTracks().forEach(track => track.stop()); }, [ownStream]);
 
   const toggle = (kind: "audio" | "video") => {

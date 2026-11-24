@@ -10,10 +10,20 @@ export type SignalHandler = (from: string, data: Record<string, unknown>) => voi
 type Status = 'idle' | 'connecting' | 'connected' | 'disconnected';
 interface ClassroomState {
   room: Room | null; status: Status; error: string; professor: boolean; students: number;
-  messages: RoomMessage[]; sendStatus: string; selfId: string; peers: Peer[];
+  messages: RoomMessage[]; lessonCaptions: RoomMessage[]; lessonEndedAt: number | null; sendStatus: string; selfId: string; peers: Peer[];
   autoSpeak: boolean; setAutoSpeak: (enabled: boolean) => void;
   sendSignal: (to: string, data: Record<string, unknown>) => boolean; onSignal: (handler: SignalHandler) => () => void;
-  join: (room: Room) => Promise<void>; leave: () => void; send: (text: string) => boolean;
+  join: (room: Room) => Promise<void>; leave: () => void; send: (text: string) => boolean; endLesson: () => boolean;
+}
+const MAX_LESSON_CAPTIONS = 500;
+const MAX_LESSON_CAPTION_CHARS = 40000;
+function keepLessonCaption(previous: RoomMessage[], message: RoomMessage) {
+  const next = [...previous, message];
+  let total = next.reduce((sum, item) => sum + item.text.length, 0);
+  while (next.length > MAX_LESSON_CAPTIONS || total > MAX_LESSON_CAPTION_CHARS) {
+    total -= next.shift()?.text.length ?? 0;
+  }
+  return next;
 }
 const Context = createContext<ClassroomState | null>(null);
 
@@ -25,6 +35,8 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const [professor, setProfessor] = useState(false);
   const [students, setStudents] = useState(0);
   const [messages, setMessages] = useState<RoomMessage[]>([]);
+  const [lessonCaptions, setLessonCaptions] = useState<RoomMessage[]>([]);
+  const [lessonEndedAt, setLessonEndedAt] = useState<number | null>(null);
   const [sendStatus, setSendStatus] = useState('');
   const [selfId, setSelfId] = useState('');
   const [peers, setPeers] = useState<Peer[]>([]);
@@ -37,7 +49,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const clearPending = () => { for (const timer of pending.current.values()) clearTimeout(timer); pending.current.clear(); };
   const leave = useCallback(() => {
     socket.current?.close(); socket.current = null; clearPending();
-    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false);
+    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setLessonCaptions([]); setLessonEndedAt(null); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false);
     window.speechSynthesis?.cancel();
   }, []);
   useEffect(() => {
@@ -85,9 +97,17 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
           typeof (caption as RoomMessage).createdAt === 'number',
         );
         setMessages(captions.slice(-500));
+        setLessonCaptions(captions);
       }
       else if (data.type === 'student.message' || data.type === 'caption.final') {
         setMessages(previous => [...previous, data].slice(-500));
+        if (data.type === 'caption.final' && data.role === 'professor' && typeof data.text === 'string') {
+          setLessonCaptions(previous => keepLessonCaption(previous, data));
+        }
+      } else if (data.type === 'lesson.ended' && Number.isFinite(data.endedAt)) {
+        setLessonEndedAt(data.endedAt);
+      } else if (data.type === 'lesson.closed') {
+        setSendStatus(typeof data.message === 'string' ? data.message : 'A aula foi finalizada.');
       } else if (data.type === 'message.ack' || data.type === 'message.rejected') {
         clearTimeout(pending.current.get(data.id)); pending.current.delete(data.id);
         setSendStatus(data.type === 'message.ack'
@@ -107,19 +127,25 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   }), [leave]);
   const send = useCallback((text: string) => {
     if (!text.trim() || text.length > 2000) { setSendStatus('Escreva uma mensagem de até 2.000 caracteres.'); return false; }
+    if (lessonEndedAt !== null) { setSendStatus('A aula foi finalizada pelo professor.'); return false; }
     if (status !== 'connected' || socket.current?.readyState !== WebSocket.OPEN) { setSendStatus('Entre novamente na sala para enviar.'); return false; }
     const id = crypto.randomUUID();
     socket.current.send(JSON.stringify({ type: role.current === 'aluno' ? 'student.message' : 'caption.final', id, text }));
     setSendStatus('Enviando…');
     pending.current.set(id, setTimeout(() => { pending.current.delete(id); setSendStatus('Sem confirmação de envio. Confira com o destinatário antes de reenviar.'); }, 8000));
     return true;
-  }, [status]);
+  }, [status, lessonEndedAt]);
+  const endLesson = useCallback(() => {
+    if (role.current !== 'professor' || status !== 'connected' || socket.current?.readyState !== WebSocket.OPEN || lessonEndedAt !== null) return false;
+    socket.current.send(JSON.stringify({ type: 'lesson.end' }));
+    return true;
+  }, [status, lessonEndedAt]);
   const sendSignal = useCallback((to: string, data: Record<string, unknown>) => {
     if (socket.current?.readyState !== WebSocket.OPEN) return false;
     socket.current.send(JSON.stringify({ type: 'signal', to, data })); return true;
   }, []);
   const onSignal = useCallback((handler: SignalHandler) => { signalHandlers.current.add(handler); return () => { signalHandlers.current.delete(handler); }; }, []);
-  return <Context.Provider value={{ room, status, error, professor, students, messages, sendStatus, selfId, peers, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ room, status, error, professor, students, messages, lessonCaptions, lessonEndedAt, sendStatus, selfId, peers, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send, endLesson }}>{children}</Context.Provider>;
 }
 export function useClassroomConnection() {
   const context = useContext(Context);
