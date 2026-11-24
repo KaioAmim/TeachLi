@@ -91,7 +91,7 @@ documentada. WebSocket conectado não comprova conexão de mídia.
 - [x] Letras estáveis entram sozinhas, sem espaços entre elas, com regra de repetição (soltar o gesto),
   rejeição de transições, pausa para correção, espaço, apagar e preservação ao reiniciar a câmera.
 - [x] Enter envia texto digitado; Shift+Enter insere linha; ouvir é ação separada e só quando solicitada.
-- [ ] Calibrar com alunos os tempos de pausa (palavra 1,5 s, envio 3,5 s) e a regra de repetição.
+- [ ] Calibrar com alunos os tempos de pausa (palavra 1,5 s, envio 5 s) e a regra de repetição.
 - [ ] Testes específicos de estabilidade, repetição intencional (LL, RR), transições e correções com câmera real.
 - [x] Painel do professor com autoria e botão de ouvir a mensagem.
 - [x] IDs, limite de texto, deduplicação e confirmação de encaminhamento.

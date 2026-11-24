@@ -146,14 +146,16 @@ participantes em logs de teste.
 3. **Sinais em movimento:** a detecção das mãos roda a ~30 quadros/s (o rosto, a ~10/s). Buffer de até 120
    quadros com as duas mãos, **limpo quando a mão fica 6 quadros fora do quadro** (para não misturar sinais vizinhos),
    consultado a cada 4 quadros. O modelo base testa janelas de 20, 30, 45, 60, 90 e 120 quadros (reamostradas para 40)
-   e fica com a mais confiante que não seja "nenhum sinal": confiança > 0,8, margem > 0,25 e 2 consultas seguidas iguais.
-   O modelo do usuário (sem essa classe) usa janela única de 60 quadros: confiança > 0,75, margem > 0,15 e 3 consultas.
+   e fica com a mais confiante que não seja "nenhum sinal": confiança > 0,9, margem > 0,4 e 3 consultas seguidas iguais.
+   O modelo do usuário (sem essa classe) usa janela única de 60 quadros: confiança > 0,85, margem > 0,25 e 4 consultas.
+   Os limiares priorizam precisão: é preferível deixar de emitir um sinal a enviar um errado. Foram endurecidos depois
+   da simulação da seção 5.4, então os números dessa tabela valem para os limiares anteriores (0,8/0,25/2 e 0,75/0,15/3).
    Uma consulta sem certeza zera a sequência de confirmação.
 4. **Composição automática:** a letra confirmada entra no texto sem espaço; sinais inteiros entram
    separados por espaço. A mesma letra só se repete depois de o gesto ser solto (≥ 8 quadros sem
    gesto confiável). Transições incertas e ausência de mão não acrescentam nada. Uma barra indica
    a confirmação e o aviso "Adicionado à mensagem" confirma a inclusão.
-5. **Pausa e envio:** após 1,5 s sem gestos entra um espaço (separa palavras); após 3,5 s a mensagem
+5. **Pausa e envio:** após 1,5 s sem gestos entra um espaço (separa palavras); após 5 s a mensagem
    segue ao professor e o campo é limpo. Só vale com câmera ligada, composição não pausada,
    professor conectado e campo de texto sem foco. O aluno pode pausar a composição, inserir espaço,
    apagar a última letra, editar livremente ou desligar o envio automático (o botão "Enviar ao
