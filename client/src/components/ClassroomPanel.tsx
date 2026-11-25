@@ -1,3 +1,4 @@
+import { speak } from '@/lib/voice';
 import { useState } from "react";
 import { logoutMicrosoftSession } from "@/lib/microsoftAuth";
 import { useLocation } from 'wouter';
@@ -30,10 +31,7 @@ export function ClassroomPanel({ compact = false, embedded = false, showAutoSpea
       {!messages.length && <div className="classroom-empty"><GraduationCap size={22} aria-hidden="true" /><p>Quando alguém enviar uma mensagem nesta sala, ela aparecerá aqui.</p></div>}
       {newestFirst.map(message => <article key={message.id} data-role={message.role}>
         <div className="classroom-message-meta"><strong>{message.author}</strong><span>{message.role === 'professor' ? 'Professor' : 'Aluno'}</span><time dateTime={new Date(message.createdAt).toISOString()}>{formatTime(message.createdAt)}</time></div><p>{message.text}</p>
-        {message.role === 'aluno' && <Button variant="ghost" onClick={() => {
-          if (!('speechSynthesis' in window)) return;
-          window.speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(message.text); utterance.lang = 'pt-BR'; window.speechSynthesis.speak(utterance);
-        }}><Volume2 size={16} aria-hidden="true" /> Ouvir mensagem</Button>}
+        {message.role === 'aluno' && <Button variant="ghost" onClick={() => { void speak(message.text); }}><Volume2 size={16} aria-hidden="true" /> Ouvir mensagem</Button>}
       </article>)}
       </div>
       {showAutoSpeak && <div className="classroom-inbox-footer"><label className="classroom-auto-speak"><input type="checkbox" role="switch" checked={autoSpeak} onChange={event => setAutoSpeak(event.target.checked)} /><Volume2 size={16} aria-hidden="true" /> Ler mensagens em voz alta</label></div>}

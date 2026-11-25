@@ -53,6 +53,8 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
 | `OLLAMA_KEEP_ALIVE` | Tempo para manter o modelo na memória após a geração; padrão `2m` |
 | `OLLAMA_TIMEOUT_SECONDS` | Tempo máximo de geração; padrão `600` |
 | `PYTHON_BIN` | Caminho do Python 3 usado pelo gerador; padrão `python3` |
+| `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` | Ativam a voz neural da leitura em voz alta (Azure Speech, rota `POST /tts`). Sem elas, o app usa a voz do navegador |
+| `AZURE_SPEECH_VOICE_FEMALE` / `AZURE_SPEECH_VOICE_MALE` | Vozes opcionais; padrão `pt-BR-FranciscaNeural` e `pt-BR-AntonioNeural` |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
 | `TEACHLI_TRUST_PROXY` | `1` apenas atrás de proxy que sobrescreve `X-Forwarded-For` (limites por IP real) |
 | `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |

@@ -1,3 +1,4 @@
+import { speak } from '@/lib/voice';
 import { useLocation } from "wouter";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { CLASSROOM_WS_URL } from '@/lib/classroomApi';
@@ -69,9 +70,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     for (const message of messages) {
       if (message.role !== 'aluno' || spokenMessageIds.current.has(message.id)) continue;
       spokenMessageIds.current.add(message.id);
-      const utterance = new SpeechSynthesisUtterance(message.text);
-      utterance.lang = 'pt-BR';
-      window.speechSynthesis.speak(utterance);
+      void speak(message.text, { interrupt: false });
     }
   }, [autoSpeak, messages]);
   useEffect(() => () => { socket.current?.close(); socket.current = null; clearPending(); }, []);

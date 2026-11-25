@@ -179,3 +179,10 @@
 .gesture-browser-note { display: flex; align-items: center; gap: 8px; color: #98a0c8; font-size: 11px; line-height: 1.5; }
 .gesture-browser-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: #f5822a; }
 @media (prefers-reduced-motion: reduce) { .gesture-browser-list > button { transition: none; } .gesture-browser-list > button:hover { transform: none; } }
+
+/* Preferência de voz */
+.voice-settings { display: grid; gap: 8px; border: 0; padding: 0; margin: 4px 0 0; }
+.voice-settings label { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1.5px solid #dfe6ef; border-radius: 12px; cursor: pointer; font-weight: 600; }
+.voice-settings label[data-checked="true"] { border-color: #f5822a; background: #ffb06e1f; }
+.voice-settings input { accent-color: #f5822a; width: 18px; height: 18px; }
+.voice-settings-note { margin: 4px 0 0; font-size: 0.88rem; color: #5b6676; }

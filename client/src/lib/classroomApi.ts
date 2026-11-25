@@ -26,3 +26,20 @@ export async function classroomRequest(path: string, token?: string, body?: unkn
   if (!response.ok) throw new ClassroomRequestError(typeof result?.error === 'string' ? result.error : 'Não foi possível conectar à sala. Tente novamente.', response.status);
   return result;
 }
+
+/** Pede um áudio ao servidor (ex.: voz neural). Devolve o MP3 como Blob. */
+export async function classroomAudio(path: string, token: string, body: unknown, timeoutMs = 10000): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(new URL(path, apiUrl), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch {
+    throw new Error('Não foi possível obter o áudio do servidor.');
+  }
+  if (!response.ok) throw new ClassroomRequestError('Áudio indisponível.', response.status);
+  return response.blob();
+}

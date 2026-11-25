@@ -1,3 +1,4 @@
+import { VoiceSettings } from "@/components/VoiceSettings";
 import { useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import {
@@ -11,6 +12,7 @@ import {
   CircleUserRound,
   DoorOpen,
   LogOut,
+  Volume2,
 } from "lucide-react";
 import { UniversityBrand, TeachLiBrand } from "@/components/Brand";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
@@ -26,6 +28,7 @@ export function AppHeader() {
   const { leave } = useClassroomConnection();
   const [accountError, setAccountError] = useState("");
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const home = location === "/";
   const changeRoom = () => { if (accountMenuRef.current) accountMenuRef.current.open = false; setAccountError(""); leave(); navigate("/salas"); };
   const logout = async () => {
@@ -80,11 +83,13 @@ export function AppHeader() {
           {!home && <details ref={accountMenuRef} className="account-menu">
             <summary><CircleUserRound size={17} aria-hidden="true" /><span>Conta</span></summary>
             <div className="account-menu-panel">
+              <button type="button" onClick={() => { if (accountMenuRef.current) accountMenuRef.current.open = false; setVoiceOpen(true); }}><Volume2 size={16} aria-hidden="true" /> Voz da leitura</button>
               <button type="button" onClick={changeRoom}><DoorOpen size={16} aria-hidden="true" /> Trocar sala</button>
               <button type="button" onClick={() => void logout()}><LogOut size={16} aria-hidden="true" /> Sair da conta</button>
               {accountError && <p role="alert">{accountError}</p>}
             </div>
           </details>}
+          <VoiceSettings open={voiceOpen} onOpenChange={setVoiceOpen} />
           <Link
             href="/"
             className="product-brand"

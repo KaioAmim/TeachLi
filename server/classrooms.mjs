@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { createMicrosoftVerifier } from './microsoft.mjs';
 import { generateLessonSummary, LessonSummaryError } from './lessonSummary.mjs';
+import { synthesizeSpeech, TtsError } from './tts.mjs';
 
 export const DEFAULT_ROOMS = [
   { id: 'laboratorio-a', name: 'Laboratório A' },
@@ -42,6 +43,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const sessions = new Map();
   const attempts = new Map();
   const summaryAttempts = new Map();
+  const ttsAttempts = new Map();
   let summaryDailyUsage = { date: pacificDate(now()), calls: 0 };
   const sockets = new Map();
   const MAX_ATTEMPT_ENTRIES = 10000, MAX_SOCKETS_PER_IP = 20;
@@ -122,7 +124,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
         if (typeof body?.idToken !== 'string' || !body.idToken) return json(req, res, 401, { error: 'Entre novamente pela Microsoft antes de acessar as salas.' });
         let identity;
         try { identity = await verifyIdentity(body.idToken); }
-        catch { log('login.failed'); return json(req, res, 401, { error: 'Não foi possível validar sua conta. Entre novamente com sua conta institucional Microsoft.' }); }
+        catch (error) { log('login.failed', { reason: String(error?.message ?? error).slice(0, 200) }); return json(req, res, 401, { error: 'Não foi possível validar sua conta. Entre novamente com sua conta institucional Microsoft.' }); }
         if (identity.role !== body.role) { log('login.role_denied', { user: who(identity.id) }); return json(req, res, 403, { error: 'Esta conta não tem permissão para o perfil escolhido.' }); }
         if (sessions.size >= 10000) return json(req, res, 503, { error: 'Serviço ocupado. Tente novamente.' });
         const token = opaque(); const expiresAt = Math.min(identity.exp * 1000, now() + 3600000);
@@ -137,6 +139,20 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
       const session = validSession(token);
       if (!session) return json(req, res, 401, { error: 'Sua sessão expirou. Entre novamente pela Microsoft.' });
       if (path === '/classrooms' && req.method === 'GET') return json(req, res, 200, { rooms: catalog });
+      if (path === '/tts' && req.method === 'POST') {
+        // Voz neural para a leitura em voz alta: limite por usuário para conter o custo do serviço.
+        const user = who(session.id);
+        let ttsLimit = ttsAttempts.get(user);
+        if (!ttsLimit || ttsLimit.until <= now()) {
+          if (!ttsLimit && ttsAttempts.size >= 10000) return json(req, res, 429, { error: 'Muitas solicitações. Tente novamente em instantes.' });
+          ttsLimit = { count: 0, until: now() + 600000 }; ttsAttempts.set(user, ttsLimit);
+        }
+        if (++ttsLimit.count > 200) return json(req, res, 429, { error: 'Limite de leituras atingido. Aguarde alguns minutos.' });
+        const body = await readJson(req, 4096);
+        const audio = await synthesizeSpeech(body?.text, body?.gender, { env });
+        res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'audio/mpeg', 'Content-Length': audio.length, 'Cache-Control': 'private, max-age=3600', 'Vary': 'Origin', 'Access-Control-Allow-Origin': req.headers.origin });
+        return res.end(audio);
+      }
       if (path === '/lessons/summary' && req.method === 'POST') {
         if (session.role !== 'aluno') return json(req, res, 403, { error: 'Somente alunos podem gerar o resumo da aula.' });
         const body = await readJson(req, 4096);
@@ -182,7 +198,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
       }
       return json(req, res, 404, { error: 'Rota não encontrada.' });
     } catch (error) {
-      if (error instanceof LessonSummaryError) return json(req, res, error.status, { error: error.message });
+      if (error instanceof LessonSummaryError || error instanceof TtsError) return json(req, res, error.status, { error: error.message });
       return json(req, res, 400, { error: 'Requisição inválida.' });
     }
   });

@@ -1,3 +1,4 @@
+import { speak } from "@/lib/voice";
 import { ClassroomPanel } from "@/components/ClassroomPanel";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
 import { RoomStatus, WorkspaceHeading } from "@/components/AppShell";
@@ -529,19 +530,7 @@ export default function StudentMode() {
   const speakText = (text: string) => {
     if (!text.trim()) return;
     
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-    
-    const voices = window.speechSynthesis.getVoices();
-    const ptBRVoice = voices.find(voice => voice.lang === 'pt-BR');
-    if (ptBRVoice) {
-      utterance.voice = ptBRVoice;
-    }
-    
-    window.speechSynthesis.speak(utterance);
+    void speak(text);
     toast.success(`Falando: "${text}"`);
   };
 
