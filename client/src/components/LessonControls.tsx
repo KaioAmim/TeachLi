@@ -84,7 +84,7 @@ export function StudentLessonSummary() {
         "/lessons/summary",
         roomSessionToken,
         { roomId: room.id, endedAt: lessonEndedAt },
-        610000,
+        185000,
       );
       setSummary(result as LessonSummary);
     } catch (error) {
@@ -110,7 +110,7 @@ export function StudentLessonSummary() {
       {summarizing ? <p className="lesson-summary-loading" role="status"><Sparkles className="lesson-summary-ai-icon" size={19} aria-hidden="true" /><span className="lesson-summary-loading-text">Gerando resumo</span><LoadingDots /></p>
         : summaryError ? <p className="lesson-summary-empty" role="status">{summaryError}</p>
           : summary ? <>
-            <p className="lesson-summary-note">Material didático gerado pelo Ollama configurado a partir da transcrição. Confira os tópicos e pontos com o conteúdo apresentado pelo professor.</p>
+            <p className="lesson-summary-note">Material didático gerado a partir da transcrição da aula. Confira os tópicos e pontos com o conteúdo apresentado pelo professor.</p>
             {summary.topic && <h3>{summary.topic}</h3>}
             {summary.summary && <p className="lesson-summary-overview">{summary.summary}</p>}
             {summary.topics.length > 0 && <>

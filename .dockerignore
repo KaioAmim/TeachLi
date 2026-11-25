@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.docker.example
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+deliverables
+output
+coverage
+*.log

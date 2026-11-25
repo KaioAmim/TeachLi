@@ -11,33 +11,74 @@ troca e saída da conta. Alunos podem aguardar a chegada do professor.
 
 ## Executar
 
-Use Node.js 22 ou posterior, Python 3 e Ollama em execução. O script usa apenas a
-biblioteca padrão do Python; não exige `pip install`. Se o executável não for `python3`,
-configure `PYTHON_BIN`. Instale as dependências de `client/` e
-`server/` com
-`npm ci` em cada pasta. Na raiz, execute:
+Use Node.js 22 ou posterior. Instale as dependências de `client/` e `server/` com
+`npm ci` em cada pasta. Para gerar resumos, configure o acesso ao LiteLLM Proxy:
+
+```env
+LITELLM_API_BASE=http://localhost:4000/v1
+LITELLM_API_KEY=sk-sua-chave-virtual
+LITELLM_MODEL=resumo-aula
+LITELLM_TIMEOUT_SECONDS=60
+```
+
+Antes de chamar a IA, o servidor seleciona palavras-chave e até 6.000 caracteres de
+trechos representativos, sem modelo ou serviço externo. A IA recebe esse recorte com
+contexto para escrever o material de estudo em palavras próprias. Mantenha a chave
+somente no servidor, nunca em `VITE_*` ou no código do cliente.
+
+O TeachLi faz uma requisição ao endpoint `/chat/completions` do gateway. O alias
+`LITELLM_MODEL` e a configuração do proxy determinam quais implantações podem atender
+à chamada. O exemplo [`litellm-config.example.yaml`](./litellm-config.example.yaml)
+mostra o balanceamento entre dois endpoints; substitua os modelos, URLs e variáveis
+de exemplo pelos valores dos provedores. O balanceamento escolhe uma implantação por
+tentativa: não divide um resumo entre modelos nem garante alternância A/B. Configure
+tentativas e alternativas no LiteLLM para falhas ou cotas esgotadas; cada provedor
+mantém seus próprios limites, custos e termos.
+
+Para iniciar cliente e servidor localmente, execute na raiz:
 
 ```bash
 npm run dev:classroom
 ```
 
-Em cada máquina que executará o modelo localmente, prepare o Ollama uma vez:
-
-```bash
-cd server
-npm run setup:ollama
-```
-
-O comando pergunta antes de instalar o Ollama pelo instalador oficial e antes de baixar
-o modelo Qwen 2.5 7B (aproximadamente 4,7 GB). Ele pode ser executado novamente sem
-baixar o que já estiver instalado. Em máquinas que usam um Ollama remoto, configure
-`OLLAMA_BASE_URL` e instale o modelo nessa máquina remota; rode o preparo local apenas
-para verificar a conexão.
-
 O comando inicia os dois serviços e encerra ambos com Ctrl+C. A página usa 5173;
 o servidor, 8787. Encerre instâncias anteriores para evitar conflito de portas.
 Também é possível executar `npm start` em `server/` e `npm run dev` em `client/`
 em terminais separados.
+
+## Docker Compose (desenvolvimento/POC)
+
+O Compose mantém três containers na mesma rede privada: `client` (Vite, porta 5173),
+`server` (Node, porta 8787) e `litellm` (proxy, porta 4000). O Node chama
+`http://litellm:4000/v1` pelo nome do serviço; a porta 4000 não é publicada no host.
+As chaves dos provedores são passadas somente ao container LiteLLM.
+
+1. Copie `.env.docker.example` para `.env.docker` na raiz e preencha os valores.
+2. Edite `server/litellm-config.example.yaml` para usar os IDs de modelo e os endpoints
+   reais dos provedores.
+3. Execute `docker compose --env-file .env.docker up --build` e abra
+   `http://localhost:5173`.
+
+Essa configuração é para desenvolvimento e prova de conceito: o cliente usa o Vite.
+Para produção, ainda é necessário servir o build estático, configurar domínio e HTTPS/WSS.
+Docker evita instalar Node e LiteLLM diretamente na máquina; o host continua precisando
+de Docker e acesso à internet para alcançar os provedores.
+
+## Prova de conceito do balanceamento
+
+`poc/run_litellm_load_balance_poc.py` inicia um LiteLLM temporário e dois endpoints
+OpenAI simulados em `localhost`, dispara 50 pedidos simultâneos e confirma que ambos
+receberam chamadas. Não usa contas ou modelos reais, portanto não consome cotas nem gera
+cobrança de provedor. Para repetir em Linux/macOS:
+
+```bash
+python3 -m venv /tmp/teachli-litellm-poc
+/tmp/teachli-litellm-poc/bin/pip install 'litellm[proxy]'
+PATH="/tmp/teachli-litellm-poc/bin:$PATH" python3 server/poc/run_litellm_load_balance_poc.py
+```
+
+O resultado demonstra concorrência e distribuição no gateway local. Não mede a capacidade,
+latência, disponibilidade ou cotas dos provedores reais.
 
 O servidor reutiliza automaticamente o **Client ID público que já está configurado
 no cliente**. Não exige novo registro do aplicativo ou Client Secret. Para um
@@ -48,11 +89,10 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
 | --- | --- |
 | `MICROSOFT_TENANT_ID` | **Obrigatório** (ou `VITE_MICROSOFT_TENANT_ID` em `client/.env*`): GUID do tenant da instituição |
 | `MICROSOFT_CLIENT_ID` | Sobrescreve o Client ID público lido de `client/.env*` |
-| `OLLAMA_BASE_URL` | Endereço do Ollama; padrão `http://127.0.0.1:11434` |
-| `OLLAMA_MODEL` | Modelo local; padrão `qwen2.5:7b` |
-| `OLLAMA_KEEP_ALIVE` | Tempo para manter o modelo na memória após a geração; padrão `2m` |
-| `OLLAMA_TIMEOUT_SECONDS` | Tempo máximo de geração; padrão `600` |
-| `PYTHON_BIN` | Caminho do Python 3 usado pelo gerador; padrão `python3` |
+| `LITELLM_API_BASE` | URL base do LiteLLM, por exemplo `http://localhost:4000/v1` |
+| `LITELLM_API_KEY` | Chave virtual usada pelo servidor TeachLi |
+| `LITELLM_MODEL` | Alias do modelo/grupo configurado no LiteLLM |
+| `LITELLM_TIMEOUT_SECONDS` | Tempo máximo de geração; padrão `60` |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
 | `TEACHLI_TRUST_PROXY` | `1` apenas atrás de proxy que sobrescreve `X-Forwarded-For` (limites por IP real) |
 | `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |
@@ -95,7 +135,7 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | --- | --- |
 | `POST /auth/microsoft/session` | Verifica ID token já obtido no login e emite sessão de comunicação |
 | `GET /classrooms` | Lista as cinco salas, com Bearer da sessão TeachLi |
-| `POST /lessons/summary` | Extrai tópicos da transcrição e gera material didático com Ollama local (apenas aluno autenticado) |
+| `POST /lessons/summary` | Reduz a transcrição e gera material didático via LiteLLM (apenas aluno autenticado) |
 | `POST /auth/logout` | Encerra sessão de comunicação; idempotente |
 | `WS /classroom?room=ID` | Subprotocolos `teachli-session` e token opaco; sem credencial na URL |
 | `joined`, `presence` | Sala confirmada e participantes conectados |
@@ -122,17 +162,18 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
 - Ao finalizar a aula, a sala fica encerrada em memória até todos saírem. As legendas
   ficam no servidor e no navegador do aluno durante a sessão (até 500 falas ou 40.000
   caracteres) e são apagadas quando todos saem. O primeiro aluno que pedir a síntese aciona
-  uma geração no Ollama; os demais compartilham o processamento em andamento e o resultado em
+  uma geração no LiteLLM; os demais compartilham o processamento em andamento e o resultado em
   memória. Há limite global de 100 chamadas de IA por dia no fuso do Pacífico e limite de
   cinco pedidos por aluno a cada dez minutos. Ao atingir o limite, o TeachLi interrompe novas
   gerações. O limite global fica em memória
-  e reinicia se o processo do servidor reiniciar. O script Python faz a extração de tópicos
-  sem modelo; depois envia apenas os tópicos e trechos relevantes ao Ollama configurado.
+  e reinicia se o processo do servidor reiniciar. O redutor local seleciona palavras-chave
+  e até 6.000 caracteres de trechos representativos; só esse recorte é enviado ao LiteLLM.
   O modelo sintetiza os tópicos e devolve resumo didático, pontos principais, exemplos presentes
   na aula e perguntas de revisão. Falhas antes de concluir não consomem o limite diário.
-- O modelo padrão `qwen2.5:7b` é executado pelo Ollama no ambiente indicado em
-  `OLLAMA_BASE_URL`; não há chave de API nem chamada a um provedor externo no fluxo padrão.
-  Se o Ollama estiver em outra máquina, o conteúdo da transcrição será enviado a essa máquina.
+- A URL, a chave virtual, o alias e os provedores disponíveis são definidos pelo operador.
+  LiteLLM pode balancear e tentar alternativas, mas cada provedor aplica seus próprios
+  limites, custos, termos e regras de retenção. O operador deve informar quais provedores
+  podem receber os trechos da transcrição.
 - Reconexão explícita; atualizar a página exige escolher a sala novamente.
 - Qualquer conta aceita pelo perfil pode escolher qualquer sala cadastrada;
   não há matrícula por turma ou disciplina.

@@ -13,7 +13,7 @@
   --brand-navy: #153566;
 }
 html {
-  scroll-behavior: auto;
+  scroll-behavior: smooth;
   scroll-padding-top: 24px;
 }
 body {

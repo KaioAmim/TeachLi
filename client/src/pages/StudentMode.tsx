@@ -4,7 +4,7 @@ import { RoomStatus, WorkspaceHeading } from "@/components/AppShell";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Video, VideoOff, Volume2, Waves, BookOpen, Plus, Trash2, ScanLine, ChevronDown, Lightbulb, MessageSquareText, Pause, Play, Space, Delete, Check } from "lucide-react";
+import { Video, VideoOff, Waves, BookOpen, Plus, Trash2, ScanLine, ChevronDown, Lightbulb, MessageSquareText, Pause, Play, Space, Delete, Check } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useHandLandmarker } from "@/hooks/useHandLandmarker";
@@ -526,25 +526,6 @@ export default function StudentMode() {
     toast.info('Câmera desligada. A mensagem foi mantida.');
   };
 
-  const speakText = (text: string) => {
-    if (!text.trim()) return;
-    
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-    
-    const voices = window.speechSynthesis.getVoices();
-    const ptBRVoice = voices.find(voice => voice.lang === 'pt-BR');
-    if (ptBRVoice) {
-      utterance.voice = ptBRVoice;
-    }
-    
-    window.speechSynthesis.speak(utterance);
-    toast.success(`Falando: "${text}"`);
-  };
-
   const clearDraft = () => {
     setRecognizedText("");
     setSpokenTypedText("");
@@ -588,14 +569,6 @@ export default function StudentMode() {
     if (!glossSuggestion) return;
     setRecognizedText(prev => `${prev}${prev && !prev.endsWith(" ") ? " " : ""}${glossSuggestion.portuguese} `);
     toast.success("Sugestão do VLibrasBD adicionada ao texto; revise antes de enviar.");
-  };
-
-  const speakMessage = () => {
-    if (!recognizedText.trim()) return;
-    // Mantido num elemento visível (abaixo) para que o VLibras, que traduz o
-    // texto presente na página, também consiga traduzir o que foi digitado.
-    setSpokenTypedText(recognizedText);
-    speakText(recognizedText);
   };
 
   const sendMessage = () => {
@@ -827,7 +800,6 @@ export default function StudentMode() {
               </Button>
               <Button variant="outline" onClick={addSpace} disabled={!recognizedText || /\s$/.test(recognizedText)}><Space size={17} aria-hidden="true" /> Espaço</Button>
               <Button variant="outline" onClick={removeLastChar} disabled={!recognizedText}><Delete size={17} aria-hidden="true" /> Apagar última</Button>
-              <Button variant="outline" onClick={speakMessage} disabled={!recognizedText.trim()}><Volume2 size={17} aria-hidden="true" /> Ouvir</Button>
               <Button variant="ghost" onClick={clearDraft} disabled={!recognizedText && !spokenTypedText}><Trash2 size={16} aria-hidden="true" /> Limpar</Button>
             </div>
             <label className="student-auto-send">

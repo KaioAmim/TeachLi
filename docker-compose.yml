@@ -1,0 +1,46 @@
+services:
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    environment:
+      VITE_SIGNALING_URL: "${VITE_SIGNALING_URL:-ws://localhost:8787}"
+      VITE_MICROSOFT_CLIENT_ID: "${MICROSOFT_CLIENT_ID:?Configure MICROSOFT_CLIENT_ID no .env.docker}"
+      VITE_MICROSOFT_TENANT_ID: "${MICROSOFT_TENANT_ID:?Configure MICROSOFT_TENANT_ID no .env.docker}"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      PORT: "8787"
+      MICROSOFT_CLIENT_ID: "${MICROSOFT_CLIENT_ID:?Configure MICROSOFT_CLIENT_ID no .env.docker}"
+      MICROSOFT_TENANT_ID: "${MICROSOFT_TENANT_ID:?Configure MICROSOFT_TENANT_ID no .env.docker}"
+      LITELLM_API_BASE: http://litellm:4000/v1
+      LITELLM_API_KEY: "${LITELLM_MASTER_KEY:?Configure LITELLM_MASTER_KEY no .env.docker}"
+      LITELLM_MODEL: resumo-aula
+      TEACHLI_CORS_ORIGIN: "${TEACHLI_CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173}"
+    ports:
+      - "8787:8787"
+    depends_on:
+      - litellm
+    restart: unless-stopped
+
+  litellm:
+    build:
+      context: .
+      dockerfile: Dockerfile.litellm
+    environment:
+      LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:?Configure LITELLM_MASTER_KEY no .env.docker}"
+      RESUMO_ENDPOINT_A_URL: "${RESUMO_ENDPOINT_A_URL:?Configure RESUMO_ENDPOINT_A_URL no .env.docker}"
+      RESUMO_ENDPOINT_A_KEY: "${RESUMO_ENDPOINT_A_KEY:?Configure RESUMO_ENDPOINT_A_KEY no .env.docker}"
+      RESUMO_ENDPOINT_B_URL: "${RESUMO_ENDPOINT_B_URL:?Configure RESUMO_ENDPOINT_B_URL no .env.docker}"
+      RESUMO_ENDPOINT_B_KEY: "${RESUMO_ENDPOINT_B_KEY:?Configure RESUMO_ENDPOINT_B_KEY no .env.docker}"
+    expose:
+      - "4000"
+    restart: unless-stopped

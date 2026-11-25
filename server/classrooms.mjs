@@ -160,11 +160,10 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
           const releaseSummaryCall = reserveSummaryCall();
           const pending = { endedAt, promise: null };
           pending.promise = generateLessonSummary(endedRoom.captions.map(caption => caption.text), {
-            model: env.OLLAMA_MODEL || 'qwen2.5:7b',
-            ollamaBaseUrl: env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
-            keepAlive: env.OLLAMA_KEEP_ALIVE || '2m',
-            timeoutSeconds: Number(env.OLLAMA_TIMEOUT_SECONDS || 600),
-            pythonBin: env.PYTHON_BIN || 'python3',
+            apiBase: env.LITELLM_API_BASE,
+            apiKey: env.LITELLM_API_KEY,
+            model: env.LITELLM_MODEL,
+            timeoutSeconds: Number(env.LITELLM_TIMEOUT_SECONDS || 60),
           }).then(result => {
             if (endedRoom.lessonEndedAt === endedAt) endedRoom.summaryCache = { endedAt, result };
             return result;
