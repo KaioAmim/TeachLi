@@ -9,6 +9,7 @@ build/
 
 # Environment variables
 .env
+.env.docker
 .env.local
 .env.development.local
 .env.test.local

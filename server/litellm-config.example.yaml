@@ -1,0 +1,24 @@
+# Exemplo para dois endpoints OpenAI-compatíveis.
+# Troque nomes de modelo e URLs pelos dados reais dos provedores escolhidos.
+# Credenciais devem existir somente no ambiente do processo LiteLLM.
+model_list:
+  - model_name: resumo-aula
+    litellm_params:
+      model: openai/model-gratuito-a
+      api_base: os.environ/RESUMO_ENDPOINT_A_URL
+      api_key: os.environ/RESUMO_ENDPOINT_A_KEY
+
+  - model_name: resumo-aula
+    litellm_params:
+      model: openai/model-gratuito-b
+      api_base: os.environ/RESUMO_ENDPOINT_B_URL
+      api_key: os.environ/RESUMO_ENDPOINT_B_KEY
+
+router_settings:
+  # Escolhe uma implantação do grupo em cada requisição.
+  routing_strategy: simple-shuffle
+  # Se a primeira implantação falhar, tenta outra do mesmo grupo.
+  num_retries: 1
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

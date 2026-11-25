@@ -203,7 +203,22 @@ export default function Home() {
               Sua voz, suas palavras, seu jeito de se expressar. Um espaço para
               aproximar alunos e professores.
             </p>
-            <a className="hero-cta" href="#acesso">
+            <a
+              className="hero-cta"
+              href="#acesso"
+              onClick={event => {
+                event.preventDefault();
+                const accessSection = document.getElementById("acesso");
+                if (!accessSection) return;
+                if (window.location.hash !== "#acesso") {
+                  window.history.pushState(null, "", "#acesso");
+                }
+                accessSection.scrollIntoView({
+                  behavior: reduced ? "auto" : "smooth",
+                  block: "start",
+                });
+              }}
+            >
               Quero participar <ArrowDown size={19} aria-hidden="true" />
             </a>
             <p className="hero-footnote">
