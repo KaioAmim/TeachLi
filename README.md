@@ -65,6 +65,24 @@ reutiliza o Client ID público já configurado no cliente; `server/.env` é opci
 O login Microsoft funciona independentemente do servidor de salas. Se este estiver
 indisponível, a seleção de sala permite tentar novamente sem refazer o login.
 
+## Executar com Docker
+
+Alternativa sem instalar Node: o Compose sobe `client` (Vite, porta 5173), `server` (porta 8787)
+e `litellm` (proxy interno, porta 4000, sem publicação no host). Exige Docker Desktop aberto.
+
+```bash
+cp .env.docker.example .env.docker   # no PowerShell: Copy-Item .env.docker.example .env.docker
+# preencha .env.docker (Client/Tenant ID da Microsoft, LITELLM_MASTER_KEY e chaves dos provedores)
+docker compose --env-file .env.docker up --build
+```
+
+Abra `http://localhost:5173`. O resumo de aula usa o alias `resumo-aula`, atendido em ordem por
+Groq, OpenRouter e Gemini (planos gratuitos); as chaves `GROQ_API_KEY`, `OPENROUTER_API_KEY` e
+`GEMINI_API_KEY` ficam só no container `litellm`. O endereço `Network` exibido pelo Vite
+(`172.x.x.x`) é interno ao Docker: acesse por `localhost`. Câmera e microfone só funcionam em
+`localhost` ou HTTPS, então outros dispositivos exigem HTTPS (ainda não configurado). Detalhes em
+[server/README.md](server/README.md#docker-compose-desenvolvimentopoc).
+
 ## Configurar login Microsoft
 
 Os botões **Aluno** e **Professor** direcionam para a Microsoft e retornam à

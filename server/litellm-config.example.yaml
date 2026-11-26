@@ -1,24 +1,55 @@
-# Exemplo para dois endpoints OpenAI-compatíveis.
-# Troque nomes de modelo e URLs pelos dados reais dos provedores escolhidos.
-# Credenciais devem existir somente no ambiente do processo LiteLLM.
-model_list:
-  - model_name: resumo-aula
-    litellm_params:
-      model: openai/model-gratuito-a
-      api_base: os.environ/RESUMO_ENDPOINT_A_URL
-      api_key: os.environ/RESUMO_ENDPOINT_A_KEY
+# LiteLLM do TeachLi: failover entre provedores com plano gratuito.
+#
+# O server do TeachLi sempre chama o alias "resumo-aula". Aqui se define quem atende.
+# Com "order", o LiteLLM usa a implantação de MENOR número e só passa para a próxima
+# quando a atual estoura a cota (429), dá erro ou está em cooldown.
+#
+# As chaves ficam SOMENTE no ambiente do container litellm (.env.docker).
+# IDs de modelo mudam com frequência: confira em /v1/models de cada provedor
+# (Groq: console.groq.com/docs/models, Gemini: AI Studio, OpenRouter: openrouter.ai/models?pricing=free).
 
+model_list:
+  # 1) Groq, modelo principal. Sem uso dos dados para treinamento. Cota diária limitada por tokens.
   - model_name: resumo-aula
     litellm_params:
-      model: openai/model-gratuito-b
-      api_base: os.environ/RESUMO_ENDPOINT_B_URL
-      api_key: os.environ/RESUMO_ENDPOINT_B_KEY
+      model: groq/openai/gpt-oss-120b
+      api_key: os.environ/GROQ_API_KEY
+      reasoning_effort: low        # modelo de raciocínio: evita gastar o max_tokens pensando
+      order: 1
+
+  # 2) Groq, segundo modelo. Mesma chave, mas a cota gratuita é por modelo.
+  - model_name: resumo-aula
+    litellm_params:
+      model: groq/openai/gpt-oss-20b
+      api_key: os.environ/GROQ_API_KEY
+      reasoning_effort: low
+      order: 2
+
+  # 3) OpenRouter, modelo gratuito (50 req/dia sem crédito comprado; 1.000/dia após US$ 10 de crédito).
+  - model_name: resumo-aula
+    litellm_params:
+      model: openrouter/google/gemma-4-26b-a4b-it:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      order: 3
+
+  # 4) Gemini (AI Studio), maior cota gratuita, mas no plano free o Google pode usar
+  #    prompts e respostas para melhorar seus produtos. Por isso fica por último.
+  - model_name: resumo-aula
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+      order: 4
 
 router_settings:
-  # Escolhe uma implantação do grupo em cada requisição.
   routing_strategy: simple-shuffle
-  # Se a primeira implantação falhar, tenta outra do mesmo grupo.
-  num_retries: 1
+  enable_pre_call_checks: true   # necessário para o "order" valer
+  num_retries: 3                 # nº de implantações - 1: uma requisição percorre toda a cadeia
+  allowed_fails: 1               # falhas antes de tirar a implantação de rotação
+  cooldown_time: 120             # segundos fora de rotação (cota estourada)
+  timeout: 45                    # abaixo do LITELLM_TIMEOUT_SECONDS=60 do server
+
+litellm_settings:
+  drop_params: true              # ignora parâmetros que um provedor não suporta
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

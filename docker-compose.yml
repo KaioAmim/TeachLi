@@ -37,10 +37,9 @@ services:
       dockerfile: Dockerfile.litellm
     environment:
       LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:?Configure LITELLM_MASTER_KEY no .env.docker}"
-      RESUMO_ENDPOINT_A_URL: "${RESUMO_ENDPOINT_A_URL:?Configure RESUMO_ENDPOINT_A_URL no .env.docker}"
-      RESUMO_ENDPOINT_A_KEY: "${RESUMO_ENDPOINT_A_KEY:?Configure RESUMO_ENDPOINT_A_KEY no .env.docker}"
-      RESUMO_ENDPOINT_B_URL: "${RESUMO_ENDPOINT_B_URL:?Configure RESUMO_ENDPOINT_B_URL no .env.docker}"
-      RESUMO_ENDPOINT_B_KEY: "${RESUMO_ENDPOINT_B_KEY:?Configure RESUMO_ENDPOINT_B_KEY no .env.docker}"
+      GROQ_API_KEY: "${GROQ_API_KEY:?Configure GROQ_API_KEY no .env.docker}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:?Configure OPENROUTER_API_KEY no .env.docker}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:?Configure GEMINI_API_KEY no .env.docker}"
     expose:
       - "4000"
     restart: unless-stopped
