@@ -29,8 +29,9 @@ somente no servidor, nunca em `VITE_*` ou no código do cliente.
 O TeachLi faz uma requisição ao endpoint `/chat/completions` do gateway. O alias
 `LITELLM_MODEL` e a configuração do proxy determinam quais implantações podem atender
 à chamada. O exemplo [`litellm-config.example.yaml`](./litellm-config.example.yaml)
-configura failover em ordem entre Groq, OpenRouter e Gemini (chaves `GROQ_API_KEY`,
-`OPENROUTER_API_KEY` e `GEMINI_API_KEY`); confira os IDs de modelo, que mudam com
+configura failover em ordem entre Groq, Cloudflare Workers AI, OpenRouter, Mistral e Gemini
+(chaves `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, `OPENROUTER_API_KEY`,
+`MINISTRAL_AI_API_KEY` e `GEMINI_API_KEY`); confira os IDs de modelo, que mudam com
 frequência. Com `order`, o LiteLLM usa a implantação de menor número e só passa à seguinte
 em caso de cota esgotada, erro ou cooldown. O balanceamento escolhe uma implantação por
 tentativa: não divide um resumo entre modelos nem garante alternância A/B. Configure
@@ -64,8 +65,9 @@ As chaves dos provedores são passadas somente ao container LiteLLM.
 Para saber qual provedor atendeu cada resumo, veja `docker compose --env-file .env.docker logs -f server`:
 cada geração registra `[resumo] provedor=... fallbacks=... tokens=... custo_estimado_usd=...`. O custo
 é uma estimativa pela tabela de preços do LiteLLM; a cobrança real depende do plano de cada chave
-(Groq e OpenRouter `:free` não cobram no plano gratuito; no Gemini, ativar faturamento no projeto da chave
-passa a cobrar por uso). Os logs não contêm o conteúdo da aula.
+(Groq e OpenRouter `:free` não cobram no plano gratuito; a Cloudflare tem limite rígido de 10.000 neurons/dia
+no plano Workers Free e só cobra se a conta assinar o Workers Paid; a Mistral só é gratuita no plano Experiment,
+e o plano Scale cobra por uso; no Gemini, ativar faturamento no projeto da chave passa a cobrar por uso). Os logs não contêm o conteúdo da aula.
 
 Essa configuração é para desenvolvimento e prova de conceito: o cliente usa o Vite.
 Para produção, ainda é necessário servir o build estático, configurar domínio e HTTPS/WSS.

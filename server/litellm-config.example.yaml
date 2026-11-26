@@ -25,25 +25,44 @@ model_list:
       reasoning_effort: low
       order: 2
 
-  # 3) OpenRouter, modelo gratuito (50 req/dia sem crédito comprado; 1.000/dia após US$ 10 de crédito).
+  # 3) Cloudflare Workers AI (endpoint compatível com OpenAI). Plano Workers Free: 10.000 neurons/dia
+  #    com limite rígido (acima disso a API recusa, sem cobrar). Só cobra se a conta assinar o
+  #    Workers Paid. A Cloudflare não treina modelos com o conteúdo enviado.
+  - model_name: resumo-aula
+    litellm_params:
+      model: openai/@cf/meta/llama-3.3-70b-instruct-fp8-fast
+      api_base: os.environ/CLOUDFLARE_AI_API_BASE
+      api_key: os.environ/CLOUDFLARE_API_TOKEN
+      order: 3
+
+  # 4) OpenRouter, modelo gratuito (50 req/dia sem crédito comprado; 1.000/dia após US$ 10 de crédito).
   - model_name: resumo-aula
     litellm_params:
       model: openrouter/google/gemma-4-26b-a4b-it:free
       api_key: os.environ/OPENROUTER_API_KEY
-      order: 3
+      order: 4
 
-  # 4) Gemini (AI Studio), maior cota gratuita, mas no plano free o Google pode usar
+  # 5) Mistral (La Plateforme). Só é gratuito no plano "Experiment" (sem cartão); nele a Mistral pode
+  #    usar prompts e respostas para treinar. Sem plano ativo a API responde 402 e o LiteLLM
+  #    segue para o próximo provedor. Não assine o plano Scale (pago por uso) se quer evitar cobrança.
+  - model_name: resumo-aula
+    litellm_params:
+      model: mistral/mistral-small-latest
+      api_key: os.environ/MINISTRAL_AI_API_KEY
+      order: 5
+
+  # 6) Gemini (AI Studio), maior cota gratuita, mas no plano free o Google pode usar
   #    prompts e respostas para melhorar seus produtos. Por isso fica por último.
   - model_name: resumo-aula
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY
-      order: 4
+      order: 6
 
 router_settings:
   routing_strategy: simple-shuffle
   enable_pre_call_checks: true   # necessário para o "order" valer
-  num_retries: 3                 # nº de implantações - 1: uma requisição percorre toda a cadeia
+  num_retries: 5                 # nº de implantações - 1: uma requisição percorre toda a cadeia
   allowed_fails: 1               # falhas antes de tirar a implantação de rotação
   cooldown_time: 120             # segundos fora de rotação (cota estourada)
   timeout: 45                    # abaixo do LITELLM_TIMEOUT_SECONDS=60 do server

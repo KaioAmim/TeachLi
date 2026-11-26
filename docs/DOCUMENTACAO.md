@@ -110,7 +110,8 @@ impede o login; logout encerra só a sessão do TeachLi.
 | `LITELLM_MODEL` | Alias configurado no gateway, por exemplo `resumo-aula` |
 | `LITELLM_TIMEOUT_SECONDS` | Tempo máximo da chamada; padrão `60` |
 | `LITELLM_MASTER_KEY` (Docker) | Chave do proxy LiteLLM; o servidor a recebe como `LITELLM_API_KEY` |
-| `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` (Docker) | Chaves dos provedores; só no container `litellm`, nunca no servidor Node nem no cliente |
+| `GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN`, `OPENROUTER_API_KEY`, `MINISTRAL_AI_API_KEY`, `GEMINI_API_KEY` (Docker) | Chaves dos provedores; só no container `litellm`, nunca no servidor Node nem no cliente |
+| `CLOUDFLARE_ACCOUNT_ID` (Docker) | ID da conta Cloudflare (32 hex), usado para montar a URL do Workers AI |
 
 Em publicação, sirva `client/dist/` por HTTPS com fallback para `index.html` e um processo
 Node com WSS; cadastre a origem na Microsoft e no servidor. `localhost` em outro
@@ -391,11 +392,12 @@ HTTPS/WSS, firewall, backups e monitoramento dependem da hospedagem.
 Os modelos de mão e de rosto são baixados de `storage.googleapis.com`; nenhuma imagem é enviada a esse serviço.
 Não há banco de dados nem upload de arquivos. Ao acionar **Resumir aula**, o servidor reduz a
 transcrição localmente a palavras-chave e até 6.000 caracteres de trechos representativos. Esse
-recorte segue ao LiteLLM, que tenta em ordem Groq (`gpt-oss-120b`, depois `gpt-oss-20b`), OpenRouter
-(modelo gratuito) e Gemini (`server/litellm-config.example.yaml`); só passa ao seguinte em caso de cota
-esgotada, erro ou cooldown. No plano gratuito do Gemini, o Google pode usar prompts e respostas para
-melhorar seus produtos, e modelos gratuitos do OpenRouter podem ter retenção própria do provedor
-upstream; por isso o Gemini fica por último. Uma geração e seu resultado são compartilhados por todos os alunos daquela sessão e
+recorte segue ao LiteLLM, que tenta em ordem Groq (`gpt-oss-120b`, depois `gpt-oss-20b`), Cloudflare
+Workers AI (`llama-3.3-70b`), OpenRouter (modelo gratuito), Mistral (`mistral-small`) e Gemini
+(`server/litellm-config.example.yaml`); só passa ao seguinte em caso de cota esgotada, erro ou cooldown.
+No plano gratuito, o Google (Gemini) e a Mistral (plano Experiment) podem usar prompts e respostas para
+melhorar ou treinar seus modelos, e modelos gratuitos do OpenRouter podem ter retenção própria do
+provedor upstream; por isso Mistral e Gemini ficam por último. Uma geração e seu resultado são compartilhados por todos os alunos daquela sessão e
 mantidos apenas em memória pelo TeachLi até todos saírem da sala. O limite adicional do TeachLi é
 de 100 gerações por dia no fuso do Pacífico; ele reinicia se o servidor reiniciar. O operador deve
 informar quais provedores recebem os trechos e verificar suas regras de retenção e uso dos dados.
