@@ -29,8 +29,10 @@ somente no servidor, nunca em `VITE_*` ou no código do cliente.
 O TeachLi faz uma requisição ao endpoint `/chat/completions` do gateway. O alias
 `LITELLM_MODEL` e a configuração do proxy determinam quais implantações podem atender
 à chamada. O exemplo [`litellm-config.example.yaml`](./litellm-config.example.yaml)
-mostra o balanceamento entre dois endpoints; substitua os modelos, URLs e variáveis
-de exemplo pelos valores dos provedores. O balanceamento escolhe uma implantação por
+configura failover em ordem entre Groq, OpenRouter e Gemini (chaves `GROQ_API_KEY`,
+`OPENROUTER_API_KEY` e `GEMINI_API_KEY`); confira os IDs de modelo, que mudam com
+frequência. Com `order`, o LiteLLM usa a implantação de menor número e só passa à seguinte
+em caso de cota esgotada, erro ou cooldown. O balanceamento escolhe uma implantação por
 tentativa: não divide um resumo entre modelos nem garante alternância A/B. Configure
 tentativas e alternativas no LiteLLM para falhas ou cotas esgotadas; cada provedor
 mantém seus próprios limites, custos e termos.
@@ -54,10 +56,16 @@ O Compose mantém três containers na mesma rede privada: `client` (Vite, porta 
 As chaves dos provedores são passadas somente ao container LiteLLM.
 
 1. Copie `.env.docker.example` para `.env.docker` na raiz e preencha os valores.
-2. Edite `server/litellm-config.example.yaml` para usar os IDs de modelo e os endpoints
-   reais dos provedores.
+2. Confira em `server/litellm-config.example.yaml` se os IDs de modelo ainda existem nos
+   provedores.
 3. Execute `docker compose --env-file .env.docker up --build` e abra
    `http://localhost:5173`.
+
+Para saber qual provedor atendeu cada resumo, veja `docker compose --env-file .env.docker logs -f server`:
+cada geração registra `[resumo] provedor=... fallbacks=... tokens=... custo_estimado_usd=...`. O custo
+é uma estimativa pela tabela de preços do LiteLLM; a cobrança real depende do plano de cada chave
+(Groq e OpenRouter `:free` não cobram no plano gratuito; no Gemini, ativar faturamento no projeto da chave
+passa a cobrar por uso). Os logs não contêm o conteúdo da aula.
 
 Essa configuração é para desenvolvimento e prova de conceito: o cliente usa o Vite.
 Para produção, ainda é necessário servir o build estático, configurar domínio e HTTPS/WSS.
