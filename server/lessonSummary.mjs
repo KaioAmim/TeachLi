@@ -116,6 +116,9 @@ export async function generateLessonSummary(captions, {
     if (response.status === 429) throw new LessonSummaryError('Os modelos disponíveis estão temporariamente no limite. Tente novamente em instantes.', 503);
     throw new LessonSummaryError('O gateway de resumo não conseguiu processar esta aula. Tente novamente.', response.status >= 500 ? 502 : 503);
   }
+  // Diagnóstico: qual provedor atendeu e o custo estimado (tabela de preços do LiteLLM, não cobrança real).
+  const header = name => response.headers?.get?.(name) ?? '?';
+  console.log(`[resumo] provedor=${header('x-litellm-model-name')} fallbacks=${header('x-litellm-attempted-fallbacks')} tokens=${payload?.usage?.total_tokens ?? '?'} custo_estimado_usd=${header('x-litellm-response-cost')}`);
   const content = payload?.choices?.[0]?.message?.content;
   return validateSummary(parseModelJson(content));
 }
