@@ -77,8 +77,11 @@ docker compose --env-file .env.docker up --build
 ```
 
 Abra `http://localhost:5173`. O resumo de aula usa o alias `resumo-aula`, atendido em ordem por
-Groq, OpenRouter e Gemini (planos gratuitos); as chaves `GROQ_API_KEY`, `OPENROUTER_API_KEY` e
-`GEMINI_API_KEY` ficam só no container `litellm`. O endereço `Network` exibido pelo Vite
+Groq, Cloudflare Workers AI, OpenRouter, Mistral e Gemini (planos gratuitos); as chaves
+`GROQ_API_KEY`, `CLOUDFLARE_API_TOKEN` (com `CLOUDFLARE_ACCOUNT_ID`), `OPENROUTER_API_KEY`,
+`MINISTRAL_AI_API_KEY` e `GEMINI_API_KEY` ficam só no container `litellm`. A Mistral só atende
+com o plano gratuito "Experiment" ativo no console; sem ele a API responde 402 e o LiteLLM segue
+para o próximo provedor. O endereço `Network` exibido pelo Vite
 (`172.x.x.x`) é interno ao Docker: acesse por `localhost`. Câmera e microfone só funcionam em
 `localhost` ou HTTPS, então outros dispositivos exigem HTTPS (ainda não configurado). Detalhes em
 [server/README.md](server/README.md#docker-compose-desenvolvimentopoc).

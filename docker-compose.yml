@@ -40,6 +40,9 @@ services:
       GROQ_API_KEY: "${GROQ_API_KEY:?Configure GROQ_API_KEY no .env.docker}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:?Configure OPENROUTER_API_KEY no .env.docker}"
       GEMINI_API_KEY: "${GEMINI_API_KEY:?Configure GEMINI_API_KEY no .env.docker}"
+      CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN:?Configure CLOUDFLARE_API_TOKEN no .env.docker}"
+      CLOUDFLARE_AI_API_BASE: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID:?Configure CLOUDFLARE_ACCOUNT_ID no .env.docker}/ai/v1"
+      MINISTRAL_AI_API_KEY: "${MINISTRAL_AI_API_KEY:?Configure MINISTRAL_AI_API_KEY no .env.docker}"
     expose:
       - "4000"
     restart: unless-stopped
