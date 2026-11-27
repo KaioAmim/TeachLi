@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { UniversityBrand, TeachLiBrand } from "@/components/Brand";
 import { useClassroomConnection } from "@/contexts/ClassroomContext";
-import { logoutMicrosoftSession } from "@/lib/microsoftAuth";
+import { loadMicrosoftSession, logoutMicrosoftSession } from "@/lib/microsoftAuth";
 
 export function RoomStatus() {
   const { room, status } = useClassroomConnection();
@@ -24,6 +24,9 @@ export function RoomStatus() {
 export function AppHeader() {
   const [location, navigate] = useLocation();
   const { leave } = useClassroomConnection();
+  const session = loadMicrosoftSession();
+  const profileLabel = session?.role === "professor" ? "Professor" : "Aluno";
+  const profilePath = session?.role === "professor" ? "/professor" : "/aluno";
   const [accountError, setAccountError] = useState("");
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
   const home = location === "/";
@@ -58,13 +61,13 @@ export function AppHeader() {
               </>
             ) : (
               <>
-                <Link href="/" aria-label="Início">
+                <Link href={session ? "/salas" : "/"} aria-label="Início">
                   <Home size={17} aria-hidden="true" />
                   <span>Início</span>
                 </Link>
-                <Link href="/aluno" aria-current={location === "/aluno" ? "page" : undefined}>
+                <Link href={profilePath} aria-current={location === profilePath ? "page" : undefined}>
                   <MessageSquare size={17} aria-hidden="true" />
-                  Aluno
+                  {profileLabel}
                 </Link>
                 <Link href="/aluno/treinar" aria-current={location === "/aluno/treinar" ? "page" : undefined}>
                   <BookOpen size={17} aria-hidden="true" />
