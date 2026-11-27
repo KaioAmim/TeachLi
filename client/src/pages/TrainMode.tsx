@@ -1,4 +1,5 @@
 import { WorkspaceHeading } from "@/components/AppShell";
+import { loadMicrosoftSession } from "@/lib/microsoftAuth";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -50,6 +51,7 @@ type SignKind = "static" | "dynamic";
 const MIN_CLIP_FRAMES = 8;
 
 export default function TrainMode() {
+  const backTo = loadMicrosoftSession()?.role === "professor" ? "/professor" : "/aluno";
   const [kind, setKind] = useState<SignKind>("static");
 
   // --- dataset estático (1 quadro por amostra) ---
@@ -320,7 +322,7 @@ export default function TrainMode() {
 
   return (
     <div className="workspace-page">
-      <WorkspaceHeading title="Cada gesto, um novo aprendizado." description="Capture amostras e personalize o reconhecimento no seu navegador." backTo="/aluno" />
+      <WorkspaceHeading title="Cada gesto, um novo aprendizado." description="Capture amostras e personalize o reconhecimento no seu navegador." backTo={backTo} />
 
       <p className="container" role="note" style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
         Privacidade: as amostras de gestos (pontos das suas mãos) e o modelo treinado ficam
