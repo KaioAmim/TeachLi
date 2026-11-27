@@ -7,7 +7,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   ArrowDown,
   ArrowUpRight,
@@ -25,7 +25,7 @@ import {
 import { useMotionPreference } from "@/components/MotionPreference";
 import { TeachLiBrand } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
-import { MICROSOFT_ROLE_DOMAINS } from "@/lib/microsoftAuth";
+import { loadMicrosoftSession, MICROSOFT_ROLE_DOMAINS } from "@/lib/microsoftAuth";
 import { useMicrosoftSignIn } from "@/hooks/useMicrosoftSignIn";
 
 const features = [
@@ -126,6 +126,8 @@ function HelpTopic({
 
 export default function Home() {
   const pageRef = useRef<HTMLElement>(null);
+  const [, navigate] = useLocation();
+  const microsoftSession = loadMicrosoftSession();
   const { reduced, toggleMotion } = useMotionPreference();
   const [openQuestion, setOpenQuestion] = useState<number | null>(null);
   const [selectedFeature, setSelectedFeature] = useState(0);
@@ -185,6 +187,13 @@ export default function Home() {
   const { pendingRole, signIn } = useMicrosoftSignIn();
   const feature = features[featureIndex];
   const ResultIcon = feature.resultIcon;
+  const access = (role: "aluno" | "professor") => {
+    if (microsoftSession?.role === role) {
+      navigate("/salas");
+      return;
+    }
+    void signIn(role);
+  };
 
   return (
     <main ref={pageRef} id="conteudo" className="home-page" tabIndex={-1}>
@@ -316,8 +325,9 @@ export default function Home() {
               <h2 id="access-title" tabIndex={-1}>Qual é o seu espaço?</h2>
             </div>
             <p>
-              Escolha seu perfil e entre com
-              <br /> sua conta institucional Microsoft.
+              {microsoftSession
+                ? `Você já está conectado como ${microsoftSession.profile.name}. Continue para escolher uma sala sem refazer o login.`
+                : <>Escolha seu perfil e entre com<br /> sua conta institucional Microsoft.</>}
             </p>
           </div>
           <article
@@ -350,7 +360,7 @@ export default function Home() {
             <Button
               className="role-button"
               disabled={pendingRole !== null}
-              onClick={() => void signIn("aluno")}
+              onClick={() => access("aluno")}
             >
               {pendingRole === "aluno" ? (
                 <>
@@ -359,7 +369,7 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  Entrar como aluno{" "}
+                  {microsoftSession?.role === "aluno" ? "Continuar para as salas" : "Entrar como aluno"}{" "}
                   <ArrowUpRight size={18} aria-hidden="true" />
                 </>
               )}
@@ -399,7 +409,7 @@ export default function Home() {
             <Button
               className="role-button"
               disabled={pendingRole !== null}
-              onClick={() => void signIn("professor")}
+              onClick={() => access("professor")}
             >
               {pendingRole === "professor" ? (
                 <>
@@ -408,7 +418,7 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  Entrar como professor{" "}
+                  {microsoftSession?.role === "professor" ? "Continuar para as salas" : "Entrar como professor"}{" "}
                   <ArrowUpRight size={18} aria-hidden="true" />
                 </>
               )}
