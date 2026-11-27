@@ -57,7 +57,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     window.speechSynthesis?.cancel();
   }, []);
   useEffect(() => {
-    if (!["/aluno", "/professor", "/aluno/treinar", "/ead"].includes(location)) leave();
+    if (!["/aluno", "/professor", "/aluno/treinar", "/professor/treinar", "/ead"].includes(location)) leave();
   }, [location, leave]);
   useEffect(() => {
     if (!autoSpeak) {

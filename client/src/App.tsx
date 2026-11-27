@@ -42,6 +42,14 @@ function TrainRoute() {
   );
 }
 
+function ProfessorTrainRoute() {
+  return loadMicrosoftSession("professor") ? (
+    <TrainMode />
+  ) : (
+    <LoginRequired role="professor" />
+  );
+}
+
 function EadRoute() {
   const session = loadMicrosoftSession();
   const { room } = useClassroomConnection();
@@ -63,6 +71,7 @@ export default function App() {
         <Route path="/aluno" component={StudentRoute} />
         <Route path="/aluno/treinar" component={TrainRoute} />
         <Route path="/professor" component={ProfessorRoute} />
+        <Route path="/professor/treinar" component={ProfessorTrainRoute} />
         <Route path="/ead" component={EadRoute} />
         <Route>
           <main id="conteudo" tabIndex={-1} className="auth-page">
