@@ -202,7 +202,7 @@ export default function VLibrasWidget() {
             disabled={!isReady}
           >
             <Languages size={18} aria-hidden="true" />
-            <span>{loadError ? "VLibras indisponível" : isReady ? (isOpen ? "Fechar VLibras" : "Abrir VLibras") : "Carregando Libras"}</span>
+            <span>{loadError ? "VLibras indisponível" : isReady ? "VLibras" : "Carregando Libras"}</span>
             <i aria-hidden="true" />
             <span className="teachli-vlibras-state">{isOpen ? "Ativo" : "Inativo"}</span>
           </button>
