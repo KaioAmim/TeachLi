@@ -32,6 +32,7 @@ alunos da mesma sala.
 | Reconhecimento por pose | Modelo experimental A–Z ou modelo pessoal | H/J/K/X/Z sem validação do movimento completo; sem Ç |
 | Reconhecimento dinâmico | Modelo base de 178 sinais em movimento (Libras-EQT-UECE) e treino Conv1D local | Acurácia medida só em clipes isolados; sem classe "nenhum sinal"; licença do dataset a confirmar |
 | Expressões faciais | Pergunta, dúvida, surpresa, negação e certeza (sobrancelhas e movimento da cabeça) | Limiares não calibrados com sinalizantes; só complementam a mensagem |
+| Materiais da aula | Professor compartilha links `http(s)` e arquivos (até 10 MB cada) com a própria sala; quem entra depois recebe a lista | Só em memória: apagados quando todos saem ou o servidor reinicia; sem antivírus nos arquivos |
 | VLibras | Widget externo para texto selecionado na página | Sem contrato próprio de fila ou controle automático do avatar |
 | Chamada de vídeo e áudio | Aluno e professor na mesma sala, WebRTC ponto a ponto; professor envia câmera e microfone, aluno só a câmera | Experimental; só STUN público; sem gravação; não validado com contas e dispositivos reais |
 | Histórico de aulas | Não implementado | Backend e tela de histórico foram removidos |
@@ -126,7 +127,8 @@ as fotos originais do alfabeto foram removidas do repositório): revise esses ar
 
 O protocolo completo está em [server/README.md](../server/README.md). Eventos principais:
 `joined`, `presence`, `student.message`, `caption.final`, `message.ack`, `message.rejected`
-(e `signal` para a chamada). Autoria e destino são definidos pelo servidor.
+(e `signal` para a chamada), além de `material.history`, `material.added` e `material.removed` para os
+materiais da aula. Autoria e destino são definidos pelo servidor.
 
 - Aluno pode entrar antes do professor; não há envio pendente para entrega futura.
 - Um professor por sala e uma conexão por sessão; trocar de sala remove a associação anterior.
@@ -389,10 +391,12 @@ HTTPS/WSS, firewall, backups e monitoramento dependem da hospedagem.
 | Áudio do professor | Reconhecimento de fala do navegador | Legendas | Não gravado pelo TeachLi; o navegador pode usar serviço próprio **[revisão jurídica]** | Fornecedor do navegador |
 | Imagem da câmera, pontos das mãos e do rosto (expressões) | Processados no navegador; amostras de treino em `localStorage`/IndexedDB | Reconhecer gestos e expressões | Até o aluno clicar em **Limpar** ou limpar o navegador | Não enviados ao servidor |
 | Vídeo e áudio da chamada | Em trânsito, ponto a ponto (WebRTC), só após **Entrar na chamada** | Comunicação em aula | Nenhuma além da chamada | Aluno/professor da sala; STUN do Google vê o IP; TURN, se houver **[revisão jurídica]** |
+| Materiais da aula (links e arquivos do professor) | Memória do servidor, na sala | Material de apoio da aula | Apagados quando todos saem da sala, quando o professor remove ou quando o servidor reinicia | Participantes da sala |
 | Eventos de auditoria | Saída padrão do processo | Segurança | A definir (sugestão: 90 dias) | Operador de infraestrutura |
 
 Os modelos de mão e de rosto são baixados de `storage.googleapis.com`; nenhuma imagem é enviada a esse serviço.
-Não há banco de dados nem upload de arquivos. Ao acionar **Resumir aula**, o servidor reduz a
+Não há banco de dados. O professor pode enviar arquivos de apoio à sala (seção 4); ficam só em memória e são
+entregues como download aos participantes da mesma sala. Ao acionar **Resumir aula**, o servidor reduz a
 transcrição localmente a palavras-chave e até 6.000 caracteres de trechos representativos. Esse
 recorte segue ao LiteLLM, que tenta em ordem Groq (`gpt-oss-120b`, depois `gpt-oss-20b`), Cloudflare
 Workers AI (`llama-3.3-70b`), OpenRouter (modelo gratuito), Mistral (`mistral-small`) e Gemini
@@ -428,6 +432,7 @@ custo estimado (tabela de preços do LiteLLM, não cobrança real); o conteúdo 
 | Entrar com conta institucional | Sim (`@alunos…`) | Sim (`@unibarretos…`) | Não |
 | Listar e entrar em sala | Sim | Sim (um professor por sala) | Não |
 | Enviar `student.message` / `caption.final` | Sim / Não | Não / Sim | Não |
+| Compartilhar/remover materiais da aula | Não (só baixar e abrir) | Sim | Não |
 | Treinar e apagar gestos locais | Sim | — | Não |
 
 Não existem papéis de gestor/administrador; o papel de professor vem do domínio. Retenção: sessão no máximo

@@ -1,6 +1,6 @@
 import { useLocation } from "wouter";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { CLASSROOM_WS_URL } from '@/lib/classroomApi';
+import { CLASSROOM_WS_URL, type LessonMaterial } from '@/lib/classroomApi';
 import { loadMicrosoftSession } from '@/lib/microsoftAuth';
 
 export interface Room { id: string; name: string }
@@ -11,6 +11,7 @@ type Status = 'idle' | 'connecting' | 'connected' | 'disconnected';
 interface ClassroomState {
   room: Room | null; status: Status; error: string; professor: boolean; students: number;
   messages: RoomMessage[]; sentMessages: RoomMessage[]; lessonCaptions: RoomMessage[]; lessonEndedAt: number | null; roomSessionToken: string | null; sendStatus: string; selfId: string; peers: Peer[];
+  materials: LessonMaterial[]; materialStatus: string; shareLink: (title: string, url: string) => boolean; removeMaterial: (id: string) => boolean;
   autoSpeak: boolean; setAutoSpeak: (enabled: boolean) => void;
   sendSignal: (to: string, data: Record<string, unknown>) => boolean; onSignal: (handler: SignalHandler) => () => void;
   join: (room: Room) => Promise<void>; leave: () => void; send: (text: string) => boolean; endLesson: () => boolean;
@@ -26,6 +27,13 @@ function keepLessonCaption(previous: RoomMessage[], message: RoomMessage) {
   }
   return next;
 }
+const isMaterial = (value: unknown): value is LessonMaterial => {
+  const material = value as LessonMaterial;
+  return !!material && typeof material === 'object' && typeof material.id === 'string' && typeof material.title === 'string' &&
+    typeof material.author === 'string' && typeof material.createdAt === 'number' &&
+    (material.kind === 'file' ? typeof material.name === 'string' && typeof material.size === 'number'
+      : material.kind === 'link' && typeof material.url === 'string' && /^https?:\/\//i.test(material.url));
+};
 const Context = createContext<ClassroomState | null>(null);
 
 export function ClassroomProvider({ children }: { children: ReactNode }) {
@@ -45,6 +53,8 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const [selfId, setSelfId] = useState('');
   const [peers, setPeers] = useState<Peer[]>([]);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [materials, setMaterials] = useState<LessonMaterial[]>([]);
+  const [materialStatus, setMaterialStatus] = useState('');
   const spokenMessageIds = useRef(new Set<string>());
   const signalHandlers = useRef(new Set<SignalHandler>());
   const socket = useRef<WebSocket | null>(null);
@@ -53,7 +63,7 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const clearPending = () => { for (const timer of pending.current.values()) clearTimeout(timer); pending.current.clear(); };
   const leave = useCallback(() => {
     socket.current?.close(); socket.current = null; clearPending();
-    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSentMessages([]); setLessonCaptions([]); setLessonEndedAt(null); setRoomSessionToken(null); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false);
+    setRoom(null); setStatus('idle'); setError(''); setMessages([]); setSentMessages([]); setLessonCaptions([]); setLessonEndedAt(null); setRoomSessionToken(null); setSendStatus(''); setProfessor(false); setStudents(0); setSelfId(''); setPeers([]); setAutoSpeak(false); setMaterials([]); setMaterialStatus('');
     window.speechSynthesis?.cancel();
   }, []);
   useEffect(() => {
@@ -103,6 +113,15 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
         setMessages(captions.slice(-500));
         setLessonCaptions(captions);
       }
+      else if (data.type === 'material.history' && Array.isArray(data.materials)) setMaterials(data.materials.filter(isMaterial));
+      else if (data.type === 'material.added' && isMaterial(data.material)) {
+        const material = data.material;
+        setMaterials(previous => previous.some(item => item.id === material.id) ? previous : [...previous, material]);
+        setMaterialStatus(`Material compartilhado: ${material.title}`);
+      } else if (data.type === 'material.removed' && typeof data.id === 'string') {
+        setMaterials(previous => previous.filter(item => item.id !== data.id));
+      }
+      else if (data.type === 'material.rejected') setMaterialStatus(typeof data.message === 'string' ? data.message : 'Não foi possível compartilhar o material.');
       else if (data.type === 'student.message' || data.type === 'caption.final') {
         setMessages(previous => [...previous, data].slice(-500));
         if (data.type === 'caption.final' && data.role === 'professor' && typeof data.text === 'string') {
@@ -145,12 +164,24 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     socket.current.send(JSON.stringify({ type: 'lesson.end' }));
     return true;
   }, [status, lessonEndedAt]);
+  const shareLink = useCallback((title: string, url: string) => {
+    if (role.current !== 'professor' || status !== 'connected' || socket.current?.readyState !== WebSocket.OPEN) { setMaterialStatus('Entre novamente na sala para compartilhar.'); return false; }
+    if (lessonEndedAt !== null) { setMaterialStatus('A aula foi finalizada. Não é possível compartilhar novos materiais.'); return false; }
+    socket.current.send(JSON.stringify({ type: 'material.link', title, url }));
+    setMaterialStatus('Compartilhando link…');
+    return true;
+  }, [status, lessonEndedAt]);
+  const removeMaterial = useCallback((id: string) => {
+    if (role.current !== 'professor' || socket.current?.readyState !== WebSocket.OPEN) return false;
+    socket.current.send(JSON.stringify({ type: 'material.remove', id }));
+    return true;
+  }, []);
   const sendSignal = useCallback((to: string, data: Record<string, unknown>) => {
     if (socket.current?.readyState !== WebSocket.OPEN) return false;
     socket.current.send(JSON.stringify({ type: 'signal', to, data })); return true;
   }, []);
   const onSignal = useCallback((handler: SignalHandler) => { signalHandlers.current.add(handler); return () => { signalHandlers.current.delete(handler); }; }, []);
-  return <Context.Provider value={{ room, status, error, professor, students, messages, sentMessages, lessonCaptions, lessonEndedAt, roomSessionToken, sendStatus, selfId, peers, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send, endLesson }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ room, status, error, professor, students, messages, sentMessages, lessonCaptions, lessonEndedAt, roomSessionToken, sendStatus, selfId, peers, materials, materialStatus, shareLink, removeMaterial, autoSpeak, setAutoSpeak, sendSignal, onSignal, join, leave, send, endLesson }}>{children}</Context.Provider>;
 }
 export function useClassroomConnection() {
   const context = useContext(Context);

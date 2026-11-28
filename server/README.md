@@ -147,6 +147,8 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | `GET /classrooms` | Lista as cinco salas, com Bearer da sessão TeachLi |
 | `POST /lessons/summary` | Reduz a transcrição e gera material didático via LiteLLM (apenas aluno autenticado) |
 | `POST /auth/logout` | Encerra sessão de comunicação; idempotente |
+| `POST /materials?name=ARQUIVO` | Professor envia um arquivo (corpo binário, até 10 MB) para a sala em que está conectado |
+| `GET /materials/ID` | Download do arquivo, só para quem está conectado à mesma sala; sempre como anexo |
 | `WS /classroom?room=ID` | Subprotocolos `teachli-session` e token opaco; sem credencial na URL |
 | `joined`, `presence` | Sala confirmada e participantes conectados |
 | `student.message` | Texto confirmado do aluno → professor da mesma sala |
@@ -154,6 +156,9 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | `lesson.ended` | Notifica participantes; novas mensagens e legendas são recusadas |
 | `caption.final` | Frase final do professor → alunos da mesma sala e histórico temporário para alunos que entrarem depois |
 | `message.ack`, `message.rejected` | Encaminhamento à conexão ou recusa; não comprova leitura |
+| `material.link`, `material.remove` | Professor compartilha um link `http(s)` (título opcional) ou remove um material |
+| `material.history`, `material.added`, `material.removed` | Lista ao entrar e atualizações dos materiais para todos da sala |
+| `material.rejected` | Recusa de link ou remoção, com o motivo |
 
 Há um professor por sala e uma conexão por sessão. Trocar sala remove a associação
 anterior. Sem professor, o aluno espera; não existe fila de mensagens para entrega
@@ -184,6 +189,12 @@ retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expir
   LiteLLM pode balancear e tentar alternativas, mas cada provedor aplica seus próprios
   limites, custos, termos e regras de retenção. O operador deve informar quais provedores
   podem receber os trechos da transcrição.
+- Materiais da aula ficam em memória na sala: até 30 por sala, arquivos de até 10 MB, 50 MB por
+  sala e 200 MB no servidor. Aceitam-se PDF, Word, PowerPoint, Excel, OpenDocument, TXT, CSV e
+  imagens (PNG, JPG, GIF, WebP); o tipo servido vem da extensão, e o download sai sempre como anexo
+  com `nosniff`. Links só `http(s)`, sem usuário/senha na URL. Depois de finalizar a aula, os
+  materiais continuam disponíveis, mas nada novo entra. Tudo é apagado quando todos saem da sala.
+  Não há verificação de vírus: oriente a turma a baixar só o que o professor indicou.
 - Reconexão explícita; atualizar a página exige escolher a sala novamente.
 - Qualquer conta aceita pelo perfil pode escolher qualquer sala cadastrada;
   não há matrícula por turma ou disciplina.
