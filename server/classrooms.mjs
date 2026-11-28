@@ -23,6 +23,7 @@ const SECURITY_HEADERS = {
 
 const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
 const MAX_ROOM_CAPTIONS = 500;
+const MAX_STUDENTS_PER_ROOM = 40;
 const MAX_ROOM_CAPTION_CHARS = 40000;
 const MAX_DAILY_SUMMARY_CALLS = 100;
 // Materiais da aula (links e arquivos do professor): só em memória, apagados quando a sala esvazia.
@@ -81,11 +82,15 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const attempts = new Map();
   const summaryAttempts = new Map();
   let summaryDailyUsage = { date: pacificDate(now()), calls: 0 };
-  const sockets = new Map();
+  const accountLogins = new Map();
   let totalMaterialBytes = 0;
-  const MAX_ATTEMPT_ENTRIES = 10000, MAX_SOCKETS_PER_IP = 20;
-  // Atrás de proxy reverso o IP real vem de X-Forwarded-For. Só confie nele com TEACHLI_TRUST_PROXY=1
-  // e quando o proxy sobrescreve o cabeçalho; caso contrário, qualquer cliente poderia forjá-lo.
+  // Limites por conta (ID Microsoft verificado), não por IP: em laboratórios e no Wi-Fi da faculdade
+  // todos os computadores saem pelo mesmo IP público, e um limite por IP barraria a turma.
+  const MAX_ATTEMPT_ENTRIES = 10000, MAX_CONNECTIONS_PER_ACCOUNT = 1, MAX_SESSIONS_PER_ACCOUNT = 1;
+  const MAX_LOGINS_PER_ACCOUNT_MINUTE = 10, MAX_INVALID_LOGINS_PER_IP_MINUTE = 30;
+  // Por IP, só tentativas inválidas (antes de haver conta verificada). Atrás de proxy reverso o IP real
+  // vem de X-Forwarded-For: confie nele só com TEACHLI_TRUST_PROXY=1 e quando o proxy sobrescreve o
+  // cabeçalho; caso contrário, qualquer cliente poderia forjá-lo.
   const trustProxy = env.TEACHLI_TRUST_PROXY === '1';
   const clientIp = req => {
     const forwarded = trustProxy ? req.headers['x-forwarded-for']?.split(',').pop()?.trim() : undefined;
@@ -158,9 +163,13 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     }
     presence(client.room);
   };
-  const revoke = token => {
+  const revoke = (token, message) => {
     sessions.delete(token);
-    for (const room of rooms.values()) for (const c of [...room.clients]) if (c.token === token) { remove(c); c.ws.close(1008, 'Sessão encerrada'); }
+    for (const room of rooms.values()) for (const c of [...room.clients]) if (c.token === token) {
+      remove(c);
+      if (message) send(c.ws, { type: 'error', message });
+      c.ws.close(1008, 'Sessão encerrada');
+    }
   };
   const server = createServer(async (req, res) => {
     if (!allowed(req)) return json(req, res, 403, { error: 'Origem não autorizada.' });
@@ -178,17 +187,31 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
           if (!limit && attempts.size >= MAX_ATTEMPT_ENTRIES) return json(req, res, 429, { error: 'Muitas tentativas. Aguarde um minuto.' });
           limit = { count: 0, until: now() + 60000 }; attempts.set(ip, limit);
         }
-        if (++limit.count > 30) { log('login.rate_limited'); return json(req, res, 429, { error: 'Muitas tentativas. Aguarde um minuto.' }); }
-        const body = await readJson(req);
-        if (typeof body?.idToken !== 'string' || !body.idToken) return json(req, res, 401, { error: 'Entre novamente pela Microsoft antes de acessar as salas.' });
+        if (limit.count >= MAX_INVALID_LOGINS_PER_IP_MINUTE) { log('login.rate_limited'); return json(req, res, 429, { error: 'Muitas tentativas. Aguarde um minuto.' }); }
+        const invalid = (status, error) => { limit.count++; return json(req, res, status, { error }); };
+        const body = await readJson(req).catch(() => null);
+        if (typeof body?.idToken !== 'string' || !body.idToken) return invalid(401, 'Entre novamente pela Microsoft antes de acessar as salas.');
         let identity;
         try { identity = await verifyIdentity(body.idToken); }
-        catch { log('login.failed'); return json(req, res, 401, { error: 'Não foi possível validar sua conta. Entre novamente com sua conta institucional Microsoft.' }); }
-        if (identity.role !== body.role) { log('login.role_denied', { user: who(identity.id) }); return json(req, res, 403, { error: 'Esta conta não tem permissão para o perfil escolhido.' }); }
+        catch { log('login.failed'); return invalid(401, 'Não foi possível validar sua conta. Entre novamente com sua conta institucional Microsoft.'); }
+        if (identity.role !== body.role) { log('login.role_denied', { user: who(identity.id) }); return invalid(403, 'Esta conta não tem permissão para o perfil escolhido.'); }
+        const account = who(identity.id);
+        let accountLimit = accountLogins.get(account);
+        if (!accountLimit || accountLimit.until <= now()) {
+          if (!accountLimit && accountLogins.size >= MAX_ATTEMPT_ENTRIES) return json(req, res, 429, { error: 'Muitas tentativas. Aguarde um minuto.' });
+          accountLimit = { count: 0, until: now() + 60000 }; accountLogins.set(account, accountLimit);
+        }
+        if (++accountLimit.count > MAX_LOGINS_PER_ACCOUNT_MINUTE) { log('login.rate_limited', { user: account }); return json(req, res, 429, { error: 'Muitas entradas com esta conta. Aguarde um minuto.' }); }
         if (sessions.size >= 10000) return json(req, res, 503, { error: 'Serviço ocupado. Tente novamente.' });
         const token = opaque(); const expiresAt = Math.min(identity.exp * 1000, now() + 3600000);
         if (expiresAt <= now()) return json(req, res, 401, { error: 'Sessão expirada.' });
-        sessions.set(token, { ...identity, expiresAt });
+        // Uma sessão por conta: um login novo (outro PC, aba ou recarga) encerra a sessão anterior,
+        // então a conta fica em um único lugar. Um PC esquecido logado não bloqueia o aluno.
+        const accountSessions = [...sessions].filter(([, s]) => s.id === identity.id).sort((a, b) => a[1].createdAt - b[1].createdAt);
+        for (const [oldToken] of accountSessions.slice(0, Math.max(0, accountSessions.length - MAX_SESSIONS_PER_ACCOUNT + 1))) {
+          revoke(oldToken, 'Sua conta entrou em outro dispositivo. Esta conexão foi encerrada.');
+        }
+        sessions.set(token, { ...identity, expiresAt, createdAt: now() });
         log('login.ok', { user: who(identity.id), role: identity.role });
         return json(req, res, 200, { token, role: identity.role, profile: { name: identity.name, email: identity.email, expiresAt } });
       }
@@ -302,16 +325,22 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     const token = protocols.find(p => p !== 'teachli-session');
     const session = validSession(token);
     if (!allowed(req) || url.pathname !== '/classroom' || !session) { log('ws.denied'); return reject('Sessão inválida. Entre novamente pela Microsoft.'); }
-    const ip = clientIp(req);
-    if ((sockets.get(ip) ?? 0) >= MAX_SOCKETS_PER_IP) return reject('Muitas conexões deste endereço.');
-    sockets.set(ip, (sockets.get(ip) ?? 0) + 1);
-    ws.on('close', () => { const n = (sockets.get(ip) ?? 1) - 1; if (n > 0) sockets.set(ip, n); else sockets.delete(ip); });
     const room = rooms.get(url.searchParams.get('room'));
     if (!room) return reject('Sala não cadastrada. Escolha uma sala da lista.');
-    if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.token !== token)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
+    if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.session.id !== session.id)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
+    // Lotação por sala. Quem já está na sala com a mesma conta (outra aba/dispositivo) é substituído,
+    // então não conta para a lotação.
+    if (session.role === 'aluno' && [...room.clients].filter(c => c.session.role === 'aluno' && c.session.id !== session.id).length >= MAX_STUDENTS_PER_ROOM) {
+      return reject(`Sala cheia: o limite de ${MAX_STUDENTS_PER_ROOM} alunos foi atingido. Escolha outra sala.`);
+    }
     // A session belongs to exactly one connection/room. An old connection loses membership immediately.
     for (const r of rooms.values()) for (const old of [...r.clients]) if (old.token === token) { remove(old); old.ws.close(1000, 'Sala alterada'); }
-    const client = { id: randomUUID(), ws, token, session, room, seen: new Set(), count: 0, until: now() + 10000, signals: 0, signalUntil: now() + 10000 };
+    // Defesa adicional: mesmo que existam duas sessões da conta, só uma conexão fica ativa.
+    const accountClients = [...rooms.values()].flatMap(r => [...r.clients]).filter(c => c.session.id === session.id).sort((a, b) => a.joinedAt - b.joinedAt);
+    for (const old of accountClients.slice(0, Math.max(0, accountClients.length - MAX_CONNECTIONS_PER_ACCOUNT + 1))) {
+      remove(old); send(old.ws, { type: 'error', message: 'Sua conta entrou em outro dispositivo. Esta conexão foi encerrada.' }); old.ws.close(1000, 'Conta conectada em outro dispositivo');
+    }
+    const client = { id: randomUUID(), ws, token, session, room, joinedAt: now(), seen: new Set(), count: 0, until: now() + 10000, signals: 0, signalUntil: now() + 10000 };
     room.clients.add(client);
     log('room.join', { user: who(session.id), role: session.role, room: room.id });
     send(ws, { type: 'joined', room: { id: room.id, name: room.name }, role: session.role, selfId: client.id });
@@ -395,6 +424,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const cleanup = setInterval(() => {
     for (const [token, s] of sessions) if (s.expiresAt <= now()) revoke(token);
     for (const [ip, a] of attempts) if (a.until <= now()) attempts.delete(ip);
+    for (const [account, a] of accountLogins) if (a.until <= now()) accountLogins.delete(account);
     for (const [user, a] of summaryAttempts) if (a.until <= now()) summaryAttempts.delete(user);
     for (const ws of wss.clients) { if (!ws.isAlive) ws.terminate(); else { ws.isAlive = false; ws.ping(); } }
   }, 15000);

@@ -29,7 +29,7 @@ async function setup(t) {
     const response = await request('/auth/microsoft/session', null, { idToken, role });
     assert.equal(response.status, 200); return (await response.json()).token;
   };
-  const connect = async (token, room = 'laboratorio-c', requestOrigin = origin, query = '') => {
+  const connect = async (token, room = 'laboratorio-c', requestOrigin = origin, query = '', expect) => {
     const ws = new WebSocket(base.replace('http', 'ws') + `/classroom?room=${room}${query}`, token ? ['teachli-session', token] : undefined, { origin: requestOrigin });
     const events = []; const waiters = [];
     ws.on('message', raw => { const event = JSON.parse(raw.toString()); events.push(event); for (const waiter of [...waiters]) if (waiter.type === event.type) { waiter.resolve(event); waiters.splice(waiters.indexOf(waiter), 1); } });
@@ -37,7 +37,7 @@ async function setup(t) {
       const timer = setTimeout(() => reject(new Error(`Missing event ${type}: ${JSON.stringify(events)}`)), 2000);
       waiters.push({ type, resolve: value => { clearTimeout(timer); resolve(value); } });
     });
-    const first = next(token && ['laboratorio-a', 'laboratorio-b', 'laboratorio-c', 'sala-01', 'sala-02'].includes(room) && requestOrigin === origin ? 'joined' : 'error');
+    const first = next(expect ?? (token && ['laboratorio-a', 'laboratorio-b', 'laboratorio-c', 'sala-01', 'sala-02'].includes(room) && requestOrigin === origin ? 'joined' : 'error'));
     await first;
     return { ws, events, next, send: data => ws.send(JSON.stringify(data)) };
   };
@@ -261,6 +261,54 @@ test('sinalização da chamada: só entre aluno e professor da mesma sala, com v
   aluno.send({ type: 'signal', to: profId, data: { kind: 'offer', sdp: 'x'.repeat(13000) } });
   await aluno.next('signal.rejected');
   assert.ok(!professor.events.some(e => e.type === 'signal' && e.data.kind !== 'hello'));
+});
+
+test('turma inteira no mesmo IP (laboratório atrás de NAT) entra e faz login', async t => {
+  const { login, connect } = await setup(t);
+  const professor = await connect(await login('professor', 'prof-lab'));
+  // Todos os testes saem de 127.0.0.1: antes, o 21º socket e o 31º login por IP eram recusados.
+  const tokens = []; for (let i = 0; i < 40; i++) tokens.push(await login('aluno', `aluno-${i}`));
+  const students = []; for (const token of tokens) students.push(await connect(token));
+  await new Promise(r => setTimeout(r, 200));
+  const presence = [...professor.events].reverse().find(e => e.type === 'presence' && e.students === 40);
+  assert.ok(presence, 'professor deveria ver os 40 alunos');
+  assert.ok(students.every(s => s.ws.readyState === WebSocket.OPEN));
+  // Sala cheia: o 41º aluno é recusado, mas pode entrar em outra sala.
+  const extraToken = await login('aluno', 'aluno-41');
+  const full = await connect(extraToken, 'laboratorio-c', origin, '', 'error');
+  assert.match(full.events.find(e => e.type === 'error').message, /Sala cheia: o limite de 40 alunos/);
+  await connect(extraToken, 'sala-01');
+  // Quem já está na sala cheia pode reabrir em outra aba (substitui a própria conexão).
+  const closed = once(students[0].ws, 'close');
+  await connect(await login('aluno', 'aluno-0'));
+  await closed;
+});
+
+test('limites por conta: um lugar por conta e logins por minuto', async t => {
+  const { login, connect, request, advance } = await setup(t);
+  // Um login novo (outro PC ou aba) encerra a sessão anterior e derruba a conexão dela.
+  const firstToken = await login('aluno', 'mesma-conta');
+  const first = await connect(firstToken);
+  const closed = once(first.ws, 'close');
+  const secondToken = await login('aluno', 'mesma-conta');
+  await closed;
+  assert.match(first.events.find(e => e.type === 'error').message, /outro dispositivo/);
+  assert.equal((await request('/classrooms', firstToken)).status, 401);
+  const second = await connect(secondToken, 'sala-01');
+  assert.equal(second.ws.readyState, WebSocket.OPEN);
+  // O professor que abre a sala em outro computador substitui a própria conexão (não é "outro professor").
+  const profPc1 = await connect(await login('professor', 'prof-dois-pcs'));
+  const profClosed = once(profPc1.ws, 'close');
+  const profPc2 = await connect(await login('professor', 'prof-dois-pcs'));
+  await profClosed;
+  assert.equal(profPc2.events.find(e => e.type === 'joined').role, 'professor');
+  // Até 10 logins por minuto por conta; outras contas no mesmo IP não são afetadas.
+  for (let i = 0; i < 8; i++) await login('aluno', 'mesma-conta');
+  const idToken = JSON.stringify({ role: 'aluno', name: 'mesma-conta', id: 'mesma-conta', email: 'mesma-conta@alunos.unibarretos.com.br', exp: Math.floor(Date.now() / 1000) + 7200 });
+  assert.equal((await request('/auth/microsoft/session', null, { idToken, role: 'aluno' })).status, 429);
+  await login('aluno', 'outra-conta');
+  advance(60001);
+  await login('aluno', 'mesma-conta');
 });
 
 test('materiais da aula: professor compartilha links e arquivos só com a própria sala', async t => {

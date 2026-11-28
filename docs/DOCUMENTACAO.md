@@ -24,7 +24,7 @@ alunos da mesma sala.
 | Recurso | Implementado | Limite atual |
 | --- | --- | --- |
 | Login | Microsoft com PKCE, `state` e nonce; perfis por domínio institucional | Sem matrícula por turma ou comprovação administrativa de função docente |
-| Salas | Laboratórios A/B/C, Sala 01/02; seleção após login, presença, troca e logout | Um professor por sala; estado em memória, uma instância |
+| Salas | Laboratórios A/B/C, Sala 01/02; seleção após login, presença, troca e logout | Um professor e até 40 alunos por sala; estado em memória, uma instância |
 | Mensagem do aluno | Digitação ou composição por gestos; envio automático após pausa (desligável), Enter para texto digitado | Sem fila para destinatário ausente; confirmação não comprova leitura |
 | Composição por gestos | Letras estáveis entram sozinhas, formam palavras e separam por pausa; pausar, espaço, apagar e editar; sem desenho de traços sobre as mãos | Heurística de tempos fixos, não calibrada com usuários |
 | Fala do professor | Transcrição local e envio de frases finais aos alunos da sala | Sem legendas parciais compartilhadas; depende do navegador |
@@ -371,7 +371,7 @@ fechar, por ele ou pelo "X" do widget, também desliga a captura de cliques do V
 | Verificação | Assinatura RS256, emissor, audiência, tenant, validade e `oid` | `server/microsoft.mjs` |
 | Autorização | Papel por domínio do e-mail, conferido no servidor; aluno só envia `student.message`, professor só `caption.final` | `server/classrooms.mjs` |
 | Sessão | Token opaco (256 bits), em memória, até 1 h, revogado no logout | `server/classrooms.mjs` |
-| Abuso | 30 logins/min por IP, 60 mensagens/10 s por conexão, 20 conexões por IP, 10.000 sessões; resumo 5 pedidos/10 min por aluno e até 100 gerações/dia | `server/classrooms.mjs` |
+| Abuso | Por conta: 1 sessão e 1 conexão (login em outro lugar encerra o anterior) e 10 logins/min; por IP, só 30 tentativas de login inválidas/min (laboratórios compartilham IP); 60 mensagens/10 s por conexão, 10.000 sessões; resumo 5 pedidos/10 min por aluno e até 100 gerações/dia | `server/classrooms.mjs` |
 | Origem/CORS | Lista exata (`TEACHLI_CORS_ORIGIN`), também no WebSocket | `server/classrooms.mjs` |
 | Cabeçalhos | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, CSP, HSTS, `no-store` | `server/classrooms.mjs` |
 | CSP do site | Injetada no build, limitando scripts, conexões e frames; inclui `storage.googleapis.com` (modelos de mão e rosto) e `vlibras.gov.br` | `client/vite.config.ts` |
@@ -453,7 +453,7 @@ período e titulares; (3) comunicar — encarregado e jurídico avaliam a comuni
 | ID | Gravidade | Achado | Situação |
 | --- | --- | --- | --- |
 | A1–A3 | Alta | IDOR em tRPC, cookie `SameSite=None` de 1 ano, corpo de 50 MB sem limite (legado) | **Corrigido** (backend removido) |
-| A4 | Alta | Rate limit contornável atrás de proxy; mapas sem teto; sem limite de conexões | **Corrigido** (`TEACHLI_TRUST_PROXY`, tetos, limite por IP) |
+| A4 | Alta | Rate limit contornável atrás de proxy; mapas sem teto; sem limite de conexões | **Corrigido** (`TEACHLI_TRUST_PROXY`, tetos, limites por conta e de tentativas inválidas por IP) |
 | A5 | Alta | Usuário em `localStorage`; ID token em `sessionStorage` | **Parcial**: legado removido; o ID token ainda fica em `sessionStorage` até a troca por token de sala |
 | M1 | Média | Sem CSP/cabeçalhos; VLibras externo sem SRI | **Parcial**: CSP e cabeçalhos aplicados; VLibras segue sem SRI |
 | M2 | Média | HTTPS/WSS não forçado | **Pendente (infraestrutura)** |

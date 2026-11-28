@@ -229,9 +229,12 @@ export async function logoutMicrosoftSession(): Promise<void> {
 let roomSessionRequest: { idToken: string; promise: Promise<MicrosoftSession & { token: string }> } | null = null;
 
 // Room service connectivity is needed only after the original Microsoft login finishes.
-export function prepareClassroomSession(): Promise<MicrosoftSession & { token: string }> {
+// O servidor mantém uma sessão por conta e um login novo encerra a anterior, então a sessão já
+// guardada nesta aba é reaproveitada. Passe `renew` só quando o servidor recusar a atual (401).
+export function prepareClassroomSession({ renew = false } = {}): Promise<MicrosoftSession & { token: string }> {
   const session = loadMicrosoftSession("aluno") || loadMicrosoftSession("professor");
   if (!session) return Promise.reject(new Error("Entre novamente pela Microsoft."));
+  if (!renew && session.token) return Promise.resolve({ ...session, token: session.token });
   if (roomSessionRequest?.idToken === session.idToken) return roomSessionRequest.promise;
   const promise = classroomRequest("/auth/microsoft/session", undefined, { idToken: session.idToken, role: session.role })
     .then(result => {
