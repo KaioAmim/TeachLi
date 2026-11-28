@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Languages } from "lucide-react";
 import { createPortal } from "react-dom";
 import "./VLibrasWidget.css";
@@ -27,17 +27,71 @@ export function translateWithVLibras(text: string): boolean {
   }
 }
 
-/** O controle visual próprio aciona o botão documentado pelo widget oficial. */
+/** Controle visual próprio; o atalho nativo do widget fica oculto. */
 export default function VLibrasWidget() {
   const [isReady, setIsReady] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const desiredOpen = useRef(false);
 
+  const applyOpenState = useCallback((open: boolean) => {
+    desiredOpen.current = open;
+    const pluginRoot = document.getElementById("vlibras-app-root");
+    if (pluginRoot) {
+      // O widget observa `data-active` e liga/desliga a captura de texto da página a partir dele.
+      pluginRoot.setAttribute("data-active", String(open));
+      pluginRoot.style.display = open ? "" : "none";
+      pluginRoot.style.zIndex = "2147483646";
+    }
+    setIsOpen(open);
+  }, []);
+
+  const toggleWidget = useCallback(() => {
+    const nextOpen = !desiredOpen.current;
+    if (document.getElementById("vlibras-app-root") || !nextOpen) {
+      applyOpenState(nextOpen);
+      return;
+    }
+    // Primeira abertura: o botão nativo carrega o app do VLibras e cria #vlibras-app-root.
+    desiredOpen.current = true;
+    document
+      .getElementById("vlibras-access-wrapper")
+      ?.shadowRoot?.querySelector<HTMLButtonElement>("#vlibras-button")
+      ?.click();
+    setIsOpen(true);
+  }, [applyOpenState]);
+
   useEffect(() => {
     let nativeAccessRoot: HTMLElement | null = null;
     let previousAccessDisplay = "";
     let pluginRoot: HTMLElement | null = null;
+
+    // Com o VLibras ativo, ele escuta cliques no <body> (fase de captura) e traduz o texto
+    // clicado em vez de deixar o clique chegar ao elemento. O `document` recebe o evento
+    // antes do <body>, então o botão próprio é tratado aqui e o VLibras nunca o vê.
+    const isToggleEvent = (event: Event) =>
+      event.target instanceof Element && event.target.closest(".teachli-vlibras-toggle") !== null;
+    const captureToggleClick = (event: MouseEvent) => {
+      if (!isToggleEvent(event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      toggleWidget();
+    };
+    // Evita que o realce de "texto traduzível" do VLibras marque o botão.
+    const captureToggleHover = (event: MouseEvent) => {
+      if (isToggleEvent(event)) event.stopImmediatePropagation();
+    };
+    document.addEventListener("click", captureToggleClick, true);
+    document.addEventListener("mouseover", captureToggleHover, true);
+    document.addEventListener("mouseout", captureToggleHover, true);
+
+    // O "X" do próprio widget fecha o painel sem alterar `data-active`; sincroniza o estado.
+    const handleNativeClose = (event: Event) => {
+      const closedByWidget = event
+        .composedPath()
+        .some(node => node instanceof Element && node.matches('#header-actions [aria-label="Fechar"]'));
+      if (closedByWidget) applyOpenState(false);
+    };
 
     const syncOpenState = () => {
       if (pluginRoot) {
@@ -70,8 +124,10 @@ export default function VLibrasWidget() {
       // A raiz contém o painel, o avatar e o atalho "Interagir" do widget.
       if (!root) return false;
       if (root !== pluginRoot) {
+        pluginRoot?.shadowRoot?.removeEventListener("click", handleNativeClose);
         pluginRoot = root;
         root.style.zIndex = "2147483646";
+        root.shadowRoot?.addEventListener("click", handleNativeClose);
       }
       syncOpenState();
       return true;
@@ -110,28 +166,13 @@ export default function VLibrasWidget() {
     return () => {
       rootObserver.disconnect();
       window.clearInterval(retryTimer);
+      document.removeEventListener("click", captureToggleClick, true);
+      document.removeEventListener("mouseover", captureToggleHover, true);
+      document.removeEventListener("mouseout", captureToggleHover, true);
+      pluginRoot?.shadowRoot?.removeEventListener("click", handleNativeClose);
       if (nativeAccessRoot) nativeAccessRoot.style.display = previousAccessDisplay;
     };
-  }, []);
-
-  const toggleWidget = () => {
-    const nextOpen = !desiredOpen.current;
-    desiredOpen.current = nextOpen;
-    const pluginRoot = document.getElementById("vlibras-app-root");
-    if (pluginRoot) {
-      pluginRoot.setAttribute("data-active", String(nextOpen));
-      pluginRoot.style.display = nextOpen ? "" : "none";
-      pluginRoot.style.zIndex = "2147483646";
-      setIsOpen(nextOpen);
-      return;
-    }
-    if (!nextOpen) return;
-    const nativeButton = document
-      .getElementById("vlibras-access-wrapper")
-      ?.shadowRoot?.querySelector<HTMLButtonElement>("#vlibras-button");
-    nativeButton?.click();
-    setIsOpen(true);
-  };
+  }, [applyOpenState, toggleWidget]);
 
   return (
     <>
@@ -153,11 +194,11 @@ export default function VLibrasWidget() {
         <>
           <button
             type="button"
-            className="teachli-vlibras-toggle"
+            // `vlibras-ignore` é a classe que o VLibras usa para não realçar elementos.
+            className="teachli-vlibras-toggle vlibras-ignore"
             data-active={isOpen}
             aria-pressed={isOpen}
             aria-label={isOpen ? "Fechar VLibras" : "Abrir VLibras"}
-            onClick={toggleWidget}
             disabled={!isReady}
           >
             <Languages size={18} aria-hidden="true" />

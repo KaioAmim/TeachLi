@@ -112,3 +112,7 @@ temp/
 
 # Gerado por predev/prebuild (client/scripts/copy-mediapipe-wasm.mjs)
 client/public/mediapipe/
+
+# Material local (apresentações, rascunhos de issues, PDFs)
+output/
+deliverables/

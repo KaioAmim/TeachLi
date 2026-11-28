@@ -7,6 +7,7 @@ import { Mic, MicOff, Languages, Trash2, ArrowUpRight, Check } from "lucide-reac
 import { toast } from "sonner";
 import { FinishLessonControl } from "@/components/LessonControls";
 import { LessonRecorder } from "@/components/LessonRecorder";
+import { LessonMaterials } from "@/components/LessonMaterials";
 
 /** Silêncio, em ms, que encerra um trecho de fala e dispara o envio do texto acumulado (1000–1500 ms). */
 const SILENCE_MS = 1200;
@@ -242,6 +243,8 @@ export default function ProfessorMode() {
 
           <ClassroomPanel compact embedded showAutoSpeak />
         </section>
+
+        <LessonMaterials role="professor" />
 
         <LessonRecorder />
 

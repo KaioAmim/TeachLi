@@ -26,6 +26,44 @@ const MAX_ROOM_CAPTIONS = 500;
 const MAX_STUDENTS_PER_ROOM = 40;
 const MAX_ROOM_CAPTION_CHARS = 40000;
 const MAX_DAILY_SUMMARY_CALLS = 100;
+// Materiais da aula (links e arquivos do professor): só em memória, apagados quando a sala esvazia.
+const MAX_ROOM_MATERIALS = 30;
+const MAX_MATERIAL_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_ROOM_MATERIAL_BYTES = 50 * 1024 * 1024;
+const MAX_TOTAL_MATERIAL_BYTES = 200 * 1024 * 1024;
+// O tipo servido vem da extensão permitida, nunca do que o navegador declarou.
+export const MATERIAL_FILE_TYPES = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  odt: 'application/vnd.oasis.opendocument.text',
+  odp: 'application/vnd.oasis.opendocument.presentation',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  txt: 'text/plain; charset=utf-8',
+  csv: 'text/csv; charset=utf-8',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+const cleanText = (value, max) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) : '';
+export function parseMaterialUrl(value) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 2000) return null;
+  try {
+    const url = new URL(value.trim());
+    return ['http:', 'https:'].includes(url.protocol) && url.hostname && !url.username && !url.password ? url.toString() : null;
+  } catch { return null; }
+}
+export function materialFileName(value) {
+  const name = cleanText(value, 120).replace(/[\\/:*?"<>|]+/g, '_');
+  const extension = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+  return name && name !== '.' + extension && Object.hasOwn(MATERIAL_FILE_TYPES, extension) ? { name, extension } : null;
+}
 const PACIFIC_DAY = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
 });
@@ -38,13 +76,14 @@ function pacificDate(timestamp) {
 export function createClassroomServer({ env = process.env, verifyIdentity = createMicrosoftVerifier(env), now = Date.now, audit = event => console.log(JSON.stringify(event)) } = {}) {
   const catalog = env.TEACHLI_ROOMS ? JSON.parse(env.TEACHLI_ROOMS) : DEFAULT_ROOMS;
   if (!Array.isArray(catalog) || !catalog.length || catalog.length > 100 || catalog.some(r => !/^[a-z0-9-]{1,60}$/.test(r.id) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100) || new Set(catalog.map(r => r.id)).size !== catalog.length) throw new Error('TEACHLI_ROOMS inválido.');
-  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set(), lessonEndedAt: null, captions: [], captionChars: 0, summaryCache: null, summaryPending: null }]));
+  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set(), lessonEndedAt: null, captions: [], captionChars: 0, summaryCache: null, summaryPending: null, materials: [], files: new Map(), materialBytes: 0 }]));
   const origins = (env.TEACHLI_CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   const sessions = new Map();
   const attempts = new Map();
   const summaryAttempts = new Map();
   let summaryDailyUsage = { date: pacificDate(now()), calls: 0 };
   const accountLogins = new Map();
+  let totalMaterialBytes = 0;
   // Limites por conta (ID Microsoft verificado), não por IP: em laboratórios e no Wi-Fi da faculdade
   // todos os computadores saem pelo mesmo IP público, e um limite por IP barraria a turma.
   const MAX_ATTEMPT_ENTRIES = 10000, MAX_CONNECTIONS_PER_ACCOUNT = 1, MAX_SESSIONS_PER_ACCOUNT = 1;
@@ -85,11 +124,32 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     for await (const chunk of req) { size += chunk.length; if (size > maxBytes) throw new Error('Requisição muito grande.'); chunks.push(chunk); }
     return JSON.parse(Buffer.concat(chunks).toString());
   };
+  const readBody = async (req, maxBytes) => {
+    let size = 0; const chunks = [];
+    for await (const chunk of req) { size += chunk.length; if (size > maxBytes) return null; chunks.push(chunk); }
+    return Buffer.concat(chunks);
+  };
   const presence = room => {
     const clients = [...room.clients];
     const event = { type: 'presence', professor: clients.some(c => c.session.role === 'professor'), students: clients.filter(c => c.session.role === 'aluno').length };
     // Cada conexão só conhece os IDs do perfil oposto (aluno↔professor); alunos não veem IDs de outros alunos.
     for (const c of clients) send(c.ws, { ...event, peers: clients.filter(o => o !== c && o.session.role !== c.session.role).map(o => ({ id: o.id, role: o.session.role })) });
+  };
+  const clearMaterials = room => {
+    totalMaterialBytes -= room.materialBytes;
+    room.materials = []; room.files.clear(); room.materialBytes = 0;
+  };
+  const broadcast = (room, event) => { for (const participant of room.clients) send(participant.ws, event); };
+  const memberRoom = token => [...rooms.values()].find(room => [...room.clients].some(c => c.token === token)) ?? null;
+  const removeMaterial = (room, materialId) => {
+    const index = room.materials.findIndex(material => material.id === materialId);
+    if (index < 0) return false;
+    const [material] = room.materials.splice(index, 1);
+    if (material.kind === 'file') {
+      room.materialBytes -= material.size; totalMaterialBytes -= material.size; room.files.delete(material.id);
+    }
+    broadcast(room, { type: 'material.removed', id: material.id });
+    return true;
   };
   const remove = client => {
     if (!client.room.clients.delete(client)) return;
@@ -99,6 +159,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
       client.room.captionChars = 0;
       client.room.summaryCache = null;
       client.room.summaryPending = null;
+      clearMaterials(client.room);
     }
     presence(client.room);
   };
@@ -202,6 +263,48 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
         const summary = await summaryPromise;
         return json(req, res, 200, summary);
       }
+      if (path === '/materials' && req.method === 'POST') {
+        if (session.role !== 'professor') return json(req, res, 403, { error: 'Somente o professor pode compartilhar arquivos.' });
+        const room = memberRoom(token);
+        if (!room) return json(req, res, 409, { error: 'Entre na sala antes de compartilhar arquivos.' });
+        if (room.lessonEndedAt) return json(req, res, 409, { error: 'A aula foi finalizada. Não é possível compartilhar novos materiais.' });
+        const file = materialFileName(new URL(req.url, 'http://localhost').searchParams.get('name'));
+        if (!file) return json(req, res, 415, { error: 'Tipo de arquivo não permitido. Envie PDF, Word, PowerPoint, Excel, OpenDocument, texto, CSV ou imagem.' });
+        if (room.materials.length >= MAX_ROOM_MATERIALS) return json(req, res, 409, { error: `A sala já tem ${MAX_ROOM_MATERIALS} materiais. Remova algum para adicionar outro.` });
+        if (Number(req.headers['content-length']) > MAX_MATERIAL_FILE_BYTES) return json(req, res, 413, { error: 'O arquivo passa de 10 MB.' });
+        const data = await readBody(req, MAX_MATERIAL_FILE_BYTES);
+        if (!data) return json(req, res, 413, { error: 'O arquivo passa de 10 MB.' });
+        if (!data.length) return json(req, res, 400, { error: 'O arquivo está vazio.' });
+        // A sala pode ter mudado (ou acabado) enquanto o envio chegava.
+        if (memberRoom(token) !== room || room.lessonEndedAt) return json(req, res, 409, { error: 'A sala mudou durante o envio. Tente novamente.' });
+        if (room.materials.length >= MAX_ROOM_MATERIALS) return json(req, res, 409, { error: `A sala já tem ${MAX_ROOM_MATERIALS} materiais. Remova algum para adicionar outro.` });
+        if (room.materialBytes + data.length > MAX_ROOM_MATERIAL_BYTES) return json(req, res, 413, { error: 'A sala atingiu o limite de 50 MB em arquivos. Remova algum para adicionar outro.' });
+        if (totalMaterialBytes + data.length > MAX_TOTAL_MATERIAL_BYTES) return json(req, res, 503, { error: 'O servidor está sem espaço para arquivos agora. Tente novamente mais tarde.' });
+        const material = { id: randomUUID(), kind: 'file', title: file.name, name: file.name, size: data.length, author: session.name, createdAt: now() };
+        room.files.set(material.id, { data, type: MATERIAL_FILE_TYPES[file.extension] });
+        room.materials.push(material); room.materialBytes += data.length; totalMaterialBytes += data.length;
+        log('material.file', { user: who(session.id), room: room.id, bytes: data.length });
+        broadcast(room, { type: 'material.added', material });
+        return json(req, res, 201, { material });
+      }
+      const materialPath = /^\/materials\/([0-9a-f-]{36})$/.exec(path);
+      if (materialPath && req.method === 'GET') {
+        const room = memberRoom(token);
+        const material = room?.materials.find(item => item.id === materialPath[1] && item.kind === 'file');
+        const file = material && room.files.get(material.id);
+        if (!file) return json(req, res, 404, { error: 'Arquivo não encontrado nesta sala.' });
+        res.writeHead(200, {
+          ...SECURITY_HEADERS,
+          'Content-Type': file.type,
+          'Content-Length': file.data.length,
+          // Sempre como download: o arquivo nunca é exibido na origem do servidor.
+          'Content-Disposition': `attachment; filename="${material.name.replace(/[^\x20-\x7e]|"/g, '_')}"; filename*=UTF-8''${encodeURIComponent(material.name)}`,
+          'Cache-Control': 'no-store',
+          'Vary': 'Origin',
+          ...(allowed(req) ? { 'Access-Control-Allow-Origin': req.headers.origin } : {}),
+        });
+        return res.end(file.data);
+      }
       return json(req, res, 404, { error: 'Rota não encontrada.' });
     } catch (error) {
       if (error instanceof LessonSummaryError) return json(req, res, error.status, { error: error.message });
@@ -243,6 +346,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     send(ws, { type: 'joined', room: { id: room.id, name: room.name }, role: session.role, selfId: client.id });
     presence(room);
     if (session.role === 'aluno') send(ws, { type: 'caption.history', captions: room.captions });
+    send(ws, { type: 'material.history', materials: room.materials });
     if (room.lessonEndedAt) send(ws, { type: 'lesson.ended', endedAt: room.lessonEndedAt });
     ws.on('message', raw => {
       if (!validSession(token) || !room.clients.has(client)) { remove(client); return reject('Sua sessão expirou. Entre novamente.'); }
@@ -272,6 +376,21 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
         const event = { type: 'lesson.ended', endedAt: room.lessonEndedAt };
         for (const participant of room.clients) send(participant.ws, event);
         return;
+      }
+      if (signal?.type === 'material.link' || signal?.type === 'material.remove') {
+        if (session.role !== 'professor') return send(ws, { type: 'material.rejected', message: 'Somente o professor pode gerenciar os materiais da aula.' });
+        if (signal.type === 'material.remove') {
+          if (typeof signal.id !== 'string' || !removeMaterial(room, signal.id)) return send(ws, { type: 'material.rejected', message: 'Material não encontrado nesta sala.' });
+          return log('material.remove', { user: who(session.id), room: room.id });
+        }
+        if (room.lessonEndedAt) return send(ws, { type: 'material.rejected', message: 'A aula foi finalizada. Não é possível compartilhar novos materiais.' });
+        const url = parseMaterialUrl(signal.url);
+        if (!url) return send(ws, { type: 'material.rejected', message: 'Link inválido. Use um endereço completo começando com http:// ou https://.' });
+        if (room.materials.length >= MAX_ROOM_MATERIALS) return send(ws, { type: 'material.rejected', message: `A sala já tem ${MAX_ROOM_MATERIALS} materiais. Remova algum para adicionar outro.` });
+        const material = { id: randomUUID(), kind: 'link', title: cleanText(signal.title, 120) || new URL(url).hostname, url, author: session.name, createdAt: now() };
+        room.materials.push(material);
+        log('material.link', { user: who(session.id), room: room.id });
+        return broadcast(room, { type: 'material.added', material });
       }
       if (room.lessonEndedAt && ['student.message', 'caption.final'].includes(signal?.type)) {
         return send(ws, { type: 'lesson.closed', message: 'A aula foi finalizada. Não é possível enviar novas mensagens nesta aula.' });

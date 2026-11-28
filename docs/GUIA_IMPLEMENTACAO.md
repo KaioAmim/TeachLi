@@ -72,6 +72,7 @@ participação; exigir login sozinho não basta.
 - [x] Mensagens e frases finais somente entre perfis opostos na mesma sala.
 - [x] Participação por texto sem exigir câmera ou microfone.
 - [x] Estados de falha, nova entrada explícita e encerramento da sessão no logout.
+- [x] Professor compartilha links e arquivos com os alunos da sala durante a aula (materiais em memória).
 - [ ] Validar em dispositivos/redes reais, inclusive interrupção de conexão.
 - [ ] Definir turmas, matrículas, encerramento de aula e histórico se o piloto exigir.
 - [ ] Evoluir reconexão e recuperação de estado sem duplicar mensagens.
