@@ -7,6 +7,14 @@ import { ClassroomRequestError, classroomRequest } from '@/lib/classroomApi';
 import { loadMicrosoftSession, logoutMicrosoftSession, prepareClassroomSession } from '@/lib/microsoftAuth';
 import { useClassroomConnection, type Room } from '@/contexts/ClassroomContext';
 
+const ROOM_REFRESH_MS = 15000;
+
+const isFull = (room: Room) => room.capacity !== undefined && room.students !== undefined && room.students >= room.capacity;
+const roomLabel = (room: Room) => {
+  if (room.capacity === undefined || room.students === undefined) return room.name;
+  return `${room.name} (${room.students}/${room.capacity} alunos${isFull(room) ? ' · cheia' : ''})`;
+};
+
 export default function RoomSelection() {
   const [, navigate] = useLocation();
   const session = loadMicrosoftSession('aluno') || loadMicrosoftSession('professor');
@@ -30,7 +38,12 @@ export default function RoomSelection() {
     };
     loadRooms().then(result => { if (active) setRooms(result.rooms); })
       .catch(reason => { if (active) setError(reason.message); }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    // Atualiza a lotação enquanto a pessoa escolhe. Falhas aqui são silenciosas: a lista anterior continua.
+    const refresh = setInterval(() => {
+      prepareClassroomSession().then(ready => classroomRequest('/classrooms', ready.token))
+        .then(result => { if (active) setRooms(result.rooms); }).catch(() => {});
+    }, ROOM_REFRESH_MS);
+    return () => { active = false; clearInterval(refresh); };
   }, [session?.idToken, attempt]);
   const enter = async (event: React.FormEvent) => {
     event.preventDefault(); const room = rooms.find(r => r.id === selected); if (!room) return;
@@ -51,7 +64,8 @@ export default function RoomSelection() {
         <label htmlFor="classroom-select">Sua sala de aula</label>
         <select id="classroom-select" value={selected} onChange={e => setSelected(e.target.value)} disabled={loading || status === 'connecting'} required>
           <option value="">{loading ? 'Carregando salas…' : 'Selecione uma sala'}</option>
-          {rooms.map(room => <option key={room.id} value={room.id}>{room.name}</option>)}
+          {/* O professor não conta na lotação, então só o aluno fica impedido de escolher uma sala cheia. */}
+          {rooms.map(room => <option key={room.id} value={room.id} disabled={session?.role === 'aluno' && isFull(room) && room.id !== selected}>{roomLabel(room)}</option>)}
         </select>
         <p className="room-hint"><MapPin size={18} aria-hidden="true" /> As mensagens chegam somente a quem está na mesma sala.</p>
         {error && <p role="alert" className="room-error">{error}</p>}

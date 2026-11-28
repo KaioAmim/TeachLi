@@ -24,7 +24,7 @@ alunos da mesma sala.
 | Recurso | Implementado | Limite atual |
 | --- | --- | --- |
 | Login | Microsoft com PKCE, `state` e nonce; perfis por domínio institucional | Sem matrícula por turma ou comprovação administrativa de função docente |
-| Salas | Laboratórios A/B/C, Sala 01/02; seleção após login, presença, troca e logout | Um professor e até 40 alunos por sala; estado em memória, uma instância |
+| Salas | Laboratórios A/B/C, Sala 01/02; seleção após login, presença, troca e logout | Um professor e até 40 alunos por sala (ou a `capacity` da sala no catálogo); a lista mostra a lotação; estado em memória, uma instância |
 | Mensagem do aluno | Digitação ou composição por gestos; envio automático após pausa (desligável), Enter para texto digitado | Sem fila para destinatário ausente; confirmação não comprova leitura |
 | Composição por gestos | Letras estáveis entram sozinhas, formam palavras e separam por pausa; pausar, espaço, apagar e editar; sem desenho de traços sobre as mãos | Heurística de tempos fixos, não calibrada com usuários |
 | Fala do professor | Transcrição local e envio de frases finais aos alunos da sala | Sem legendas parciais compartilhadas; depende do navegador |
@@ -104,7 +104,7 @@ impede o login; logout encerra só a sessão do TeachLi.
 | `VITE_SIGNALING_URL` | Servidor de salas; padrão `ws://localhost:8787` |
 | `MICROSOFT_CLIENT_ID` / `MICROSOFT_TENANT_ID` (servidor) | Opcionais se lidos do cliente; o servidor recusa tokens de outro tenant |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas autorizadas; padrão localhost/127.0.0.1:5173 |
-| `TEACHLI_ROOMS` | Catálogo opcional de salas com IDs estáveis |
+| `TEACHLI_ROOMS` | Catálogo opcional de salas com IDs estáveis e `capacity` opcional por sala (padrão 40) |
 | `PORT` | Porta do servidor; padrão 8787 |
 | `LITELLM_API_BASE` | URL base do LiteLLM, por exemplo `http://localhost:4000/v1` |
 | `LITELLM_API_KEY` | Chave virtual do LiteLLM; manter somente no servidor |

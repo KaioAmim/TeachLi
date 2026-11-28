@@ -23,7 +23,10 @@ const SECURITY_HEADERS = {
 
 const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
 const MAX_ROOM_CAPTIONS = 500;
-const MAX_STUDENTS_PER_ROOM = 40;
+// Capacidade padrão de alunos por sala. Cada sala do catálogo pode definir a sua em `capacity`
+// (ex.: auditórios com 100); o professor não conta na lotação.
+const DEFAULT_ROOM_CAPACITY = 40;
+const MAX_ROOM_CAPACITY = 500;
 const MAX_ROOM_CAPTION_CHARS = 40000;
 const MAX_DAILY_SUMMARY_CALLS = 100;
 // Materiais da aula (links e arquivos do professor): só em memória, apagados quando a sala esvazia.
@@ -75,8 +78,8 @@ function pacificDate(timestamp) {
 
 export function createClassroomServer({ env = process.env, verifyIdentity = createMicrosoftVerifier(env), now = Date.now, audit = event => console.log(JSON.stringify(event)) } = {}) {
   const catalog = env.TEACHLI_ROOMS ? JSON.parse(env.TEACHLI_ROOMS) : DEFAULT_ROOMS;
-  if (!Array.isArray(catalog) || !catalog.length || catalog.length > 100 || catalog.some(r => !/^[a-z0-9-]{1,60}$/.test(r.id) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100) || new Set(catalog.map(r => r.id)).size !== catalog.length) throw new Error('TEACHLI_ROOMS inválido.');
-  const rooms = new Map(catalog.map(r => [r.id, { ...r, clients: new Set(), lessonEndedAt: null, captions: [], captionChars: 0, summaryCache: null, summaryPending: null, materials: [], files: new Map(), materialBytes: 0 }]));
+  if (!Array.isArray(catalog) || !catalog.length || catalog.length > 100 || catalog.some(r => !/^[a-z0-9-]{1,60}$/.test(r.id) || typeof r.name !== 'string' || !r.name.trim() || r.name.length > 100 || (r.capacity !== undefined && (!Number.isInteger(r.capacity) || r.capacity < 1 || r.capacity > MAX_ROOM_CAPACITY))) || new Set(catalog.map(r => r.id)).size !== catalog.length) throw new Error('TEACHLI_ROOMS inválido.');
+  const rooms = new Map(catalog.map(r => [r.id, { ...r, capacity: r.capacity ?? DEFAULT_ROOM_CAPACITY, clients: new Set(), lessonEndedAt: null, captions: [], captionChars: 0, summaryCache: null, summaryPending: null, materials: [], files: new Map(), materialBytes: 0 }]));
   const origins = (env.TEACHLI_CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   const sessions = new Map();
   const attempts = new Map();
@@ -220,7 +223,11 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
       if (path === '/auth/logout' && req.method === 'POST') { if (sessions.has(token)) log('logout', { user: who(sessions.get(token).id) }); revoke(token); return json(req, res, 200, { ok: true }); }
       const session = validSession(token);
       if (!session) return json(req, res, 401, { error: 'Sua sessão expirou. Entre novamente pela Microsoft.' });
-      if (path === '/classrooms' && req.method === 'GET') return json(req, res, 200, { rooms: catalog });
+      if (path === '/classrooms' && req.method === 'GET') {
+        // Lotação atual de cada sala para o aluno escolher uma com vaga antes de tentar entrar.
+        const list = [...rooms.values()].map(r => ({ id: r.id, name: r.name, capacity: r.capacity, students: [...r.clients].filter(c => c.session.role === 'aluno').length }));
+        return json(req, res, 200, { rooms: list });
+      }
       if (path === '/lessons/summary' && req.method === 'POST') {
         if (session.role !== 'aluno') return json(req, res, 403, { error: 'Somente alunos podem gerar o resumo da aula.' });
         const body = await readJson(req, 4096);
@@ -330,8 +337,8 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.session.id !== session.id)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
     // Lotação por sala. Quem já está na sala com a mesma conta (outra aba/dispositivo) é substituído,
     // então não conta para a lotação.
-    if (session.role === 'aluno' && [...room.clients].filter(c => c.session.role === 'aluno' && c.session.id !== session.id).length >= MAX_STUDENTS_PER_ROOM) {
-      return reject(`Sala cheia: o limite de ${MAX_STUDENTS_PER_ROOM} alunos foi atingido. Escolha outra sala.`);
+    if (session.role === 'aluno' && [...room.clients].filter(c => c.session.role === 'aluno' && c.session.id !== session.id).length >= room.capacity) {
+      return reject(`Sala cheia: o limite de ${room.capacity} alunos foi atingido. Escolha outra sala.`);
     }
     // A session belongs to exactly one connection/room. An old connection loses membership immediately.
     for (const r of rooms.values()) for (const old of [...r.clients]) if (old.token === token) { remove(old); old.ws.close(1000, 'Sala alterada'); }

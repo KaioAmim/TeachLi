@@ -9,10 +9,10 @@ import { createMicrosoftVerifier, microsoftTenantId } from './microsoft.mjs';
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from 'jose';
 
 const origin = 'http://localhost:5173';
-async function setup(t) {
+async function setup(t, env) {
   let now = Date.now();
   const audit = [];
-  const app = createClassroomServer({ now: () => now, audit: event => audit.push(event), verifyIdentity: async token => {
+  const app = createClassroomServer({ ...(env ? { env } : {}), now: () => now, audit: event => audit.push(event), verifyIdentity: async token => {
     const identity = JSON.parse(token);
     return identity;
   } });
@@ -380,4 +380,27 @@ test('materiais da aula: professor compartilha links e arquivos só com a própr
   await new Promise(r => setTimeout(r, 50));
   const again = await connect(alunoToken);
   assert.deepEqual(again.events.find(e => e.type === 'material.history').materials, []);
+});
+
+test('lista de salas mostra a lotação e respeita a capacidade de cada sala', async t => {
+  const TEACHLI_ROOMS = JSON.stringify([{ id: 'sala-01', name: 'Sala 01' }, { id: 'auditorio', name: 'Auditório', capacity: 2 }]);
+  const { login, connect, request } = await setup(t, { TEACHLI_ROOMS });
+  const rooms = async token => (await (await request('/classrooms', token)).json()).rooms;
+  const professorToken = await login('professor', 'prof');
+  assert.deepEqual(await rooms(professorToken), [
+    { id: 'sala-01', name: 'Sala 01', capacity: 40, students: 0 },
+    { id: 'auditorio', name: 'Auditório', capacity: 2, students: 0 },
+  ]);
+  // O professor não conta na lotação; só alunos.
+  await connect(professorToken, 'auditorio', origin, '', 'joined');
+  await connect(await login('aluno', 'ana'), 'auditorio', origin, '', 'joined');
+  await connect(await login('aluno', 'bia'), 'auditorio', origin, '', 'joined');
+  const caiToken = await login('aluno', 'cai');
+  assert.deepEqual((await rooms(caiToken)).map(r => [r.id, r.students]), [['sala-01', 0], ['auditorio', 2]]);
+  const full = await connect(caiToken, 'auditorio', origin, '', 'error');
+  assert.match(full.events.find(e => e.type === 'error').message, /Sala cheia: o limite de 2 alunos/);
+  // Capacidade inválida no catálogo impede o servidor de subir.
+  for (const capacity of [0, 501, 1.5, '40']) {
+    assert.throws(() => createClassroomServer({ env: { TEACHLI_ROOMS: JSON.stringify([{ id: 'sala-01', name: 'Sala 01', capacity }]) }, verifyIdentity: async () => ({}) }), /TEACHLI_ROOMS inválido/);
+  }
 });
