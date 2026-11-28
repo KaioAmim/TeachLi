@@ -156,7 +156,8 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | `caption.final` | Frase final do professor → alunos da mesma sala e histórico temporário para alunos que entrarem depois |
 | `message.ack`, `message.rejected` | Encaminhamento à conexão ou recusa; não comprova leitura |
 
-Há um professor por sala e uma conexão por sessão. Trocar sala remove a associação
+Há um professor por sala, até 40 alunos por sala (o 41º recebe "Sala cheia" e pode escolher
+outra sala) e uma conexão por sessão. Trocar sala remove a associação
 anterior. Sem professor, o aluno espera; não existe fila de mensagens para entrega
 futura. O professor pode ouvir uma mensagem manualmente; não há áudio automático.
 Texto tem limite de 2.000 caracteres. Há limites de 60 eventos/10 segundos por

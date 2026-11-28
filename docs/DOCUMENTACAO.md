@@ -24,7 +24,7 @@ alunos da mesma sala.
 | Recurso | Implementado | Limite atual |
 | --- | --- | --- |
 | Login | Microsoft com PKCE, `state` e nonce; perfis por domínio institucional | Sem matrícula por turma ou comprovação administrativa de função docente |
-| Salas | Laboratórios A/B/C, Sala 01/02; seleção após login, presença, troca e logout | Um professor por sala; estado em memória, uma instância |
+| Salas | Laboratórios A/B/C, Sala 01/02; seleção após login, presença, troca e logout | Um professor e até 40 alunos por sala; estado em memória, uma instância |
 | Mensagem do aluno | Digitação ou composição por gestos; envio automático após pausa (desligável), Enter para texto digitado | Sem fila para destinatário ausente; confirmação não comprova leitura |
 | Composição por gestos | Letras estáveis entram sozinhas, formam palavras e separam por pausa; pausar, espaço, apagar e editar; sem desenho de traços sobre as mãos | Heurística de tempos fixos, não calibrada com usuários |
 | Fala do professor | Transcrição local e envio de frases finais aos alunos da sala | Sem legendas parciais compartilhadas; depende do navegador |

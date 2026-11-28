@@ -29,7 +29,7 @@ async function setup(t) {
     const response = await request('/auth/microsoft/session', null, { idToken, role });
     assert.equal(response.status, 200); return (await response.json()).token;
   };
-  const connect = async (token, room = 'laboratorio-c', requestOrigin = origin, query = '') => {
+  const connect = async (token, room = 'laboratorio-c', requestOrigin = origin, query = '', expect) => {
     const ws = new WebSocket(base.replace('http', 'ws') + `/classroom?room=${room}${query}`, token ? ['teachli-session', token] : undefined, { origin: requestOrigin });
     const events = []; const waiters = [];
     ws.on('message', raw => { const event = JSON.parse(raw.toString()); events.push(event); for (const waiter of [...waiters]) if (waiter.type === event.type) { waiter.resolve(event); waiters.splice(waiters.indexOf(waiter), 1); } });
@@ -37,7 +37,7 @@ async function setup(t) {
       const timer = setTimeout(() => reject(new Error(`Missing event ${type}: ${JSON.stringify(events)}`)), 2000);
       waiters.push({ type, resolve: value => { clearTimeout(timer); resolve(value); } });
     });
-    const first = next(token && ['laboratorio-a', 'laboratorio-b', 'laboratorio-c', 'sala-01', 'sala-02'].includes(room) && requestOrigin === origin ? 'joined' : 'error');
+    const first = next(expect ?? (token && ['laboratorio-a', 'laboratorio-b', 'laboratorio-c', 'sala-01', 'sala-02'].includes(room) && requestOrigin === origin ? 'joined' : 'error'));
     await first;
     return { ws, events, next, send: data => ws.send(JSON.stringify(data)) };
   };
@@ -273,6 +273,15 @@ test('turma inteira no mesmo IP (laboratório atrás de NAT) entra e faz login',
   const presence = [...professor.events].reverse().find(e => e.type === 'presence' && e.students === 40);
   assert.ok(presence, 'professor deveria ver os 40 alunos');
   assert.ok(students.every(s => s.ws.readyState === WebSocket.OPEN));
+  // Sala cheia: o 41º aluno é recusado, mas pode entrar em outra sala.
+  const extraToken = await login('aluno', 'aluno-41');
+  const full = await connect(extraToken, 'laboratorio-c', origin, '', 'error');
+  assert.match(full.events.find(e => e.type === 'error').message, /Sala cheia: o limite de 40 alunos/);
+  await connect(extraToken, 'sala-01');
+  // Quem já está na sala cheia pode reabrir em outra aba (substitui a própria conexão).
+  const closed = once(students[0].ws, 'close');
+  await connect(await login('aluno', 'aluno-0'));
+  await closed;
 });
 
 test('limites por conta: um lugar por conta e logins por minuto', async t => {

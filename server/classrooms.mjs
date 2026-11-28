@@ -23,6 +23,7 @@ const SECURITY_HEADERS = {
 
 const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
 const MAX_ROOM_CAPTIONS = 500;
+const MAX_STUDENTS_PER_ROOM = 40;
 const MAX_ROOM_CAPTION_CHARS = 40000;
 const MAX_DAILY_SUMMARY_CALLS = 100;
 const PACIFIC_DAY = new Intl.DateTimeFormat('en-US', {
@@ -224,6 +225,11 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     const room = rooms.get(url.searchParams.get('room'));
     if (!room) return reject('Sala não cadastrada. Escolha uma sala da lista.');
     if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.session.id !== session.id)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
+    // Lotação por sala. Quem já está na sala com a mesma conta (outra aba/dispositivo) é substituído,
+    // então não conta para a lotação.
+    if (session.role === 'aluno' && [...room.clients].filter(c => c.session.role === 'aluno' && c.session.id !== session.id).length >= MAX_STUDENTS_PER_ROOM) {
+      return reject(`Sala cheia: o limite de ${MAX_STUDENTS_PER_ROOM} alunos foi atingido. Escolha outra sala.`);
+    }
     // A session belongs to exactly one connection/room. An old connection loses membership immediately.
     for (const r of rooms.values()) for (const old of [...r.clients]) if (old.token === token) { remove(old); old.ws.close(1000, 'Sala alterada'); }
     // Defesa adicional: mesmo que existam duas sessões da conta, só uma conexão fica ativa.
