@@ -1,5 +1,6 @@
 import { useLocation } from "wouter";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { CLASSROOM_WS_URL } from '@/lib/classroomApi';
 import { loadMicrosoftSession } from '@/lib/microsoftAuth';
 
@@ -88,7 +89,11 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
       if (socket.current !== ws) return;
       let data; try { data = JSON.parse(event.data); } catch { return; }
       if (data.type === 'joined') {
-        clearTimeout(timeout); joined = true; setRoom(data.room); setSelfId(typeof data.selfId === 'string' ? data.selfId : ''); setStatus('connected'); resolve();
+        clearTimeout(timeout); joined = true;
+        // Grava a sala antes de liberar quem aguarda o join: sem isso, a navegação seguinte renderiza a
+        // rota da aula com `room` ainda vazio e mostra (e executa) a tela de salas por um instante.
+        flushSync(() => { setRoom(data.room); setSelfId(typeof data.selfId === 'string' ? data.selfId : ''); setStatus('connected'); });
+        resolve();
       } else if (data.type === 'presence') { setProfessor(data.professor); setStudents(data.students); setPeers(Array.isArray(data.peers) ? data.peers : []); }
       else if (data.type === 'signal') { for (const handler of signalHandlers.current) handler(data.from, data.data); }
       else if (data.type === 'caption.history' && Array.isArray(data.captions)) {
