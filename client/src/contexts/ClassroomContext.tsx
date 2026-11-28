@@ -4,7 +4,8 @@ import { flushSync } from 'react-dom';
 import { CLASSROOM_WS_URL, type LessonMaterial } from '@/lib/classroomApi';
 import { loadMicrosoftSession } from '@/lib/microsoftAuth';
 
-export interface Room { id: string; name: string }
+// `capacity` e `students` vêm da lista de salas (lotação atual); o join só precisa de id e nome.
+export interface Room { id: string; name: string; capacity?: number; students?: number }
 export interface RoomMessage { id: string; text: string; author: string; role: 'aluno' | 'professor'; createdAt: number }
 export interface Peer { id: string; role: 'aluno' | 'professor' }
 export type SignalHandler = (from: string, data: Record<string, unknown>) => void;

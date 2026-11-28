@@ -105,7 +105,7 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
 | `LITELLM_TIMEOUT_SECONDS` | Tempo máximo de geração; padrão `60` |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
 | `TEACHLI_TRUST_PROXY` | `1` apenas atrás de proxy que sobrescreve `X-Forwarded-For` (limite de tentativas inválidas por IP real) |
-| `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |
+| `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"},{"id":"auditorio","name":"Auditório","capacity":100}]`; `capacity` (1 a 500 alunos) é opcional, padrão 40 |
 | `PORT` | Porta do servidor, padrão 8787 |
 | `VITE_SIGNALING_URL` no cliente | Endereço do servidor, padrão `ws://localhost:8787` |
 
@@ -145,7 +145,7 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | Endpoint/evento | Uso |
 | --- | --- |
 | `POST /auth/microsoft/session` | Verifica ID token já obtido no login e emite sessão de comunicação |
-| `GET /classrooms` | Lista as cinco salas, com Bearer da sessão TeachLi |
+| `GET /classrooms` | Lista as salas com capacidade e alunos conectados (`capacity`, `students`), com Bearer da sessão TeachLi |
 | `POST /lessons/summary` | Reduz a transcrição e gera material didático via LiteLLM (apenas aluno autenticado) |
 | `POST /auth/logout` | Encerra sessão de comunicação; idempotente |
 | `POST /materials?name=ARQUIVO` | Professor envia um arquivo (corpo binário, até 10 MB) para a sala em que está conectado |
@@ -161,7 +161,7 @@ A validação segue a [orientação Microsoft para emissores e chaves de múltip
 | `material.history`, `material.added`, `material.removed` | Lista ao entrar e atualizações dos materiais para todos da sala |
 | `material.rejected` | Recusa de link ou remoção, com o motivo |
 
-Há um professor por sala, até 40 alunos por sala (o 41º recebe "Sala cheia" e pode escolher
+Há um professor por sala, até 40 alunos por sala ou a `capacity` definida no catálogo (o professor não conta; o próximo aluno recebe "Sala cheia" e pode escolher
 outra sala) e uma conexão por sessão. Trocar sala remove a associação
 anterior. Sem professor, o aluno espera; não existe fila de mensagens para entrega
 futura. O professor pode ouvir uma mensagem manualmente; não há áudio automático.
