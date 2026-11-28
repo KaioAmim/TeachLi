@@ -224,11 +224,6 @@ export async function loadClassifier(): Promise<LoadedClassifier | null> {
   };
 }
 
-/** True quando o próprio usuário já treinou um modelo (ignora o modelo base). */
-export async function hasTrainedClassifier(): Promise<boolean> {
-  return localStorage.getItem(LABELS_STORAGE_KEY) !== null;
-}
-
 export async function deleteClassifier(): Promise<void> {
   localStorage.removeItem(LABELS_STORAGE_KEY);
   try {
