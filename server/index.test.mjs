@@ -277,14 +277,21 @@ test('turma inteira no mesmo IP (laboratório atrás de NAT) entra e faz login',
 
 test('limites por conta: conexões, sessões e logins por minuto', async t => {
   const { login, connect, request, advance } = await setup(t);
-  // Até 3 conexões por conta; a 4ª encerra a mais antiga.
+  // Uma conexão por conta: entrar em outro dispositivo encerra a anterior.
   const tokens = []; for (let i = 0; i < 4; i++) tokens.push(await login('aluno', 'mesma-conta'));
-  const first = await connect(tokens[0]); const second = await connect(tokens[1]); await connect(tokens[2]);
+  const first = await connect(tokens[0]);
   const closed = once(first.ws, 'close');
-  const fourth = await connect(tokens[3], 'sala-01');
+  const second = await connect(tokens[1], 'sala-01');
   await closed;
   assert.match(first.events.find(e => e.type === 'error').message, /outro dispositivo/);
-  assert.equal(second.ws.readyState, WebSocket.OPEN); assert.equal(fourth.ws.readyState, WebSocket.OPEN);
+  assert.equal(second.ws.readyState, WebSocket.OPEN);
+  // O professor que abre a sala em outro computador substitui a própria conexão (não é "outro professor").
+  const profTokens = [await login('professor', 'prof-dois-pcs'), await login('professor', 'prof-dois-pcs')];
+  const profPc1 = await connect(profTokens[0]);
+  const profClosed = once(profPc1.ws, 'close');
+  const profPc2 = await connect(profTokens[1]);
+  await profClosed;
+  assert.equal(profPc2.events.find(e => e.type === 'joined').role, 'professor');
   // Até 5 sessões por conta; a 6ª revoga a mais antiga.
   await login('aluno', 'mesma-conta'); await login('aluno', 'mesma-conta');
   assert.equal((await request('/classrooms', tokens[0])).status, 401);

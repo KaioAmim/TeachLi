@@ -46,7 +46,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const accountLogins = new Map();
   // Limites por conta (ID Microsoft verificado), não por IP: em laboratórios e no Wi-Fi da faculdade
   // todos os computadores saem pelo mesmo IP público, e um limite por IP barraria a turma.
-  const MAX_ATTEMPT_ENTRIES = 10000, MAX_CONNECTIONS_PER_ACCOUNT = 3, MAX_SESSIONS_PER_ACCOUNT = 5;
+  const MAX_ATTEMPT_ENTRIES = 10000, MAX_CONNECTIONS_PER_ACCOUNT = 1, MAX_SESSIONS_PER_ACCOUNT = 5;
   const MAX_LOGINS_PER_ACCOUNT_MINUTE = 10, MAX_INVALID_LOGINS_PER_IP_MINUTE = 30;
   // Por IP, só tentativas inválidas (antes de haver conta verificada). Atrás de proxy reverso o IP real
   // vem de X-Forwarded-For: confie nele só com TEACHLI_TRUST_PROXY=1 e quando o proxy sobrescreve o
@@ -216,10 +216,10 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     if (!allowed(req) || url.pathname !== '/classroom' || !session) { log('ws.denied'); return reject('Sessão inválida. Entre novamente pela Microsoft.'); }
     const room = rooms.get(url.searchParams.get('room'));
     if (!room) return reject('Sala não cadastrada. Escolha uma sala da lista.');
-    if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.token !== token)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
+    if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.session.id !== session.id)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
     // A session belongs to exactly one connection/room. An old connection loses membership immediately.
     for (const r of rooms.values()) for (const old of [...r.clients]) if (old.token === token) { remove(old); old.ws.close(1000, 'Sala alterada'); }
-    // Limite por conta: a conexão mais antiga da mesma conta (outro dispositivo/aba) dá lugar à nova.
+    // Uma conexão por conta: entrar em outro dispositivo/aba encerra a conexão anterior da mesma conta.
     const accountClients = [...rooms.values()].flatMap(r => [...r.clients]).filter(c => c.session.id === session.id).sort((a, b) => a.joinedAt - b.joinedAt);
     for (const old of accountClients.slice(0, Math.max(0, accountClients.length - MAX_CONNECTIONS_PER_ACCOUNT + 1))) {
       remove(old); send(old.ws, { type: 'error', message: 'Sua conta entrou em outro dispositivo. Esta conexão foi encerrada.' }); old.ws.close(1000, 'Conta conectada em outro dispositivo');

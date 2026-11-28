@@ -160,9 +160,9 @@ anterior. Sem professor, o aluno espera; não existe fila de mensagens para entr
 futura. O professor pode ouvir uma mensagem manualmente; não há áudio automático.
 Texto tem limite de 2.000 caracteres. Há limites de 60 eventos/10 segundos por
 conexão. Os limites de acesso são por conta (ID Microsoft verificado), não por IP, porque
-laboratórios e o Wi-Fi da faculdade saem pelo mesmo IP público: até 3 conexões simultâneas por
-conta (a mais antiga é encerrada quando entra uma nova), até 5 sessões ativas por conta (a mais
-antiga é revogada) e até 10 logins por minuto por conta. Por IP, só contam tentativas de login
+laboratórios e o Wi-Fi da faculdade saem pelo mesmo IP público: uma conexão por conta (entrar em
+outro dispositivo ou aba encerra a anterior; o professor que reabre a sala em outro computador
+substitui a própria conexão), até 5 sessões ativas por conta (a mais antiga é revogada) e até 10 logins por minuto por conta. Por IP, só contam tentativas de login
 inválidas (token ausente, inválido ou de outro perfil): 30 por minuto. Os últimos 500 IDs por
 conexão não são retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expiração.
 

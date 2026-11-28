@@ -367,7 +367,7 @@ de vídeo, fila automática ou sincronização garantida; o texto original conti
 | Verificação | Assinatura RS256, emissor, audiência, tenant, validade e `oid` | `server/microsoft.mjs` |
 | Autorização | Papel por domínio do e-mail, conferido no servidor; aluno só envia `student.message`, professor só `caption.final` | `server/classrooms.mjs` |
 | Sessão | Token opaco (256 bits), em memória, até 1 h, revogado no logout | `server/classrooms.mjs` |
-| Abuso | Por conta: 3 conexões simultâneas, 5 sessões ativas e 10 logins/min; por IP, só 30 tentativas de login inválidas/min (laboratórios compartilham IP); 60 mensagens/10 s por conexão, 10.000 sessões; resumo 5 pedidos/10 min por aluno e até 100 gerações/dia | `server/classrooms.mjs` |
+| Abuso | Por conta: 1 conexão (a nova encerra a anterior), 5 sessões ativas e 10 logins/min; por IP, só 30 tentativas de login inválidas/min (laboratórios compartilham IP); 60 mensagens/10 s por conexão, 10.000 sessões; resumo 5 pedidos/10 min por aluno e até 100 gerações/dia | `server/classrooms.mjs` |
 | Origem/CORS | Lista exata (`TEACHLI_CORS_ORIGIN`), também no WebSocket | `server/classrooms.mjs` |
 | Cabeçalhos | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, CSP, HSTS, `no-store` | `server/classrooms.mjs` |
 | CSP do site | Injetada no build, limitando scripts, conexões e frames; inclui `storage.googleapis.com` (modelos de mão e rosto) e `vlibras.gov.br` | `client/vite.config.ts` |
