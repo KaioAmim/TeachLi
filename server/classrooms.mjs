@@ -46,7 +46,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
   const accountLogins = new Map();
   // Limites por conta (ID Microsoft verificado), não por IP: em laboratórios e no Wi-Fi da faculdade
   // todos os computadores saem pelo mesmo IP público, e um limite por IP barraria a turma.
-  const MAX_ATTEMPT_ENTRIES = 10000, MAX_CONNECTIONS_PER_ACCOUNT = 1, MAX_SESSIONS_PER_ACCOUNT = 5;
+  const MAX_ATTEMPT_ENTRIES = 10000, MAX_CONNECTIONS_PER_ACCOUNT = 1, MAX_SESSIONS_PER_ACCOUNT = 1;
   const MAX_LOGINS_PER_ACCOUNT_MINUTE = 10, MAX_INVALID_LOGINS_PER_IP_MINUTE = 30;
   // Por IP, só tentativas inválidas (antes de haver conta verificada). Atrás de proxy reverso o IP real
   // vem de X-Forwarded-For: confie nele só com TEACHLI_TRUST_PROXY=1 e quando o proxy sobrescreve o
@@ -101,9 +101,13 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     }
     presence(client.room);
   };
-  const revoke = token => {
+  const revoke = (token, message) => {
     sessions.delete(token);
-    for (const room of rooms.values()) for (const c of [...room.clients]) if (c.token === token) { remove(c); c.ws.close(1008, 'Sessão encerrada'); }
+    for (const room of rooms.values()) for (const c of [...room.clients]) if (c.token === token) {
+      remove(c);
+      if (message) send(c.ws, { type: 'error', message });
+      c.ws.close(1008, 'Sessão encerrada');
+    }
   };
   const server = createServer(async (req, res) => {
     if (!allowed(req)) return json(req, res, 403, { error: 'Origem não autorizada.' });
@@ -139,9 +143,12 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
         if (sessions.size >= 10000) return json(req, res, 503, { error: 'Serviço ocupado. Tente novamente.' });
         const token = opaque(); const expiresAt = Math.min(identity.exp * 1000, now() + 3600000);
         if (expiresAt <= now()) return json(req, res, 401, { error: 'Sessão expirada.' });
-        // Cada conta mantém poucas sessões ativas; a mais antiga é encerrada (ex.: PC esquecido logado).
+        // Uma sessão por conta: um login novo (outro PC, aba ou recarga) encerra a sessão anterior,
+        // então a conta fica em um único lugar. Um PC esquecido logado não bloqueia o aluno.
         const accountSessions = [...sessions].filter(([, s]) => s.id === identity.id).sort((a, b) => a[1].createdAt - b[1].createdAt);
-        for (const [oldToken] of accountSessions.slice(0, Math.max(0, accountSessions.length - MAX_SESSIONS_PER_ACCOUNT + 1))) revoke(oldToken);
+        for (const [oldToken] of accountSessions.slice(0, Math.max(0, accountSessions.length - MAX_SESSIONS_PER_ACCOUNT + 1))) {
+          revoke(oldToken, 'Sua conta entrou em outro dispositivo. Esta conexão foi encerrada.');
+        }
         sessions.set(token, { ...identity, expiresAt, createdAt: now() });
         log('login.ok', { user: who(identity.id), role: identity.role });
         return json(req, res, 200, { token, role: identity.role, profile: { name: identity.name, email: identity.email, expiresAt } });
@@ -219,7 +226,7 @@ export function createClassroomServer({ env = process.env, verifyIdentity = crea
     if (session.role === 'professor' && [...room.clients].some(c => c.session.role === 'professor' && c.session.id !== session.id)) return reject('Esta sala já tem um professor. Escolha outra sala ou aguarde a saída dele.');
     // A session belongs to exactly one connection/room. An old connection loses membership immediately.
     for (const r of rooms.values()) for (const old of [...r.clients]) if (old.token === token) { remove(old); old.ws.close(1000, 'Sala alterada'); }
-    // Uma conexão por conta: entrar em outro dispositivo/aba encerra a conexão anterior da mesma conta.
+    // Defesa adicional: mesmo que existam duas sessões da conta, só uma conexão fica ativa.
     const accountClients = [...rooms.values()].flatMap(r => [...r.clients]).filter(c => c.session.id === session.id).sort((a, b) => a.joinedAt - b.joinedAt);
     for (const old of accountClients.slice(0, Math.max(0, accountClients.length - MAX_CONNECTIONS_PER_ACCOUNT + 1))) {
       remove(old); send(old.ws, { type: 'error', message: 'Sua conta entrou em outro dispositivo. Esta conexão foi encerrada.' }); old.ws.close(1000, 'Conta conectada em outro dispositivo');

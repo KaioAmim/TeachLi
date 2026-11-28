@@ -116,7 +116,8 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
    o redirecionamento nem a conclusão do login Microsoft.
 2. Depois do retorno, `/salas` troca o ID token Microsoft por uma sessão de comunicação.
    Apenas essa etapa depende do servidor. Falhas de conexão permitem tentar novamente
-   sem perder o login.
+   sem perder o login. A aba reaproveita a sessão já guardada (recarregar a página ou trocar de
+   sala não cria outra) e só faz um login novo se o servidor recusar a atual.
 3. O servidor verifica assinatura RS256, chaves oficiais Microsoft, emissor do token
    e da chave, audiência e validade. A origem organizacional vem do próprio token,
    verificado criptograficamente. Com `MICROSOFT_TENANT_ID` (ou
@@ -160,9 +161,10 @@ anterior. Sem professor, o aluno espera; não existe fila de mensagens para entr
 futura. O professor pode ouvir uma mensagem manualmente; não há áudio automático.
 Texto tem limite de 2.000 caracteres. Há limites de 60 eventos/10 segundos por
 conexão. Os limites de acesso são por conta (ID Microsoft verificado), não por IP, porque
-laboratórios e o Wi-Fi da faculdade saem pelo mesmo IP público: uma conexão por conta (entrar em
-outro dispositivo ou aba encerra a anterior; o professor que reabre a sala em outro computador
-substitui a própria conexão), até 5 sessões ativas por conta (a mais antiga é revogada) e até 10 logins por minuto por conta. Por IP, só contam tentativas de login
+laboratórios e o Wi-Fi da faculdade saem pelo mesmo IP público. Cada conta fica em um único lugar:
+uma sessão e uma conexão por conta. Um login novo em outro dispositivo ou aba encerra a sessão
+anterior, que recebe o aviso "Sua conta entrou em outro dispositivo"; o professor que reabre a sala
+em outro computador substitui a própria conexão. Há ainda até 10 logins por minuto por conta. Por IP, só contam tentativas de login
 inválidas (token ausente, inválido ou de outro perfil): 30 por minuto. Os últimos 500 IDs por
 conexão não são retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expiração.
 

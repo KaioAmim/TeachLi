@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import { DoorOpen, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WorkspaceHeading } from '@/components/AppShell';
-import { classroomRequest } from '@/lib/classroomApi';
+import { ClassroomRequestError, classroomRequest } from '@/lib/classroomApi';
 import { loadMicrosoftSession, logoutMicrosoftSession, prepareClassroomSession } from '@/lib/microsoftAuth';
 import { useClassroomConnection, type Room } from '@/contexts/ClassroomContext';
 
@@ -19,7 +19,16 @@ export default function RoomSelection() {
   useEffect(() => {
     let active = true; setLoading(true); setError('');
     if (!session) { navigate('/'); return; }
-    prepareClassroomSession().then(ready => classroomRequest('/classrooms', ready.token)).then(result => { if (active) setRooms(result.rooms); })
+    const loadRooms = async () => {
+      const ready = await prepareClassroomSession();
+      try { return await classroomRequest('/classrooms', ready.token); }
+      catch (reason) {
+        // Sessão guardada expirada, revogada ou perdida num reinício do servidor: faz um login novo.
+        if (!(reason instanceof ClassroomRequestError) || reason.status !== 401) throw reason;
+        return classroomRequest('/classrooms', (await prepareClassroomSession({ renew: true })).token);
+      }
+    };
+    loadRooms().then(result => { if (active) setRooms(result.rooms); })
       .catch(reason => { if (active) setError(reason.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [session?.idToken, attempt]);

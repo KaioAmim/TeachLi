@@ -275,29 +275,26 @@ test('turma inteira no mesmo IP (laboratório atrás de NAT) entra e faz login',
   assert.ok(students.every(s => s.ws.readyState === WebSocket.OPEN));
 });
 
-test('limites por conta: conexões, sessões e logins por minuto', async t => {
+test('limites por conta: um lugar por conta e logins por minuto', async t => {
   const { login, connect, request, advance } = await setup(t);
-  // Uma conexão por conta: entrar em outro dispositivo encerra a anterior.
-  const tokens = []; for (let i = 0; i < 4; i++) tokens.push(await login('aluno', 'mesma-conta'));
-  const first = await connect(tokens[0]);
+  // Um login novo (outro PC ou aba) encerra a sessão anterior e derruba a conexão dela.
+  const firstToken = await login('aluno', 'mesma-conta');
+  const first = await connect(firstToken);
   const closed = once(first.ws, 'close');
-  const second = await connect(tokens[1], 'sala-01');
+  const secondToken = await login('aluno', 'mesma-conta');
   await closed;
   assert.match(first.events.find(e => e.type === 'error').message, /outro dispositivo/);
+  assert.equal((await request('/classrooms', firstToken)).status, 401);
+  const second = await connect(secondToken, 'sala-01');
   assert.equal(second.ws.readyState, WebSocket.OPEN);
   // O professor que abre a sala em outro computador substitui a própria conexão (não é "outro professor").
-  const profTokens = [await login('professor', 'prof-dois-pcs'), await login('professor', 'prof-dois-pcs')];
-  const profPc1 = await connect(profTokens[0]);
+  const profPc1 = await connect(await login('professor', 'prof-dois-pcs'));
   const profClosed = once(profPc1.ws, 'close');
-  const profPc2 = await connect(profTokens[1]);
+  const profPc2 = await connect(await login('professor', 'prof-dois-pcs'));
   await profClosed;
   assert.equal(profPc2.events.find(e => e.type === 'joined').role, 'professor');
-  // Até 5 sessões por conta; a 6ª revoga a mais antiga.
-  await login('aluno', 'mesma-conta'); await login('aluno', 'mesma-conta');
-  assert.equal((await request('/classrooms', tokens[0])).status, 401);
-  assert.equal((await request('/classrooms', tokens[1])).status, 200);
   // Até 10 logins por minuto por conta; outras contas no mesmo IP não são afetadas.
-  for (let i = 0; i < 4; i++) await login('aluno', 'mesma-conta');
+  for (let i = 0; i < 8; i++) await login('aluno', 'mesma-conta');
   const idToken = JSON.stringify({ role: 'aluno', name: 'mesma-conta', id: 'mesma-conta', email: 'mesma-conta@alunos.unibarretos.com.br', exp: Math.floor(Date.now() / 1000) + 7200 });
   assert.equal((await request('/auth/microsoft/session', null, { idToken, role: 'aluno' })).status, 429);
   await login('aluno', 'outra-conta');
