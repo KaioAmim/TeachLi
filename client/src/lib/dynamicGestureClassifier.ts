@@ -437,11 +437,6 @@ function buildClassifier(
   return { sources: [source], labels: visibleLabels, predict, dispose: () => model.dispose() };
 }
 
-export async function hasDynamicClassifier(): Promise<boolean> {
-  return localStorage.getItem(LABELS_STORAGE_KEY) !== null ||
-    localStorage.getItem(LEGACY_LABELS_STORAGE_KEY) !== null;
-}
-
 export async function deleteDynamicClassifier(): Promise<void> {
   localStorage.removeItem(LABELS_STORAGE_KEY);
   localStorage.removeItem(LEGACY_LABELS_STORAGE_KEY);

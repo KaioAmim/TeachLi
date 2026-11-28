@@ -352,6 +352,8 @@ locais. Não há confirmação de leitura.
 
 VLibras é um widget externo disponível em todas as telas, para traduzir texto selecionado. Não há API própria
 de vídeo, fila automática ou sincronização garantida; o texto original continua sendo o canal disponível.
+O botão próprio do TeachLi (`VLibrasWidget.tsx`) abre e fecha o widget sem ser capturado como texto a traduzir;
+fechar, por ele ou pelo "X" do widget, também desliga a captura de cliques do VLibras na página.
 
 ## 7. Segurança e LGPD
 
