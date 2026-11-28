@@ -13,7 +13,30 @@ declare global {
 
 const SCRIPT_ID = "vlibras-plugin-script";
 const APP_URL = "https://vlibras.gov.br/app";
+const WIDGET_STORAGE_KEY = "@vlibras-widget";
 let widgetInitialized = false;
+
+/**
+ * O VLibras salva no localStorage se estava aberto e, ao carregar a página, se reabre sozinho
+ * quando encontra `"isOpen":true`. O botão próprio sempre começa em "Inativo", então isso deixava
+ * o widget ligado e escondido (cursor de tradução e cliques capturados) sem ninguém pedir.
+ * Zera esse estado antes de o script do VLibras rodar.
+ */
+function forgetPersistedOpenState() {
+  try {
+    const raw = localStorage.getItem(WIDGET_STORAGE_KEY);
+    if (!raw?.includes('"isOpen":true')) return;
+    const saved = JSON.parse(raw);
+    if (saved?.state && typeof saved.state === "object") {
+      saved.state.isOpen = false;
+      localStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(saved));
+    } else {
+      localStorage.removeItem(WIDGET_STORAGE_KEY);
+    }
+  } catch {
+    try { localStorage.removeItem(WIDGET_STORAGE_KEY); } catch { /* armazenamento indisponível */ }
+  }
+}
 
 /** Pede ao widget que traduza um texto. O player não é uma API estável do VLibras. */
 export function translateWithVLibras(text: string): boolean {
@@ -65,6 +88,13 @@ export default function VLibrasWidget() {
     let nativeAccessRoot: HTMLElement | null = null;
     let previousAccessDisplay = "";
     let pluginRoot: HTMLElement | null = null;
+    // O carregador do VLibras grava `data-active="true"` quando o app termina de carregar, sem saber se
+    // o usuário desligou o widget nesse meio-tempo (ex.: clicou duas vezes durante o carregamento).
+    // Com isso o widget fica ligado e escondido: cursor de tradução e cliques capturados com o botão
+    // em "Inativo". Este observador mantém o atributo sempre igual à escolha do usuário.
+    const activeObserver = new MutationObserver(() => {
+      if (pluginRoot && pluginRoot.getAttribute("data-active") !== String(desiredOpen.current)) syncOpenState();
+    });
 
     // Com o VLibras ativo, ele escuta cliques no <body> (fase de captura) e traduz o texto
     // clicado em vez de deixar o clique chegar ao elemento. O `document` recebe o evento
@@ -128,6 +158,8 @@ export default function VLibrasWidget() {
         pluginRoot = root;
         root.style.zIndex = "2147483646";
         root.shadowRoot?.addEventListener("click", handleNativeClose);
+        activeObserver.disconnect();
+        activeObserver.observe(root, { attributes: true, attributeFilter: ["data-active"] });
       }
       syncOpenState();
       return true;
@@ -150,6 +182,7 @@ export default function VLibrasWidget() {
     }, 400);
 
     const existingScript = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
+    if (!existingScript) forgetPersistedOpenState();
     if (existingScript) {
       initializeAndConnect();
       existingScript.addEventListener("error", () => setLoadError(true), { once: true });
@@ -165,6 +198,7 @@ export default function VLibrasWidget() {
 
     return () => {
       rootObserver.disconnect();
+      activeObserver.disconnect();
       window.clearInterval(retryTimer);
       document.removeEventListener("click", captureToggleClick, true);
       document.removeEventListener("mouseover", captureToggleHover, true);
