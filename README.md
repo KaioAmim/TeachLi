@@ -22,6 +22,7 @@ O reconhecimento depende dos dados de treino e precisa de avaliação com usuár
 | VLibrasBD | Corpus CSV opcional para sugestões experimentais de frases português/glossa |
 | VLibras | Widget disponível em todas as telas para traduzir textos selecionados na página |
 | Modo Professor | Receber mensagens dos alunos e compartilhar frases finais da transcrição na sala |
+| Materiais da aula | Professor compartilha links e arquivos (PDF, Word, PowerPoint, Excel, imagens…) com os alunos da sala durante a aula |
 
 Segurança, privacidade (LGPD) e os pontos que dependem da instituição estão em
 [Segurança e LGPD](docs/DOCUMENTACAO.md#7-segurança-e-lgpd).

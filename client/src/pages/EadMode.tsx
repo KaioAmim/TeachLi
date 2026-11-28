@@ -4,6 +4,7 @@ import { CallPanel } from "@/components/CallPanel";
 import type { AppRole } from "@/lib/microsoftAuth";
 import { FinishLessonControl, StudentLessonSummary } from "@/components/LessonControls";
 import { EadProfessorCaptions } from "@/components/EadProfessorCaptions";
+import { LessonMaterials } from "@/components/LessonMaterials";
 
 export default function EadMode({ role }: { role: AppRole }) {
   return (
@@ -24,6 +25,7 @@ export default function EadMode({ role }: { role: AppRole }) {
           <ShieldCheck size={22} aria-hidden="true" className="ead-privacy-icon" />
         </div>
         {role === "professor" ? <EadProfessorCaptions /> : <StudentLessonSummary />}
+        <LessonMaterials role={role} />
         <CallPanel role={role} />
       </main>
     </div>

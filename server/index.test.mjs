@@ -262,3 +262,74 @@ test('sinalização da chamada: só entre aluno e professor da mesma sala, com v
   await aluno.next('signal.rejected');
   assert.ok(!professor.events.some(e => e.type === 'signal' && e.data.kind !== 'hello'));
 });
+
+test('materiais da aula: professor compartilha links e arquivos só com a própria sala', async t => {
+  const { base, login, connect } = await setup(t);
+  const upload = (token, name, body, requestOrigin = origin) => fetch(`${base}/materials?name=${encodeURIComponent(name)}`, {
+    method: 'POST', headers: { Origin: requestOrigin, Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' }, body,
+  });
+  const download = (token, id) => fetch(`${base}/materials/${id}`, { headers: { Origin: origin, Authorization: `Bearer ${token}` } });
+  const professorToken = await login('professor', 'prof');
+  const alunoToken = await login('aluno', 'ana');
+  const professor = await connect(professorToken);
+  const aluno = await connect(alunoToken);
+  assert.deepEqual(aluno.events.find(e => e.type === 'material.history').materials, []);
+  const outraSalaToken = await login('aluno', 'bia');
+  const outraSala = await connect(outraSalaToken, 'sala-01');
+
+  // Link: só http(s), título limpo, entregue a todos da sala (inclusive ao professor).
+  let added = aluno.next('material.added');
+  const professorAdded = professor.next('material.added');
+  professor.send({ type: 'material.link', title: '  Slides\n da aula ', url: 'https://exemplo.edu/slides' });
+  const link = (await added).material;
+  assert.equal(link.kind, 'link'); assert.equal(link.title, 'Slides da aula'); assert.equal(link.author, 'prof');
+  assert.equal((await professorAdded).material.id, link.id);
+  for (const url of ['javascript:alert(1)', 'data:text/html,x', 'exemplo.edu', 'https://user:senha@exemplo.edu']) {
+    const rejected = professor.next('material.rejected'); professor.send({ type: 'material.link', url }); await rejected;
+  }
+  let error = aluno.next('material.rejected'); aluno.send({ type: 'material.link', url: 'https://exemplo.edu' }); await error;
+
+  // Arquivo: só o professor envia; o tipo servido vem da extensão permitida.
+  assert.equal((await upload(alunoToken, 'nota.pdf', 'x')).status, 403);
+  assert.equal((await upload(professorToken, 'script.html', '<script>')).status, 415);
+  assert.equal((await upload(professorToken, 'semextensao', 'x')).status, 415);
+  assert.equal((await upload(professorToken, 'vazio.pdf', '')).status, 400);
+  assert.equal((await upload(professorToken, 'grande.pdf', Buffer.alloc(10 * 1024 * 1024 + 1))).status, 413);
+  added = aluno.next('material.added');
+  const response = await upload(professorToken, 'Apostila ç.pdf', '%PDF-1.4 conteúdo');
+  assert.equal(response.status, 201);
+  const file = (await added).material;
+  assert.equal(file.name, 'Apostila ç.pdf'); assert.equal(file.kind, 'file'); assert.ok(!('data' in file));
+  const fileResponse = await download(alunoToken, file.id);
+  assert.equal(fileResponse.status, 200);
+  assert.equal(fileResponse.headers.get('content-type'), 'application/pdf');
+  assert.match(fileResponse.headers.get('content-disposition'), /^attachment; .*filename\*=UTF-8''Apostila%20%C3%A7\.pdf$/);
+  assert.equal(fileResponse.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(await fileResponse.text(), '%PDF-1.4 conteúdo');
+  assert.equal((await download(outraSalaToken, file.id)).status, 404);
+
+  // Quem entra depois recebe a lista; outras salas não recebem nada.
+  const lateToken = await login('aluno', 'cai');
+  const late = await connect(lateToken);
+  assert.deepEqual(late.events.find(e => e.type === 'material.history').materials.map(m => m.id), [link.id, file.id]);
+  assert.ok(!outraSala.events.some(e => e.type === 'material.added'));
+
+  // Remoção: só o professor; o arquivo deixa de ser servido.
+  error = aluno.next('material.rejected'); aluno.send({ type: 'material.remove', id: file.id }); await error;
+  const removed = aluno.next('material.removed');
+  professor.send({ type: 'material.remove', id: file.id });
+  assert.equal((await removed).id, file.id);
+  assert.equal((await download(alunoToken, file.id)).status, 404);
+
+  // Aula finalizada: materiais seguem visíveis, mas nada novo entra.
+  professor.send({ type: 'lesson.end' }); await aluno.next('lesson.ended');
+  const closed = professor.next('material.rejected');
+  professor.send({ type: 'material.link', url: 'https://exemplo.edu/depois' }); await closed;
+  assert.equal((await upload(professorToken, 'depois.pdf', 'x')).status, 409);
+
+  // Sala vazia apaga os materiais.
+  for (const c of [professor, aluno, late]) { const done = once(c.ws, 'close'); c.ws.close(); await done; }
+  await new Promise(r => setTimeout(r, 50));
+  const again = await connect(alunoToken);
+  assert.deepEqual(again.events.find(e => e.type === 'material.history').materials, []);
+});

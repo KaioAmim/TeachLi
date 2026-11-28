@@ -27,6 +27,7 @@ import type { FaceObservation } from "@/lib/facialExpression";
 import { translateWithVLibras } from "@/components/VLibrasWidget";
 import { getGlossPhraseSuggestion, loadVLibrasBD, type LibrasCorpusEntry } from "@/lib/librasDatasetImporter";
 import { StudentLessonSummary } from "@/components/LessonControls";
+import { LessonMaterials } from "@/components/LessonMaterials";
 
 interface RecognitionResult {
   gesture: string;
@@ -627,6 +628,7 @@ export default function StudentMode() {
 
       <main id="conteudo" tabIndex={-1} className="container workspace-content">
         <StudentLessonSummary />
+        <LessonMaterials role="aluno" />
         <div className="student-studio">
           {/* Mensagens da sala no topo: o aluno lê o que chegou antes de compor a resposta. */}
           <ClassroomPanel compact embedded />
