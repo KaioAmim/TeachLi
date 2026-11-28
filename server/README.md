@@ -104,7 +104,7 @@ servidor hospedado separadamente, forneça esse mesmo ID em `MICROSOFT_CLIENT_ID
 | `LITELLM_MODEL` | Alias do modelo/grupo configurado no LiteLLM |
 | `LITELLM_TIMEOUT_SECONDS` | Tempo máximo de geração; padrão `60` |
 | `TEACHLI_CORS_ORIGIN` | Origens exatas permitidas; padrão localhost e 127.0.0.1 na porta 5173 |
-| `TEACHLI_TRUST_PROXY` | `1` apenas atrás de proxy que sobrescreve `X-Forwarded-For` (limites por IP real) |
+| `TEACHLI_TRUST_PROXY` | `1` apenas atrás de proxy que sobrescreve `X-Forwarded-For` (limite de tentativas inválidas por IP real) |
 | `TEACHLI_ROOMS` | Catálogo JSON `[{"id":"sala-01","name":"Sala 01"}]` |
 | `PORT` | Porta do servidor, padrão 8787 |
 | `VITE_SIGNALING_URL` no cliente | Endereço do servidor, padrão `ws://localhost:8787` |
@@ -159,8 +159,12 @@ Há um professor por sala e uma conexão por sessão. Trocar sala remove a assoc
 anterior. Sem professor, o aluno espera; não existe fila de mensagens para entrega
 futura. O professor pode ouvir uma mensagem manualmente; não há áudio automático.
 Texto tem limite de 2.000 caracteres. Há limites de 60 eventos/10 segundos por
-conexão e 30 trocas de sessão/IP/minuto. Os últimos 500 IDs por conexão não são
-retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expiração.
+conexão. Os limites de acesso são por conta (ID Microsoft verificado), não por IP, porque
+laboratórios e o Wi-Fi da faculdade saem pelo mesmo IP público: até 3 conexões simultâneas por
+conta (a mais antiga é encerrada quando entra uma nova), até 5 sessões ativas por conta (a mais
+antiga é revogada) e até 10 logins por minuto por conta. Por IP, só contam tentativas de login
+inválidas (token ausente, inválido ou de outro perfil): 30 por minuto. Os últimos 500 IDs por
+conexão não são retransmitidos. Sessões são limitadas a 10.000 entradas, com limpeza por expiração.
 
 ## Limites e verificação
 

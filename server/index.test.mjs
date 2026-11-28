@@ -262,3 +262,38 @@ test('sinalização da chamada: só entre aluno e professor da mesma sala, com v
   await aluno.next('signal.rejected');
   assert.ok(!professor.events.some(e => e.type === 'signal' && e.data.kind !== 'hello'));
 });
+
+test('turma inteira no mesmo IP (laboratório atrás de NAT) entra e faz login', async t => {
+  const { login, connect } = await setup(t);
+  const professor = await connect(await login('professor', 'prof-lab'));
+  // Todos os testes saem de 127.0.0.1: antes, o 21º socket e o 31º login por IP eram recusados.
+  const tokens = []; for (let i = 0; i < 40; i++) tokens.push(await login('aluno', `aluno-${i}`));
+  const students = []; for (const token of tokens) students.push(await connect(token));
+  await new Promise(r => setTimeout(r, 200));
+  const presence = [...professor.events].reverse().find(e => e.type === 'presence' && e.students === 40);
+  assert.ok(presence, 'professor deveria ver os 40 alunos');
+  assert.ok(students.every(s => s.ws.readyState === WebSocket.OPEN));
+});
+
+test('limites por conta: conexões, sessões e logins por minuto', async t => {
+  const { login, connect, request, advance } = await setup(t);
+  // Até 3 conexões por conta; a 4ª encerra a mais antiga.
+  const tokens = []; for (let i = 0; i < 4; i++) tokens.push(await login('aluno', 'mesma-conta'));
+  const first = await connect(tokens[0]); const second = await connect(tokens[1]); await connect(tokens[2]);
+  const closed = once(first.ws, 'close');
+  const fourth = await connect(tokens[3], 'sala-01');
+  await closed;
+  assert.match(first.events.find(e => e.type === 'error').message, /outro dispositivo/);
+  assert.equal(second.ws.readyState, WebSocket.OPEN); assert.equal(fourth.ws.readyState, WebSocket.OPEN);
+  // Até 5 sessões por conta; a 6ª revoga a mais antiga.
+  await login('aluno', 'mesma-conta'); await login('aluno', 'mesma-conta');
+  assert.equal((await request('/classrooms', tokens[0])).status, 401);
+  assert.equal((await request('/classrooms', tokens[1])).status, 200);
+  // Até 10 logins por minuto por conta; outras contas no mesmo IP não são afetadas.
+  for (let i = 0; i < 4; i++) await login('aluno', 'mesma-conta');
+  const idToken = JSON.stringify({ role: 'aluno', name: 'mesma-conta', id: 'mesma-conta', email: 'mesma-conta@alunos.unibarretos.com.br', exp: Math.floor(Date.now() / 1000) + 7200 });
+  assert.equal((await request('/auth/microsoft/session', null, { idToken, role: 'aluno' })).status, 429);
+  await login('aluno', 'outra-conta');
+  advance(60001);
+  await login('aluno', 'mesma-conta');
+});
